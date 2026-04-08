@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, ArrowLeft, AlertTriangle, Paperclip } from 'lucide-react';
+import { Send, ArrowLeft, AlertTriangle, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Messages() {
@@ -14,11 +14,14 @@ export default function Messages() {
   const [newMsg, setNewMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [coaches, setCoaches] = useState([]);
+  const [showNewConvo, setShowNewConvo] = useState(false);
   const msgEndRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
     loadConversations();
+    base44.entities.Coach.filter({ is_active: true }).then(setCoaches);
   }, [user]);
 
   const loadConversations = async () => {
@@ -83,6 +86,26 @@ export default function Messages() {
     return convo.participant_names?.[idx] || convo.participant_emails?.[idx] || 'Unknown';
   };
 
+  const startConvoWithCoach = async (coach) => {
+    const all = await base44.entities.Conversation.filter({});
+    let convo = all.find(c =>
+      c.participant_emails?.includes(user.email) &&
+      c.participant_emails?.includes(coach.email) &&
+      !c.is_archived
+    );
+    if (!convo) {
+      convo = await base44.entities.Conversation.create({
+        type: 'coach_client',
+        participant_emails: [user.email, coach.email],
+        participant_names: [user.full_name || user.email, `${coach.first_name} ${coach.last_name}`],
+        coach_id: coach.id,
+      });
+    }
+    setShowNewConvo(false);
+    await loadConversations();
+    await loadMessages(convo);
+  };
+
   if (loading) {
     return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
   }
@@ -95,23 +118,48 @@ export default function Messages() {
         <div className="bg-card border border-border rounded-lg overflow-hidden" style={{ height: '70vh' }}>
           <div className="flex h-full">
             {/* Conversation List */}
-            <div className={`w-full sm:w-80 border-r border-border overflow-y-auto ${selectedConvo ? 'hidden sm:block' : ''}`}>
-              {conversations.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-sm">No conversations yet.</div>
-              ) : (
-                conversations.map(convo => (
-                  <button
-                    key={convo.id}
-                    onClick={() => loadMessages(convo)}
-                    className={`w-full text-left p-4 border-b border-border hover:bg-secondary/50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-secondary' : ''}`}
-                  >
-                    <p className="font-oswald tracking-wider text-sm text-foreground">{getOtherName(convo)}</p>
-                    {convo.last_message && (
-                      <p className="text-xs text-muted-foreground mt-1 truncate">{convo.last_message}</p>
-                    )}
-                  </button>
-                ))
-              )}
+            <div className={`w-full sm:w-80 border-r border-border flex flex-col ${selectedConvo ? 'hidden sm:flex' : 'flex'}`}>
+              <div className="p-3 border-b border-border">
+                <Button
+                  size="sm"
+                  onClick={() => setShowNewConvo(!showNewConvo)}
+                  className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Message a Coach
+                </Button>
+                {showNewConvo && (
+                  <div className="mt-2 space-y-1">
+                    {coaches.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => startConvoWithCoach(c)}
+                        className="w-full text-left px-3 py-2 rounded-md bg-secondary hover:bg-secondary/80 transition-colors text-sm"
+                      >
+                        <span className="font-oswald tracking-wider">{c.first_name} {c.last_name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{c.county}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {conversations.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground text-sm">No conversations yet.</div>
+                ) : (
+                  conversations.map(convo => (
+                    <button
+                      key={convo.id}
+                      onClick={() => loadMessages(convo)}
+                      className={`w-full text-left p-4 border-b border-border hover:bg-secondary/50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-secondary' : ''}`}
+                    >
+                      <p className="font-oswald tracking-wider text-sm text-foreground">{getOtherName(convo)}</p>
+                      {convo.last_message && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{convo.last_message}</p>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Chat Area */}
