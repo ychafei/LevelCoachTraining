@@ -34,7 +34,6 @@ export default function AdminUsers() {
   }, []);
 
   const updateRole = async (userId, role) => {
-    if (!isSuperAdmin) { toast.error('Only super admins can change roles'); return; }
     await base44.entities.User.update(userId, { role });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
     toast.success('Role updated');
