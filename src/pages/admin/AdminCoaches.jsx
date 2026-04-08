@@ -30,7 +30,12 @@ export default function AdminCoaches() {
   const loadCoaches = () => base44.entities.Coach.list('display_order').then(setCoaches);
 
   const linkUser = async (userId) => {
-    await base44.entities.User.update(userId, { coach_id: linkDialog.id, role: 'coach' });
+    const targetUser = users.find(u => u.id === userId);
+    const updateData = { coach_id: linkDialog.id };
+    // Don't downgrade admins — only set role to 'coach' if not already admin
+    if (targetUser?.role !== 'admin') updateData.role = 'coach';
+    await base44.entities.User.update(userId, updateData);
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updateData } : u));
     toast.success('User linked as coach');
     setLinkDialog(null);
   };
