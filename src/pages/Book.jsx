@@ -106,20 +106,21 @@ export default function Book() {
 
     await base44.entities.Session.create(session);
 
-    // Send confirmation emails
+    // Send confirmation emails via Resend (bypasses unsubscribe suppression)
     const coachName = `${coach.first_name} ${coach.last_name}`;
     const dateStr = format(selectedDate, 'EEEE, MMMM d, yyyy');
 
-    await base44.integrations.Core.SendEmail({
-      to: user.email,
-      subject: `Booking Confirmed — ${dateStr} with ${coachName}`,
-      body: `<div style="background:#0A0E14;color:#F8FAFC;padding:40px;font-family:sans-serif;"><h1 style="color:#F59E0B;font-family:Oswald,sans-serif;text-transform:uppercase;">Booking Confirmed</h1><p>Your session with <strong>${coachName}</strong> is scheduled for <strong>${dateStr}</strong> at <strong>${selectedTime}</strong> (${duration.label}).</p><p>County: ${county}</p><p style="margin-top:20px;"><strong>Cancellation Policy:</strong> Sessions cancelled with less than 24 hours notice may incur a late-cancellation fee at the coach's discretion.</p><p style="margin-top:20px;"><a href="${window.location.origin}/pay" style="background:#F59E0B;color:#0A0E14;padding:12px 24px;text-decoration:none;font-weight:bold;border-radius:6px;">Pay Now</a></p></div>`,
-    });
-
-    await base44.integrations.Core.SendEmail({
-      to: coach.email,
-      subject: `New Booking — ${user.full_name || user.email} on ${dateStr}`,
-      body: `<div style="background:#0A0E14;color:#F8FAFC;padding:40px;font-family:sans-serif;"><h1 style="color:#F59E0B;font-family:Oswald,sans-serif;text-transform:uppercase;">New Session Booked</h1><p><strong>${user.full_name || user.email}</strong> has booked a session with you.</p><p>Date: ${dateStr}<br/>Time: ${selectedTime}<br/>Duration: ${duration.label}<br/>County: ${county}</p>${sessionGoals ? `<p>Goals: ${sessionGoals}</p>` : ''}</div>`,
+    await base44.functions.invoke('sendBookingEmails', {
+      clientEmail: user.email,
+      clientName: user.full_name || user.email,
+      coachEmail: coach.email,
+      coachName,
+      dateStr,
+      time: selectedTime,
+      durationLabel: duration.label,
+      county,
+      sessionGoals,
+      origin: window.location.origin,
     });
 
     setSubmitting(false);
