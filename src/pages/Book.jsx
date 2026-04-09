@@ -41,10 +41,13 @@ export default function Book() {
   const [existingSessions, setExistingSessions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [bookingComplete, setBookingComplete] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
 
   // Load coaches
   useEffect(() => {
-    base44.entities.Coach.filter({ is_active: true }).then(setCoaches);
+    base44.entities.Coach.filter({ is_active: true }).then(setCoaches).catch(() => {
+      setAuthRequired(true);
+    });
   }, []);
 
   // Auto-select head coach when county changes
@@ -153,6 +156,23 @@ export default function Book() {
     setSubmitting(false);
     setBookingComplete(true);
   };
+
+  if (authRequired) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-4">SIGN IN TO BOOK</h2>
+          <p className="text-muted-foreground mb-8">You need an account to browse coaches and book a session.</p>
+          <Button
+            onClick={() => base44.auth.redirectToLogin(window.location.href)}
+            className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+          >
+            Sign In / Create Account
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (bookingComplete) {
     return (
