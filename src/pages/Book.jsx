@@ -490,13 +490,20 @@ export default function Book() {
   );
 }
 
-function PaymentHandlesDisplay({ coach }) {
+function PaymentHandlesDisplay({ coach, price }) {
+  if (!coach) return null;
+
+  const paypalHandle = coach.paypal?.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '');
+  const paypalUrl = paypalHandle
+    ? `https://paypal.me/${paypalHandle}${price ? '/' + price : ''}`
+    : null;
+
   const handles = [];
-  if (coach.venmo) handles.push({ name: 'Venmo', value: coach.venmo });
-  if (coach.zelle) handles.push({ name: 'Zelle', value: coach.zelle });
-  if (coach.cashapp) handles.push({ name: 'Cash App', value: coach.cashapp });
-  if (coach.paypal) handles.push({ name: 'PayPal', value: coach.paypal });
-  if (coach.cash_accepted) handles.push({ name: 'Cash', value: 'Accepted' });
+  if (coach.venmo) handles.push({ name: 'Venmo', value: coach.venmo, link: null });
+  if (coach.zelle) handles.push({ name: 'Zelle', value: coach.zelle, link: null });
+  if (coach.cashapp) handles.push({ name: 'Cash App', value: coach.cashapp, link: null });
+  if (paypalUrl) handles.push({ name: 'PayPal', value: price ? `Pay $${price} via PayPal` : 'Pay via PayPal', link: paypalUrl });
+  if (coach.cash_accepted) handles.push({ name: 'Cash', value: 'Accepted', link: null });
 
   if (handles.length === 0) return null;
 
@@ -507,7 +514,13 @@ function PaymentHandlesDisplay({ coach }) {
         {handles.map(h => (
           <div key={h.name} className="flex justify-between text-sm">
             <span className="text-muted-foreground">{h.name}</span>
-            <span className="text-foreground font-medium">{h.value}</span>
+            {h.link ? (
+              <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300 font-medium">
+                {h.value}
+              </a>
+            ) : (
+              <span className="text-foreground font-medium">{h.value}</span>
+            )}
           </div>
         ))}
       </div>
