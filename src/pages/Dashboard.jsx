@@ -49,6 +49,13 @@ export default function Dashboard() {
   const handleCancel = async (session) => {
     const now = new Date();
     const sessionTime = new Date(`${session.date}T${session.start_time}`);
+
+    // Block cancellation on the day of or after the session
+    if (!isBefore(now, new Date(session.date + 'T00:00:00'))) {
+      alert('Sessions can only be cancelled before the day of the appointment.');
+      return;
+    }
+
     const isLateCancel = isBefore(sessionTime, addHours(now, 24));
 
     if (isLateCancel) {
