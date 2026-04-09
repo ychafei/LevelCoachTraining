@@ -28,15 +28,19 @@ export default function Book() {
   const preCounty = urlParams.get('county');
 
   const { user } = useCurrentUser();
-  const [step, setStep] = useState(preCounty ? 1 : 0);
-  const [county, setCounty] = useState(preCounty || '');
-  const [coach, setCoach] = useState(null);
+
+  // Restore saved state if returning from login
+  const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
+
+  const [step, setStep] = useState(saved?.step ?? (preCounty ? 1 : 0));
+  const [county, setCounty] = useState(saved?.county || preCounty || '');
+  const [coach, setCoach] = useState(saved?.coach || null);
   const [coaches, setCoaches] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTime, setSelectedTime] = useState('');
-  const [duration, setDuration] = useState(null);
-  const [goals, setGoals] = useState('');
-  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(saved?.selectedDate ? new Date(saved.selectedDate) : null);
+  const [selectedTime, setSelectedTime] = useState(saved?.selectedTime || '');
+  const [duration, setDuration] = useState(saved?.duration || null);
+  const [goals, setGoals] = useState(saved?.goals || '');
+  const [selectedTags, setSelectedTags] = useState(saved?.selectedTags || []);
   const [blocks, setBlocks] = useState([]);
   const [existingSessions, setExistingSessions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -115,9 +119,15 @@ export default function Book() {
 
   const handleSubmit = async () => {
     if (!user) {
+      // Save all booking state before redirecting to login
+      sessionStorage.setItem('lc_booking', JSON.stringify({
+        step, county, coach, selectedDate, selectedTime, duration, goals, selectedTags
+      }));
       base44.auth.redirectToLogin(window.location.href);
       return;
     }
+    // Clear saved state once proceeding
+    sessionStorage.removeItem('lc_booking');
     setSubmitting(true);
     const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
     const session = {
@@ -465,12 +475,12 @@ export default function Book() {
             ) : (
               <div className="flex flex-col items-end gap-2">
                 <Button
-                  onClick={() => base44.auth.redirectToLogin(window.location.href)}
+                  onClick={handleSubmit}
                   className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
                 >
                   Sign In to Confirm
                 </Button>
-                <p className="text-xs text-muted-foreground">You need an account to complete your booking</p>
+                <p className="text-xs text-muted-foreground">You'll be signed in and returned to confirm</p>
               </div>
             )
           )}
