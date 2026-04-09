@@ -7,6 +7,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { ArrowLeft, ArrowRight, MapPin, User, Clock, Timer, CheckCircle2, Package, ExternalLink } from 'lucide-react';
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
+import PayPalCheckout from '@/components/PayPalCheckout';
 
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
@@ -545,24 +546,21 @@ export default function Book() {
             {!useExistingCredit && (
               <div className="bg-card border border-border rounded-lg p-6 mb-6">
                 <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
-                {paypalUrl ? (
-                  <>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      You'll be redirected to PayPal to complete payment of <strong className="text-foreground">${sessionPrice}</strong> to your coach.
-                    </p>
-                    <a href={paypalUrl} target="_blank" rel="noopener noreferrer">
-                      <Button className="w-full bg-[#003087] hover:bg-[#002070] text-white font-oswald tracking-wider uppercase">
-                        <ExternalLink className="w-4 h-4 mr-2" /> Pay ${sessionPrice} via PayPal
-                      </Button>
-                    </a>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Contact your coach directly to arrange payment.</p>
-                )}
+                <p className="text-sm text-muted-foreground mb-4">
+                  Pay <strong className="text-foreground">${sessionPrice}</strong> securely via PayPal.
+                </p>
+                <PayPalCheckout
+                  amount={sessionPrice}
+                  packageId={selectedPackage?.id}
+                  packageName={selectedPackage?.name}
+                  packageSessions={selectedPackage?.sessions || 1}
+                  sessionDurationMinutes={duration?.minutes}
+                  onSuccess={handlePaymentConfirmed}
+                />
               </div>
             )}
 
-            {/* Confirm button */}
+            {/* Confirm button (existing credits only) */}
             <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
               <p className="text-xs text-accent font-oswald tracking-wide uppercase mb-1">After completing payment</p>
               <p className="text-xs text-muted-foreground">
@@ -570,10 +568,12 @@ export default function Book() {
               </p>
             </div>
 
-            <Button onClick={handlePaymentConfirmed} disabled={submitting}
-              className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
-              {submitting ? 'Activating Credits...' : useExistingCredit ? 'Use My Credits & Continue' : "I've Paid — Activate My Credits"}
-            </Button>
+            {useExistingCredit && (
+              <Button onClick={handlePaymentConfirmed} disabled={submitting}
+                className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
+                {submitting ? 'Activating Credits...' : 'Use My Credits & Continue'}
+              </Button>
+            )}
           </div>
         )}
 
