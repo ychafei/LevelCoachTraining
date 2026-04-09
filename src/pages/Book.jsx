@@ -49,11 +49,14 @@ export default function Book() {
 
   // Auto-select head coach when county changes
   useEffect(() => {
-    if (county) {
+    if (county && coaches.length > 0) {
       const headCoach = coaches.find(c => c.county === county && c.is_head_coach);
       if (headCoach) {
         setCoach(headCoach);
         if (preCounty) setStep(2);
+      } else {
+        // No head coach — let user pick from available coaches
+        setCoach(null);
       }
     }
   }, [county, coaches, preCounty]);
@@ -228,24 +231,67 @@ export default function Book() {
         )}
 
         {/* Step 1: Coach */}
-        {step === 1 && coach && (
-          <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">YOUR COACH</h2>
-            <div className="bg-card border border-accent/30 rounded-lg p-6 flex items-center gap-6">
-              <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
-                {coach.photo_url ? (
-                  <img src={coach.photo_url} alt={coach.first_name} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-6 h-6 text-muted-foreground" />
-                )}
-              </div>
+        {step === 1 && (() => {
+          const countyCoaches = coaches.filter(c => c.county === county);
+          if (countyCoaches.length === 0) {
+            return (
               <div>
-                <h3 className="font-oswald text-xl font-bold tracking-wider">{coach.first_name} {coach.last_name}</h3>
-                <p className="text-sm text-accent font-oswald tracking-wider uppercase">{county} County — Head Coach</p>
+                <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">YOUR COACH</h2>
+                <p className="text-muted-foreground">No coaches available in {county} County at this time. Please check back soon.</p>
+              </div>
+            );
+          }
+          if (countyCoaches.length === 1 || coach) {
+            const displayCoach = coach || countyCoaches[0];
+            if (!coach) setCoach(displayCoach);
+            return (
+              <div>
+                <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">YOUR COACH</h2>
+                <div className="bg-card border border-accent/30 rounded-lg p-6 flex items-center gap-6">
+                  <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                    {displayCoach.photo_url ? (
+                      <img src={displayCoach.photo_url} alt={displayCoach.first_name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-6 h-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-oswald text-xl font-bold tracking-wider">{displayCoach.first_name} {displayCoach.last_name}</h3>
+                    <p className="text-sm text-accent font-oswald tracking-wider uppercase">{county} County — {displayCoach.is_head_coach ? 'Head Coach' : 'Coach'}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div>
+              <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">SELECT YOUR COACH</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {countyCoaches.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCoach(c)}
+                    className={`p-6 rounded-lg border text-left transition-all flex items-center gap-4 ${
+                      coach?.id === c.id ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'
+                    }`}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                      {c.photo_url ? (
+                        <img src={c.photo_url} alt={c.first_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-oswald text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
+                      {c.is_head_coach && <p className="text-xs text-accent font-oswald tracking-wider uppercase">Head Coach</p>}
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Step 2: Date */}
         {step === 2 && (
@@ -406,13 +452,25 @@ export default function Book() {
               Next <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
-            >
-              {submitting ? 'Booking...' : 'Confirm Booking'}
-            </Button>
+            user ? (
+              <Button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+              >
+                {submitting ? 'Booking...' : 'Confirm Booking'}
+              </Button>
+            ) : (
+              <div className="flex flex-col items-end gap-2">
+                <Button
+                  onClick={() => base44.auth.redirectToLogin(window.location.href)}
+                  className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                >
+                  Sign In to Confirm
+                </Button>
+                <p className="text-xs text-muted-foreground">You need an account to complete your booking</p>
+              </div>
+            )
           )}
         </div>
       </div>
