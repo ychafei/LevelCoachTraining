@@ -63,7 +63,19 @@ export default function Pay() {
                         {coach.venmo && <div className="flex justify-between"><span className="text-muted-foreground">Venmo</span><span>{coach.venmo}</span></div>}
                         {coach.zelle && <div className="flex justify-between"><span className="text-muted-foreground">Zelle</span><span>{coach.zelle}</span></div>}
                         {coach.cashapp && <div className="flex justify-between"><span className="text-muted-foreground">Cash App</span><span>{coach.cashapp}</span></div>}
-                        {coach.paypal && <div className="flex justify-between"><span className="text-muted-foreground">PayPal</span><span>{coach.paypal}</span></div>}
+                        {coach.paypal && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">PayPal</span>
+                            <a
+                              href={`https://paypal.me/${coach.paypal.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '')}${session.total_price ? '/' + session.total_price : ''}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 underline hover:text-blue-300 font-medium"
+                            >
+                              Pay via PayPal{session.total_price ? ` ($${session.total_price})` : ''}
+                            </a>
+                          </div>
+                        )}
                         {coach.cash_accepted && <div className="flex justify-between"><span className="text-muted-foreground">Cash</span><span>Accepted</span></div>}
                       </div>
                     </div>
