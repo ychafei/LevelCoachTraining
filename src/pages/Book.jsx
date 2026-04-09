@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, ArrowRight, MapPin, User, Clock, Timer, CheckCircle2, Package, Zap, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, User, Clock, Timer, CheckCircle2, Package, ExternalLink } from 'lucide-react';
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
 
-// Duration options with discount multipliers relative to 1hr base
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
   { label: '1.5 Hours', minutes: 90,  hours: 1.5, discount: 0.10 },
@@ -25,16 +24,13 @@ for (let h = 8; h <= 20; h++) {
   if (h < 20) TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`);
 }
 
-// Steps: 0=County, 1=Coach, 2=Package, 3=Date, 4=Time, 5=Duration, 6=Goals, 7=Review
-const STEPS = ['County', 'Coach', 'Package', 'Date', 'Time', 'Duration', 'Goals', 'Review'];
+// Steps: 0=County, 1=Coach, 2=Package, 3=Duration, 4=Goals, 5=Checkout
+const STEPS = ['County', 'Coach', 'Package', 'Duration', 'Goals', 'Checkout'];
 
-// Calculate session price: base is per-session price from package (1hr), scale up with discount for longer
 function calcPrice(pkg, dur) {
   if (!pkg || !dur) return null;
   const perSessionBase = pkg.price / (pkg.sessions || 1);
-  const raw = perSessionBase * dur.hours;
-  const discounted = raw * (1 - dur.discount);
-  return Math.round(discounted);
+  return Math.round(perSessionBase * dur.hours * (1 - dur.discount));
 }
 
 export default function Book() {
@@ -44,24 +40,28 @@ export default function Book() {
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
 
-  const [step, setStep]                   = useState(saved?.step ?? (preCounty ? 1 : 0));
-  const [county, setCounty]               = useState(saved?.county || preCounty || '');
-  const [coach, setCoach]                 = useState(saved?.coach || null);
-  const [coaches, setCoaches]             = useState([]);
-  const [packages, setPackages]           = useState([]);
+  const [step, setStep]                       = useState(saved?.step ?? (preCounty ? 1 : 0));
+  const [county, setCounty]                   = useState(saved?.county || preCounty || '');
+  const [coach, setCoach]                     = useState(saved?.coach || null);
+  const [coaches, setCoaches]                 = useState([]);
+  const [packages, setPackages]               = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(saved?.selectedPackage || null);
-  const [existingCredit, setExistingCredit]   = useState(null); // SessionCredit record user already owns
+  const [existingCredit, setExistingCredit]   = useState(null);
   const [useExistingCredit, setUseExistingCredit] = useState(false);
-  const [selectedDate, setSelectedDate]   = useState(saved?.selectedDate ? new Date(saved.selectedDate) : null);
-  const [selectedTime, setSelectedTime]   = useState(saved?.selectedTime || '');
-  const [duration, setDuration]           = useState(saved?.duration || null);
-  const [goals, setGoals]                 = useState(saved?.goals || '');
-  const [selectedTags, setSelectedTags]   = useState(saved?.selectedTags || []);
-  const [blocks, setBlocks]               = useState([]);
+  const [duration, setDuration]               = useState(saved?.duration || null);
+  const [goals, setGoals]                     = useState(saved?.goals || '');
+  const [selectedTags, setSelectedTags]       = useState(saved?.selectedTags || []);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [creditRecord, setCreditRecord]       = useState(null);
+
+  // Schedule later state
+  const [scheduling, setScheduling]           = useState(false); // true = user chose "Schedule Now"
+  const [blocks, setBlocks]                   = useState([]);
   const [existingSessions, setExistingSessions] = useState([]);
-  const [submitting, setSubmitting]       = useState(false);
-  const [bookingComplete, setBookingComplete] = useState(false);
-  const [bookedSession, setBookedSession] = useState(null);
+  const [selectedDate, setSelectedDate]       = useState(null);
+  const [selectedTime, setSelectedTime]       = useState('');
+  const [submitting, setSubmitting]           = useState(false);
+  const [sessionBooked, setSessionBooked]     = useState(false);
 
   useEffect(() => {
     base44.functions.invoke('getPublicCoaches', {}).then(res => setCoaches(res.data.coaches || []));
@@ -71,12 +71,8 @@ export default function Book() {
   useEffect(() => {
     if (county && coaches.length > 0) {
       const headCoach = coaches.find(c => c.county === county && c.is_head_coach);
-      if (headCoach) {
-        setCoach(headCoach);
-        if (preCounty) setStep(2);
-      } else {
-        setCoach(null);
-      }
+      if (headCoach) { setCoach(headCoach); if (preCounty) setStep(2); }
+      else setCoach(null);
     }
   }, [county, coaches, preCounty]);
 
@@ -89,7 +85,6 @@ export default function Book() {
     }
   }, [coach]);
 
-  // Check for existing unused credits when user + package selected
   useEffect(() => {
     if (user && selectedPackage) {
       base44.entities.SessionCredit.filter({ client_email: user.email, package_id: selectedPackage.id }).then(credits => {
@@ -130,49 +125,36 @@ export default function Book() {
     const dayAvail = coach.availability[format(selectedDate, 'EEEE')];
     if (!dayAvail || !dayAvail.enabled) return true;
     const slotMins  = timeToMinutes(time);
-    const startMins = timeToMinutes(dayAvail.start);
-    const endMins   = timeToMinutes(dayAvail.end);
-    return slotMins < startMins || slotMins >= endMins;
+    return slotMins < timeToMinutes(dayAvail.start) || slotMins >= timeToMinutes(dayAvail.end);
   };
 
   const sessionPrice = calcPrice(selectedPackage, duration);
 
-  const handleSubmit = async () => {
+  const paypalHandle = coach?.paypal?.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '');
+  const paypalUrl = paypalHandle
+    ? `https://paypal.me/${paypalHandle}${sessionPrice ? '/' + sessionPrice : ''}`
+    : null;
+
+  // Called after user confirms payment
+  const handlePaymentConfirmed = async () => {
     if (!user) {
-      sessionStorage.setItem('lc_booking', JSON.stringify({
-        step, county, coach, selectedPackage, selectedDate, selectedTime, duration, goals, selectedTags
-      }));
+      sessionStorage.setItem('lc_booking', JSON.stringify({ step, county, coach, selectedPackage, duration, goals, selectedTags }));
       base44.auth.redirectToLogin(window.location.href);
       return;
     }
     sessionStorage.removeItem('lc_booking');
     setSubmitting(true);
 
-    const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
-    const session = {
-      coach_id: coach.id,
-      client_email: user.email,
-      client_name: user.full_name || user.email,
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      start_time: selectedTime,
-      duration_minutes: duration.minutes,
-      status: 'pending',
-      payment_status: 'unpaid',
-      county,
-      session_goals: sessionGoals,
-      total_price: sessionPrice,
-    };
-
-    const newSession = await base44.entities.Session.create(session);
-
-    // Handle credits
+    let credit;
     if (useExistingCredit && existingCredit) {
-      await base44.entities.SessionCredit.update(existingCredit.id, {
+      // Deduct from existing credits
+      credit = await base44.entities.SessionCredit.update(existingCredit.id, {
         used_credits: existingCredit.used_credits + 1
       });
-    } else if (selectedPackage) {
-      // New package purchase — create credit record (remaining sessions = total - 1 used)
-      await base44.entities.SessionCredit.create({
+      setCreditRecord({ ...existingCredit, used_credits: existingCredit.used_credits + 1 });
+    } else {
+      // New package — create credits
+      credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
         client_name: user.full_name || user.email,
         package_id: selectedPackage.id,
@@ -181,17 +163,38 @@ export default function Book() {
         used_credits: 1,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
       });
+      setCreditRecord(credit);
     }
 
-    const coachName = `${coach.first_name} ${coach.last_name}`;
-    const dateStr = format(selectedDate, 'EEEE, MMMM d, yyyy');
+    setSubmitting(false);
+    setPaymentConfirmed(true);
+  };
+
+  // Book a specific session after credits are awarded
+  const handleBookSession = async () => {
+    if (!selectedDate || !selectedTime) return;
+    setSubmitting(true);
+    const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
+    await base44.entities.Session.create({
+      coach_id: coach.id,
+      client_email: user.email,
+      client_name: user.full_name || user.email,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      start_time: selectedTime,
+      duration_minutes: duration.minutes,
+      status: 'pending',
+      payment_status: 'paid',
+      county,
+      session_goals: sessionGoals,
+      total_price: sessionPrice,
+    });
 
     await base44.functions.invoke('sendBookingEmails', {
       clientEmail: user.email,
       clientName: user.full_name || user.email,
       coachEmail: coach.email,
-      coachName,
-      dateStr,
+      coachName: `${coach.first_name} ${coach.last_name}`,
+      dateStr: format(selectedDate, 'EEEE, MMMM d, yyyy'),
       time: selectedTime,
       durationLabel: duration.label,
       county,
@@ -199,35 +202,106 @@ export default function Book() {
       origin: window.location.origin,
     });
 
-    setBookedSession(newSession);
     setSubmitting(false);
-    setBookingComplete(true);
+    setSessionBooked(true);
   };
 
-  if (bookingComplete) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="w-8 h-8 text-accent" />
-          </div>
-          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-4">BOOKING CONFIRMED</h1>
-          <p className="text-muted-foreground mb-2">
-            Your session with {coach.first_name} {coach.last_name} on {format(selectedDate, 'EEEE, MMMM d')} at {selectedTime} is booked.
-          </p>
-          {sessionPrice && (
-            <p className="text-accent font-oswald text-xl font-bold mb-2">Session Total: ${sessionPrice}</p>
-          )}
-          <p className="text-sm text-muted-foreground mb-8">
-            A confirmation email has been sent. Please complete payment directly with your coach.
-          </p>
-          <PaymentHandlesDisplay coach={coach} price={sessionPrice} />
-          <div className="flex gap-3 justify-center mt-8">
+  // ── Payment confirmed screen ──────────────────────────────────────────────
+  if (paymentConfirmed) {
+    const remainingCredits = (creditRecord?.total_credits || selectedPackage?.sessions || 1) - (creditRecord?.used_credits || 1);
+
+    if (sessionBooked) {
+      return (
+        <div className="min-h-[80vh] flex items-center justify-center px-4">
+          <div className="max-w-md w-full text-center">
+            <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-8 h-8 text-accent" />
+            </div>
+            <h1 className="font-oswald text-3xl font-bold tracking-tight mb-4">SESSION BOOKED!</h1>
+            <p className="text-muted-foreground mb-2">
+              {format(selectedDate, 'EEEE, MMMM d')} at {selectedTime} with {coach.first_name} {coach.last_name}
+            </p>
+            <p className="text-sm text-muted-foreground mb-8">A confirmation email has been sent.</p>
             <Button onClick={() => window.location.href = '/dashboard'} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase">
               Go to Dashboard
             </Button>
-            <Button onClick={() => window.location.href = '/pay'} variant="outline" className="font-oswald tracking-wider uppercase">
-              View Receipt
+          </div>
+        </div>
+      );
+    }
+
+    if (scheduling) {
+      return (
+        <div className="min-h-[80vh] py-12">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6">
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SCHEDULE YOUR SESSION</h2>
+            <p className="text-muted-foreground text-sm mb-8">Pick a date and time with {coach.first_name} {coach.last_name}.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate}
+                  disabled={(date) => isBefore(date, startOfDay(new Date())) || isDateBlocked(date)}
+                  className="rounded-lg border border-border bg-card p-4" />
+              </div>
+              {selectedDate && (
+                <div>
+                  <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Time</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {TIME_SLOTS.map((time) => {
+                      const taken    = isTimeSlotTaken(time);
+                      const outside  = isTimeSlotOutsideAvailability(time);
+                      const disabled = taken || outside;
+                      return (
+                        <button key={time} onClick={() => !disabled && setSelectedTime(time)} disabled={disabled}
+                          className={`p-2 rounded-md border text-xs font-oswald tracking-wide transition-all ${disabled ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed' : selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}>
+                          {time}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <Button variant="outline" onClick={() => setScheduling(false)} className="font-oswald tracking-wider uppercase">
+                Back
+              </Button>
+              <Button onClick={handleBookSession} disabled={!selectedDate || !selectedTime || submitting}
+                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+                {submitting ? 'Booking...' : 'Confirm Session'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Payment confirmed — choose to schedule now or later
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
+            <CheckCircle2 className="w-8 h-8 text-green-400" />
+          </div>
+          <h1 className="font-oswald text-3xl font-bold tracking-tight mb-4">PAYMENT CONFIRMED!</h1>
+          <p className="text-muted-foreground mb-2">
+            Your <strong>{selectedPackage?.name}</strong> package is active.
+          </p>
+          <div className="bg-card border border-border rounded-lg p-4 mb-8">
+            <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-2">Your Credits</p>
+            <p className="font-oswald text-4xl font-bold text-accent">{remainingCredits}</p>
+            <p className="text-sm text-muted-foreground">session{remainingCredits !== 1 ? 's' : ''} remaining</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <Button onClick={() => setScheduling(true)}
+              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+              Schedule Now
+            </Button>
+            <Button variant="outline" onClick={() => window.location.href = '/dashboard'}
+              className="font-oswald tracking-wider uppercase">
+              Schedule Later from Dashboard
             </Button>
           </div>
         </div>
@@ -240,11 +314,9 @@ export default function Book() {
       case 0: return !!county;
       case 1: return !!coach;
       case 2: return !!selectedPackage;
-      case 3: return !!selectedDate;
-      case 4: return !!selectedTime;
-      case 5: return !!duration;
-      case 6: return true;
-      case 7: return true;
+      case 3: return !!duration;
+      case 4: return true;
+      case 5: return true;
       default: return false;
     }
   };
@@ -266,7 +338,7 @@ export default function Book() {
         {/* Step 0: County */}
         {step === 0 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">SELECT YOUR COUNTY</h2>
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {['Oakland', 'Macomb', 'Wayne'].map((c) => (
                 <button key={c} onClick={() => setCounty(c)}
@@ -284,7 +356,7 @@ export default function Book() {
           const countyCoaches = coaches.filter(c => c.county === county);
           if (countyCoaches.length === 0) return (
             <div>
-              <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">YOUR COACH</h2>
+              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
               <p className="text-muted-foreground">No coaches available in {county} County at this time.</p>
             </div>
           );
@@ -293,7 +365,7 @@ export default function Book() {
             if (!coach) setCoach(displayCoach);
             return (
               <div>
-                <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">YOUR COACH</h2>
+                <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
                 <div className="bg-card border border-accent/30 rounded-lg p-6 flex items-center gap-6">
                   <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
                     {displayCoach.photo_url ? <img src={displayCoach.photo_url} alt={displayCoach.first_name} className="w-full h-full object-cover" /> : <User className="w-6 h-6 text-muted-foreground" />}
@@ -308,7 +380,7 @@ export default function Book() {
           }
           return (
             <div>
-              <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">SELECT YOUR COACH</h2>
+              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COACH</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {countyCoaches.map((c) => (
                   <button key={c.id} onClick={() => setCoach(c)}
@@ -330,17 +402,16 @@ export default function Book() {
         {/* Step 2: Package */}
         {step === 2 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-2">SELECT A PACKAGE</h2>
-            <p className="text-muted-foreground text-sm mb-8">Base price is for 1 hour. Longer sessions scale up with a discount applied.</p>
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SELECT A PACKAGE</h2>
+            <p className="text-muted-foreground text-sm mb-8">Multi-session packages give you credits to schedule sessions whenever you're ready.</p>
 
-            {/* Existing credits notice */}
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
                 <p className="text-primary font-oswald tracking-wider text-sm uppercase mb-1">You have existing credits!</p>
-                <p className="text-xs text-muted-foreground">
-                  You have {existingCredit.total_credits - existingCredit.used_credits} session(s) remaining on your <strong>{existingCredit.package_name}</strong> package.
+                <p className="text-xs text-muted-foreground mb-3">
+                  {existingCredit.total_credits - existingCredit.used_credits} session(s) remaining on <strong>{existingCredit.package_name}</strong>.
                 </p>
-                <div className="flex gap-3 mt-3">
+                <div className="flex gap-3">
                   <button onClick={() => setUseExistingCredit(true)}
                     className={`px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all ${useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
                     Use Existing Credits
@@ -367,7 +438,7 @@ export default function Book() {
                     <p className="font-oswald text-xl font-bold tracking-wider">{pkg.name.toUpperCase()}</p>
                     <p className="text-2xl font-oswald font-bold text-accent mt-1">${pkg.price}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : '1 session · $' + perSession + '/hr base'}
+                      {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : `1 session · $${perSession}/hr base`}
                     </p>
                     {pkg.description && <p className="text-sm text-muted-foreground mt-3">{pkg.description}</p>}
                     {pkg.includes?.length > 0 && (
@@ -386,43 +457,11 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 3: Date */}
+        {/* Step 3: Duration */}
         {step === 3 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">PICK A DATE</h2>
-            <div className="flex justify-center">
-              <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate}
-                disabled={(date) => isBefore(date, startOfDay(new Date())) || isDateBlocked(date)}
-                className="rounded-lg border border-border bg-card p-4" />
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Time */}
-        {step === 4 && (
-          <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">CHOOSE A TIME</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {TIME_SLOTS.map((time) => {
-                const taken    = isTimeSlotTaken(time);
-                const outside  = isTimeSlotOutsideAvailability(time);
-                const disabled = taken || outside;
-                return (
-                  <button key={time} onClick={() => !disabled && setSelectedTime(time)} disabled={disabled}
-                    className={`p-3 rounded-md border text-sm font-oswald tracking-wide transition-all ${disabled ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed' : selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card text-foreground hover:border-accent/30'}`}>
-                    {time}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Duration */}
-        {step === 5 && (
-          <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-2">SESSION DURATION</h2>
-            <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly base rate.</p>
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SESSION DURATION</h2>
+            <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly rate.</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {DURATIONS.map((d) => {
                 const price = calcPrice(selectedPackage, d);
@@ -438,9 +477,7 @@ export default function Book() {
                     <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} />
                     <span className="font-oswald text-lg font-bold tracking-wider block">{d.label}</span>
                     {price !== null && (
-                      <span className={`text-sm font-oswald font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>
-                        ${price}
-                      </span>
+                      <span className={`text-sm font-oswald font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
                     )}
                   </button>
                 );
@@ -449,10 +486,10 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 6: Goals */}
-        {step === 6 && (
+        {/* Step 4: Goals */}
+        {step === 4 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">SESSION GOALS</h2>
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SESSION GOALS</h2>
             <div className="flex flex-wrap gap-2 mb-6">
               {GOAL_TAGS.map((tag) => (
                 <button key={tag}
@@ -462,124 +499,104 @@ export default function Book() {
                 </button>
               ))}
             </div>
-            <Textarea placeholder="Any additional goals or notes for your session..."
+            <Textarea placeholder="Any additional goals or notes for your sessions..."
               value={goals} onChange={(e) => setGoals(e.target.value)}
               className="bg-card border-border" rows={4} />
           </div>
         )}
 
-        {/* Step 7: Review */}
-        {step === 7 && (
+        {/* Step 5: Checkout */}
+        {step === 5 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">REVIEW & CONFIRM</h2>
-            <div className="bg-card border border-border rounded-lg p-6 space-y-1">
-              {[
-                ['County', county],
-                ['Coach', `${coach?.first_name} ${coach?.last_name}`],
-                ['Package', selectedPackage?.name + (useExistingCredit && existingCredit ? ` (using credit — ${existingCredit.total_credits - existingCredit.used_credits} remaining)` : ' (new purchase)')],
-                ['Date', selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')],
-                ['Time', selectedTime],
-                ['Duration', duration?.label],
-              ].map(([label, val]) => (
-                <div key={label} className="flex justify-between items-center py-3 border-b border-border">
-                  <span className="text-muted-foreground text-sm">{label}</span>
-                  <span className="font-oswald tracking-wider text-sm text-right max-w-[60%]">{val}</span>
-                </div>
-              ))}
-              {(selectedTags.length > 0 || goals) && (
-                <div className="py-3 border-b border-border">
-                  <span className="text-muted-foreground text-sm block mb-2">Goals</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedTags.map(t => <Badge key={t} className="bg-accent/10 text-accent border-accent/20">{t}</Badge>)}
+            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">CHECKOUT</h2>
+
+            {/* Order Summary */}
+            <div className="bg-card border border-border rounded-lg p-6 mb-6">
+              <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-4">Order Summary</p>
+              <div className="space-y-1">
+                {[
+                  ['Package', selectedPackage?.name],
+                  ['Sessions', selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions` : '1 session'],
+                  ['Session Duration', duration?.label],
+                  ['Coach', `${coach?.first_name} ${coach?.last_name}`],
+                  ['County', county],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between py-2 border-b border-border last:border-0">
+                    <span className="text-muted-foreground text-sm">{label}</span>
+                    <span className="font-oswald tracking-wider text-sm">{val}</span>
                   </div>
-                  {goals && <p className="text-sm text-foreground mt-2">{goals}</p>}
-                </div>
+                ))}
+              </div>
+              <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
+                <span className="font-oswald text-lg font-bold tracking-wider">PER SESSION TOTAL</span>
+                <span className="font-oswald text-2xl font-bold text-accent">${sessionPrice}</span>
+              </div>
+              {duration?.discount > 0 && (
+                <p className="text-xs text-green-400 mt-2">{Math.round(duration.discount * 100)}% multi-hour discount applied</p>
               )}
-              {/* Price Summary */}
-              {sessionPrice !== null && (
-                <div className="flex justify-between items-center py-4">
-                  <span className="font-oswald text-lg font-bold tracking-wider">SESSION TOTAL</span>
-                  <span className="font-oswald text-2xl font-bold text-accent">${sessionPrice}</span>
-                </div>
+              {selectedPackage?.sessions > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Package total: ${selectedPackage.price} for {selectedPackage.sessions} sessions
+                </p>
               )}
             </div>
 
-            {duration?.discount > 0 && (
-              <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                <p className="text-xs text-green-400 font-oswald tracking-wide">
-                  {Math.round(duration.discount * 100)}% multi-hour discount applied
-                </p>
+            {/* PayPal Payment */}
+            {!useExistingCredit && (
+              <div className="bg-card border border-border rounded-lg p-6 mb-6">
+                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
+                {paypalUrl ? (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      You'll be redirected to PayPal to complete payment of <strong className="text-foreground">${sessionPrice}</strong> to your coach.
+                    </p>
+                    <a href={paypalUrl} target="_blank" rel="noopener noreferrer">
+                      <Button className="w-full bg-[#003087] hover:bg-[#002070] text-white font-oswald tracking-wider uppercase">
+                        <ExternalLink className="w-4 h-4 mr-2" /> Pay ${sessionPrice} via PayPal
+                      </Button>
+                    </a>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Contact your coach directly to arrange payment.</p>
+                )}
               </div>
             )}
 
-            <div className="mt-6 p-4 rounded-lg bg-accent/5 border border-accent/20">
-              <p className="text-sm text-accent font-oswald tracking-wide uppercase mb-1">Cancellation Policy</p>
+            {/* Confirm button */}
+            <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
+              <p className="text-xs text-accent font-oswald tracking-wide uppercase mb-1">After completing payment</p>
               <p className="text-xs text-muted-foreground">
-                Sessions cancelled with less than 24 hours notice may incur a late-cancellation fee at the coach's discretion.
+                Click below once you've sent the payment. Your credits will be activated and you can schedule sessions whenever you're ready.
               </p>
             </div>
+
+            <Button onClick={handlePaymentConfirmed} disabled={submitting}
+              className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
+              {submitting ? 'Activating Credits...' : useExistingCredit ? 'Use My Credits & Continue' : "I've Paid — Activate My Credits"}
+            </Button>
           </div>
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between mt-10">
-          <Button variant="outline" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
-            className="font-oswald tracking-wider uppercase">
-            <ArrowLeft className="mr-2 w-4 h-4" /> Back
-          </Button>
-          {step < STEPS.length - 1 ? (
+        {step < 5 && (
+          <div className="flex justify-between mt-10">
+            <Button variant="outline" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
+              className="font-oswald tracking-wider uppercase">
+              <ArrowLeft className="mr-2 w-4 h-4" /> Back
+            </Button>
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}
               className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
               Next <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
-          ) : (
-            user ? (
-              <Button onClick={handleSubmit} disabled={submitting}
-                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
-                {submitting ? 'Booking...' : 'Confirm Booking'}
-              </Button>
-            ) : (
-              <div className="flex flex-col items-end gap-2">
-                <Button onClick={handleSubmit} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
-                  Sign In to Confirm
-                </Button>
-                <p className="text-xs text-muted-foreground">You'll be signed in and returned to confirm</p>
-              </div>
-            )
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PaymentHandlesDisplay({ coach, price }) {
-  if (!coach) return null;
-  const paypalHandle = coach.paypal?.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '');
-  const paypalUrl = paypalHandle ? `https://paypal.me/${paypalHandle}${price ? '/' + price : ''}` : null;
-
-  const handles = [];
-  if (coach.venmo)         handles.push({ name: 'Venmo',    value: coach.venmo,                                link: null });
-  if (coach.zelle)         handles.push({ name: 'Zelle',    value: coach.zelle,                                link: null });
-  if (coach.cashapp)       handles.push({ name: 'Cash App', value: coach.cashapp,                              link: null });
-  if (paypalUrl)           handles.push({ name: 'PayPal',   value: price ? `Pay $${price} via PayPal` : 'Pay via PayPal', link: paypalUrl });
-  if (coach.cash_accepted) handles.push({ name: 'Cash',     value: 'Accepted',                                link: null });
-  if (handles.length === 0) return null;
-
-  return (
-    <div className="bg-card border border-border rounded-lg p-4 text-left">
-      <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Payment Methods</p>
-      <div className="space-y-2">
-        {handles.map(h => (
-          <div key={h.name} className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{h.name}</span>
-            {h.link ? (
-              <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300 font-medium">{h.value}</a>
-            ) : (
-              <span className="text-foreground font-medium">{h.value}</span>
-            )}
           </div>
-        ))}
+        )}
+        {step === 5 && (
+          <div className="flex mt-6">
+            <Button variant="outline" onClick={() => setStep(4)} className="font-oswald tracking-wider uppercase">
+              <ArrowLeft className="mr-2 w-4 h-4" /> Back
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
