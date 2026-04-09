@@ -15,13 +15,13 @@ export default function PayPalCheckout({ amount, packageId, packageName, package
     return res.data.orderId;
   };
 
-  const onApprove = async () => {
-    // Payment approved — trigger credit grant in parent
+  const onApprove = async (data) => {
+    await base44.functions.invoke('capturePaypalOrder', { orderId: data.orderID });
     await onSuccess();
   };
 
   return (
-    <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID, currency: 'USD' }}>
+    <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID, currency: 'USD', intent: 'capture' }}>
       <PayPalButtons
         style={{ layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' }}
         createOrder={createOrder}
