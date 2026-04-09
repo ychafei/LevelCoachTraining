@@ -1,7 +1,7 @@
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { base44 } from '@/api/base44Client';
 
-const PAYPAL_CLIENT_ID = 'AV2qBjOAIlIWngkAl0sqUZEGVBlrbXQpMAJQrIZoPAtxGmgvLY2HNeGBPkxgJNScyOkppdIeW0779ceE';
+const PAYPAL_CLIENT_ID = 'Adz5wY73h9nEH2eSHIOxR6GA_vD6bI7TykK_0dRsL3g5T7zBcQ1rbbF7naBDgd56ehUnfJi-U2fD-RfN';
 
 export default function PayPalCheckout({ amount, packageId, packageName, packageSessions, sessionDurationMinutes, onSuccess }) {
   const createOrder = async () => {
