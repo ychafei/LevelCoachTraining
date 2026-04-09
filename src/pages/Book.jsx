@@ -161,7 +161,7 @@ export default function Book() {
         package_id: selectedPackage.id,
         package_name: selectedPackage.name,
         total_credits: selectedPackage.sessions || 1,
-        used_credits: 1,
+        used_credits: 0,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
       });
       setCreditRecord(credit);
