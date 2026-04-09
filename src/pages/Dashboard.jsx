@@ -50,8 +50,8 @@ export default function Dashboard() {
     const now = new Date();
     const sessionTime = new Date(`${session.date}T${session.start_time}`);
 
-    // Block cancellation on the day of or after the session
-    if (!isBefore(now, new Date(session.date + 'T00:00:00'))) {
+    // Only block clients from cancelling on the day of or after
+    if (!isCoach && !isBefore(now, new Date(session.date + 'T00:00:00'))) {
       alert('Sessions can only be cancelled before the day of the appointment.');
       return;
     }
