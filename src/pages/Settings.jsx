@@ -89,7 +89,7 @@ export default function Settings() {
                   <Select value={profile.position} onValueChange={v => setProfile({...profile, position: v})}>
                     <SelectTrigger className="bg-card border-border mt-1"><SelectValue placeholder="Select position" /></SelectTrigger>
                     <SelectContent>
-                      {['Goalkeeper', 'Defender', 'Midfielder', 'Striker', 'Winger', 'Center Back', 'Fullback', 'Other'].map(p => (
+                      {['Goalkeeper', 'Center Back', 'Fullback', 'Defensive Midfielder', 'Central Midfielder', 'Attacking Midfielder', 'Winger', 'Striker', 'Forward', 'Other'].map(p => (
                         <SelectItem key={p} value={p}>{p}</SelectItem>
                       ))}
                     </SelectContent>
