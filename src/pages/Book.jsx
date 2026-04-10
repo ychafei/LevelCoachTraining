@@ -203,7 +203,7 @@ export default function Book() {
       coachName: `${coach.first_name} ${coach.last_name}`,
       dateStr: format(selectedDate, 'EEEE, MMMM d, yyyy'),
       time: selectedTime,
-      durationLabel: duration.label,
+      durationLabel: duration?.label ?? `${durationMinutes} min`,
       county,
       sessionGoals,
       origin: window.location.origin,
