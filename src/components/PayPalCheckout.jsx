@@ -41,6 +41,7 @@ export default function PayPalCheckout({ amount, packageId, packageName, package
       currency: 'USD',
       intent: 'capture',
       components: 'buttons',
+      enableFunding: 'applepay,googlepay,venmo',
     }}>
       {error && <p className="text-destructive text-sm mb-3">{error}</p>}
       {processing && <p className="text-muted-foreground text-sm mb-3">Processing payment...</p>}
