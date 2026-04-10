@@ -180,19 +180,20 @@ export default function Book() {
     setSubmitting(true);
     const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
     const pmMethod = useExistingCredit ? 'credits' : paymentMethod === 'cash' ? 'cash' : 'electronic';
+    const durationMinutes = duration?.minutes ?? 60;
     await base44.entities.Session.create({
       coach_id: coach.id,
       client_email: user.email,
       client_name: user.full_name || user.email,
       date: format(selectedDate, 'yyyy-MM-dd'),
       start_time: selectedTime,
-      duration_minutes: duration.minutes,
+      duration_minutes: durationMinutes,
       status: 'pending',
-      payment_status: paymentMethod === 'cash' ? 'unpaid' : 'paid',
+      payment_status: pmMethod === 'cash' ? 'unpaid' : 'paid',
       payment_method: pmMethod,
       county,
       session_goals: sessionGoals,
-      total_price: sessionPrice,
+      total_price: sessionPrice ?? 0,
     });
 
     await base44.functions.invoke('sendBookingEmails', {
