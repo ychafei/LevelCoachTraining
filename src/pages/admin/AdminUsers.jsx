@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Shield, Ban, UserPlus } from 'lucide-react';
+import { Shield, Ban, UserPlus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminUsers() {
@@ -23,6 +23,8 @@ export default function AdminUsers() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('user');
   const [inviting, setInviting] = useState(false);
+  const [warnDialog, setWarnDialog] = useState(null);
+  const [warnMessage, setWarnMessage] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -73,7 +75,6 @@ export default function AdminUsers() {
     setInviting(true);
     await base44.users.inviteUser(inviteEmail.trim(), inviteRole);
     if (inviteRole === 'coach') {
-      // Pre-create a Coach entity so admin can fill in details
       await base44.entities.Coach.create({
         first_name: inviteEmail.split('@')[0],
         last_name: '',
@@ -87,6 +88,18 @@ export default function AdminUsers() {
     setInviteEmail('');
     setInviteRole('user');
     setInviting(false);
+  };
+
+  const sendWarning = async () => {
+    if (!warnMessage.trim()) { toast.error('Please enter a warning message'); return; }
+    await base44.integrations.Core.SendEmail({
+      to: warnDialog.email,
+      subject: 'Account Warning — LC Training',
+      body: `<p>Hi ${warnDialog.full_name || warnDialog.email},</p><p>${warnMessage}</p><p>If you have questions, reply to this email or contact support@lctrainings.com.</p><p>— LC Training Team</p>`,
+    });
+    toast.success(`Warning sent to ${warnDialog.email}`);
+    setWarnDialog(null);
+    setWarnMessage('');
   };
 
   const filtered = users.filter(u =>
@@ -121,23 +134,31 @@ export default function AdminUsers() {
               return (
                 <div key={u.id} className="bg-card border border-border rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-oswald tracking-wider text-foreground">{u.full_name}</p>
+                    <p className="font-oswald tracking-wider text-foreground">{u.full_name || '—'}</p>
                     <p className="text-xs text-muted-foreground">{u.email}</p>
-                    {isBanned && <Badge className="bg-destructive/10 text-destructive border-destructive/20 border text-xs mt-1">Banned</Badge>}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase border ${
+                        u.role === 'admin' ? 'bg-accent/10 text-accent border-accent/20' :
+                        u.role === 'coach' ? 'bg-primary/10 text-primary border-primary/20' :
+                        'bg-secondary text-muted-foreground border-border'
+                      }`}>{u.role || 'user'}</span>
+                      {isBanned && <Badge className="bg-destructive/10 text-destructive border-destructive/20 border text-xs">Banned</Badge>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {isSuperAdmin && (
-                      <Select value={u.role || 'user'} onValueChange={v => updateRole(u.id, v)}>
-                        <SelectTrigger className="w-28 h-7 text-xs bg-secondary border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="user">User</SelectItem>
-                          <SelectItem value="coach">Coach</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={u.role || 'user'} onValueChange={v => updateRole(u.id, v)}>
+                      <SelectTrigger className="w-28 h-7 text-xs bg-secondary border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">Client</SelectItem>
+                        <SelectItem value="coach">Coach</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="ghost" className="text-yellow-400 h-7 text-xs" onClick={() => { setWarnDialog(u); setWarnMessage(''); }}>
+                      <AlertTriangle className="w-3 h-3 mr-1" /> Warn
+                    </Button>
                     {!isBanned ? (
                       <Button size="sm" variant="ghost" className="text-destructive h-7 text-xs" onClick={() => { setBanDialog(u); setBanReason(''); }}>
                         <Ban className="w-3 h-3 mr-1" /> Ban
@@ -189,7 +210,7 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">User — Client / Parent</SelectItem>
+                  <SelectItem value="user">Client — Regular user</SelectItem>
                   <SelectItem value="coach">Coach — Will have a coach profile</SelectItem>
                   <SelectItem value="admin">Admin — Full access</SelectItem>
                 </SelectContent>
@@ -204,6 +225,22 @@ export default function AdminUsers() {
           </div>
           <Button onClick={handleInvite} disabled={inviting} className="mt-6 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
             {inviting ? 'Sending...' : 'Send Invitation'}
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning Dialog */}
+      <Dialog open={!!warnDialog} onOpenChange={() => setWarnDialog(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-oswald tracking-wider">SEND WARNING</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{warnDialog?.full_name} ({warnDialog?.email})</p>
+          <p className="text-xs text-muted-foreground mt-1">This will send a warning email directly to the user.</p>
+          <div className="mt-4">
+            <Label className="font-oswald tracking-wider uppercase text-xs">Warning Message</Label>
+            <Textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} placeholder="Describe the policy violation or issue..." className="bg-secondary border-border mt-1" rows={4} />
+          </div>
+          <Button onClick={sendWarning} className="mt-4 w-full bg-yellow-500 text-black font-oswald tracking-wider uppercase hover:bg-yellow-400">
+            <AlertTriangle className="w-4 h-4 mr-2" /> Send Warning Email
           </Button>
         </DialogContent>
       </Dialog>
