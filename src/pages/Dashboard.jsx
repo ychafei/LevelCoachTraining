@@ -177,6 +177,34 @@ export default function Dashboard() {
           </Link>
         )}
 
+        {/* New user welcome prompt */}
+        {!isCoach && !isAdmin && sessions.length === 0 && credits.length === 0 && (
+          <div className="mb-8 p-5 bg-primary/10 border border-primary/20 rounded-lg">
+            <h3 className="font-oswald text-lg font-bold tracking-wider text-foreground mb-1">WELCOME TO LC TRAINING!</h3>
+            <p className="text-sm text-muted-foreground mb-4">You're all set. Here's what you can do to get started:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Link to="/book">
+                <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
+                  <p className="font-oswald tracking-wider text-sm text-foreground">Book a Session</p>
+                  <p className="text-xs text-muted-foreground mt-1">Choose a package and pick your coach.</p>
+                </div>
+              </Link>
+              <Link to="/settings">
+                <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
+                  <p className="font-oswald tracking-wider text-sm text-foreground">Complete Your Profile</p>
+                  <p className="text-xs text-muted-foreground mt-1">Add your info and preferences.</p>
+                </div>
+              </Link>
+              <Link to="/matching">
+                <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
+                  <p className="font-oswald tracking-wider text-sm text-foreground">Find a Training Partner</p>
+                  <p className="text-xs text-muted-foreground mt-1">Connect with other players in your area.</p>
+                </div>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Sessions */}
           <div className="lg:col-span-2 space-y-8">

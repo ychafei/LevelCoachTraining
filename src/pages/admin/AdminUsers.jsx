@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Shield, Ban } from 'lucide-react';
+import { Shield, Ban, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminUsers() {
@@ -19,6 +19,10 @@ export default function AdminUsers() {
   const [banReason, setBanReason] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [inviteDialog, setInviteDialog] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('user');
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -64,6 +68,27 @@ export default function AdminUsers() {
     }
   };
 
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) { toast.error('Please enter an email'); return; }
+    setInviting(true);
+    await base44.users.inviteUser(inviteEmail.trim(), inviteRole);
+    if (inviteRole === 'coach') {
+      // Pre-create a Coach entity so admin can fill in details
+      await base44.entities.Coach.create({
+        first_name: inviteEmail.split('@')[0],
+        last_name: '',
+        email: inviteEmail.trim(),
+        county: 'Oakland',
+        is_active: false,
+      });
+    }
+    toast.success(`Invitation sent to ${inviteEmail}${inviteRole === 'coach' ? ' — a coach profile was created for them' : ''}`);
+    setInviteDialog(false);
+    setInviteEmail('');
+    setInviteRole('user');
+    setInviting(false);
+  };
+
   const filtered = users.filter(u =>
     !search || u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
   );
@@ -73,7 +98,12 @@ export default function AdminUsers() {
   return (
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-6">USER MANAGEMENT</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">USER MANAGEMENT</h1>
+          <Button onClick={() => setInviteDialog(true)} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+            <UserPlus className="w-4 h-4 mr-2" /> Invite User
+          </Button>
+        </div>
 
         <Input
           placeholder="Search by name or email…"
@@ -134,6 +164,47 @@ export default function AdminUsers() {
             <Textarea value={banReason} onChange={e => setBanReason(e.target.value)} className="bg-secondary border-border mt-1" rows={3} />
           </div>
           <Button onClick={banUser} className="mt-4 w-full bg-destructive text-destructive-foreground font-oswald tracking-wider uppercase hover:bg-destructive/90">Confirm Ban</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Dialog */}
+      <Dialog open={inviteDialog} onOpenChange={setInviteDialog}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-oswald tracking-wider">INVITE NEW USER</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">They'll receive an email to set up their account and log in.</p>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label className="font-oswald tracking-wider uppercase text-xs">Email Address</Label>
+              <Input
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="bg-secondary border-border mt-1"
+              />
+            </div>
+            <div>
+              <Label className="font-oswald tracking-wider uppercase text-xs">Role</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger className="w-full mt-1 bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User — Client / Parent</SelectItem>
+                  <SelectItem value="coach">Coach — Will have a coach profile</SelectItem>
+                  <SelectItem value="admin">Admin — Full access</SelectItem>
+                </SelectContent>
+              </Select>
+              {inviteRole === 'coach' && (
+                <p className="text-xs text-accent mt-2">A coach profile will be auto-created. They'll be prompted to complete it on first login.</p>
+              )}
+              {inviteRole === 'admin' && (
+                <p className="text-xs text-destructive mt-2">Admin users have full access to the admin panel.</p>
+              )}
+            </div>
+          </div>
+          <Button onClick={handleInvite} disabled={inviting} className="mt-6 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+            {inviting ? 'Sending...' : 'Send Invitation'}
+          </Button>
         </DialogContent>
       </Dialog>
     </div>
