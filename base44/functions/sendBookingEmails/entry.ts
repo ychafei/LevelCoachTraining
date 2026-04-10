@@ -10,7 +10,7 @@ async function sendEmail({ to, subject, html }) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "LC Training <onboarding@resend.dev>",
+      from: "LC Training <support@lctrainings.com>",
       to,
       subject,
       html,
@@ -50,6 +50,17 @@ Deno.serve(async (req) => {
         html: `<div style="background:#0A0E14;color:#F8FAFC;padding:40px;font-family:sans-serif;">
           <h1 style="color:#F59E0B;font-family:sans-serif;text-transform:uppercase;letter-spacing:2px;">New Session Booked</h1>
           <p><strong>${clientName}</strong> has booked a session with you.</p>
+          <p>Date: ${dateStr}<br/>Time: ${time}<br/>Duration: ${durationLabel}<br/>County: ${county}</p>
+          ${sessionGoals ? `<p>Goals: ${sessionGoals}</p>` : ''}
+        </div>`,
+      }),
+      // Notification to support
+      sendEmail({
+        to: 'support@lctrainings.com',
+        subject: `New Booking — ${clientName} on ${dateStr}`,
+        html: `<div style="background:#0A0E14;color:#F8FAFC;padding:40px;font-family:sans-serif;">
+          <h1 style="color:#F59E0B;font-family:sans-serif;text-transform:uppercase;letter-spacing:2px;">New Session Booked</h1>
+          <p><strong>${clientName}</strong> (${clientEmail}) has booked a session with <strong>${coachName}</strong>.</p>
           <p>Date: ${dateStr}<br/>Time: ${time}<br/>Duration: ${durationLabel}<br/>County: ${county}</p>
           ${sessionGoals ? `<p>Goals: ${sessionGoals}</p>` : ''}
         </div>`,
