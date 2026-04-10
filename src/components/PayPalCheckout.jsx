@@ -40,9 +40,8 @@ export default function PayPalCheckout({ amount, packageId, packageName, package
       clientId: PAYPAL_CLIENT_ID,
       currency: 'USD',
       intent: 'capture',
-      'enable-funding': 'applepay,googlepay,venmo,card',
-      'disable-funding': '',
       components: 'buttons',
+      'enable-funding': 'venmo,paylater',
     }}>
       {error && <p className="text-destructive text-sm mb-3">{error}</p>}
       {processing && <p className="text-muted-foreground text-sm mb-3">Processing payment...</p>}
