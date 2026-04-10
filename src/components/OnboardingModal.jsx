@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const POSITIONS = ['Goalkeeper', 'Defender', 'Center Back', 'Fullback', 'Midfielder', 'Winger', 'Striker', 'Forward', 'Other'];
-const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Elite'];
+const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
 
 export default function OnboardingModal({ user, onComplete }) {
   const [step, setStep] = useState(1);

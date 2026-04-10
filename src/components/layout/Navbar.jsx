@@ -20,6 +20,8 @@ export default function Navbar() {
       return [
         { label: 'Home', path: '/' },
         { label: 'About', path: '/about' },
+        { label: 'Book', path: '/book' },
+        { label: 'Apply', path: '/apply' },
         { label: 'Blog', path: '/blog' },
       ];
     }
@@ -28,6 +30,7 @@ export default function Navbar() {
 
     if (!isCoach && !isAdmin) {
       links.push({ label: 'Book', path: '/book' });
+      links.push({ label: 'Matching', path: '/matching' });
     }
 
     links.push({ label: 'Dashboard', path: '/dashboard' });

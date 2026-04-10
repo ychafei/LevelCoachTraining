@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import WeeklyAvailabilityEditor from '@/components/coach/WeeklyAvailabilityEditor';
 
 export default function CoachSchedule() {
-  const { user } = useCurrentUser();
+  const { user, isCoach, isAdmin } = useCurrentUser();
   const [blocks, setBlocks] = useState([]);
   const [coach, setCoach] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +66,15 @@ export default function CoachSchedule() {
 
   if (loading) {
     return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
+  }
+
+  if (!isCoach && !isAdmin) {
+    return (
+      <div className="py-24 text-center space-y-2">
+        <p className="text-foreground font-oswald text-xl uppercase tracking-wider">Access Denied</p>
+        <p className="text-muted-foreground text-sm">This page is for coaches only.</p>
+      </div>
+    );
   }
 
   if (!user?.coach_id) {

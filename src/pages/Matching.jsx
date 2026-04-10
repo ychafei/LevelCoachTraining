@@ -7,7 +7,7 @@ import { Users, Send, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Matching() {
-  const { user } = useCurrentUser();
+  const { user, isCoach, isAdmin } = useCurrentUser();
   const [clients, setClients] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +76,16 @@ export default function Matching() {
 
   if (loading) {
     return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
+  }
+
+  if (isCoach || isAdmin) {
+    return (
+      <div className="py-24 text-center max-w-md mx-auto px-4">
+        <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
+        <p className="text-muted-foreground text-sm">Player matching is for clients only.</p>
+      </div>
+    );
   }
 
   if (!user?.matching_opted_in) {
