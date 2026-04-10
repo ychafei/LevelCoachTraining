@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const POSITIONS = ['Point Guard', 'Shooting Guard', 'Small Forward', 'Power Forward', 'Center'];
+const POSITIONS = ['Goalkeeper', 'Defender', 'Center Back', 'Fullback', 'Midfielder', 'Winger', 'Striker', 'Forward', 'Other'];
 const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Elite'];
 
 export default function OnboardingModal({ user, onComplete }) {
