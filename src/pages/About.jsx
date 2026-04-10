@@ -1,14 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Target, Users, Trophy } from 'lucide-react';
+import { MapPin, Target, Users, Trophy, Upload } from 'lucide-react';
+import useCurrentUser from '@/hooks/useCurrentUser';
 
 export default function About() {
   const [coaches, setCoaches] = useState([]);
+  const [foundersPhoto, setFoundersPhoto] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const { user } = useCurrentUser();
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     base44.entities.Coach.filter({ is_active: true }, 'display_order').then(setCoaches);
+    base44.entities.SiteContent.filter({ key: 'founders_photo' }).then(results => {
+      if (results.length > 0) setFoundersPhoto(results[0]);
+    });
   }, []);
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    if (foundersPhoto) {
+      await base44.entities.SiteContent.update(foundersPhoto.id, { value: file_url });
+      setFoundersPhoto({ ...foundersPhoto, value: file_url });
+    } else {
+      const record = await base44.entities.SiteContent.create({ key: 'founders_photo', value: file_url, content_type: 'image' });
+      setFoundersPhoto(record);
+    }
+    setUploading(false);
+  };
 
   return (
     <div>
@@ -25,6 +48,66 @@ export default function About() {
               elite-level coaching to Oakland, Macomb, and Wayne counties. We believe every player 
               deserves access to professional training, regardless of their starting point.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Founders Story */}
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            {/* Photo */}
+            <div className="relative">
+              <div className="aspect-[4/3] rounded-lg overflow-hidden bg-secondary border border-border relative group">
+                {foundersPhoto?.value ? (
+                  <img src={foundersPhoto.value} alt="LC Training Founders" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <p className="text-muted-foreground text-sm font-oswald tracking-wider uppercase">Founders Photo</p>
+                  </div>
+                )}
+                {isAdmin && (
+                  <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                    <div className="text-center text-white">
+                      <Upload className="w-8 h-8 mx-auto mb-2" />
+                      <p className="text-sm font-oswald tracking-wider">{uploading ? 'UPLOADING...' : 'UPLOAD PHOTO'}</p>
+                    </div>
+                  </label>
+                )}
+              </div>
+              {/* Decorative accent line */}
+              <div className="absolute -bottom-4 -left-4 w-32 h-1 bg-accent" />
+            </div>
+
+            {/* Story */}
+            <div>
+              <p className="text-xs font-oswald tracking-widest uppercase text-accent mb-4">Our Story</p>
+              <h2 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-6">
+                THREE TEAMMATES. ONE DREAM.
+              </h2>
+              <div className="space-y-4 text-muted-foreground leading-relaxed">
+                <p>
+                  It started on a college soccer field — three young men from Metro Detroit who shared more than just a love 
+                  for the beautiful game. We shared a belief that the players who never got the right guidance, the right 
+                  coaching, the right push — were the ones who needed it most.
+                </p>
+                <p>
+                  Through four years of early morning trainings, late-night film sessions, and the kind of brotherhood 
+                  only a locker room can build, we made a pact: when our playing days were behind us, we'd come back home 
+                  and give the next generation what we wished we'd had.
+                </p>
+                <p>
+                  LC Training was born from that promise. We returned to Oakland, Macomb, and Wayne counties — the same 
+                  fields where we first learned to love the game — and built something we're proud of. Not just a training 
+                  program, but a community. A family.
+                </p>
+                <p className="text-foreground font-medium">
+                  Every player we coach carries a piece of that college promise with them. That's why we show up every 
+                  single day, cones in hand and hearts full.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
