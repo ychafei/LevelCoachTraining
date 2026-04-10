@@ -45,6 +45,15 @@
       ],
       "default": "unpaid"
     },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "electronic",
+        "cash",
+        "credits"
+      ],
+      "description": "How the client paid for this session"
+    },
     "county": {
       "type": "string",
       "enum": [

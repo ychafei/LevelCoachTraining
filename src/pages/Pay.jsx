@@ -54,29 +54,70 @@ export default function Pay() {
                     </div>
                     <Badge className="bg-accent/10 text-accent border-accent/20">Unpaid</Badge>
                   </div>
+                  {/* Payment method the client chose when booking */}
+                  {session.payment_method && (
+                    <div className="mt-3 mb-1">
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase border ${
+                        session.payment_method === 'cash' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                        session.payment_method === 'credits' ? 'bg-primary/10 text-primary border-primary/20' :
+                        'bg-green-500/10 text-green-400 border-green-500/20'
+                      }`}>
+                        Chosen method: {session.payment_method === 'cash' ? '💵 Cash' : session.payment_method === 'credits' ? '⚡ Credits' : '💳 Electronic'}
+                      </span>
+                    </div>
+                  )}
                   {coach && (
                     <div className="border-t border-border pt-4 mt-4">
                       <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">
                         Pay {coach.first_name} {coach.last_name} via:
                       </p>
                       <div className="space-y-2 text-sm">
-                        {coach.venmo && <div className="flex justify-between"><span className="text-muted-foreground">Venmo</span><span>{coach.venmo}</span></div>}
-                        {coach.zelle && <div className="flex justify-between"><span className="text-muted-foreground">Zelle</span><span>{coach.zelle}</span></div>}
-                        {coach.cashapp && <div className="flex justify-between"><span className="text-muted-foreground">Cash App</span><span>{coach.cashapp}</span></div>}
-                        {coach.paypal && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">PayPal</span>
-                            <a
-                              href={`https://paypal.me/${coach.paypal.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '')}${session.total_price ? '/' + session.total_price : ''}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-400 underline hover:text-blue-300 font-medium"
-                            >
-                              Pay via PayPal{session.total_price ? ` ($${session.total_price})` : ''}
-                            </a>
-                          </div>
+                        {session.payment_method === 'cash' || !session.payment_method ? (
+                          // Show all methods if cash or unspecified
+                          <>
+                            {coach.venmo && <div className="flex justify-between"><span className="text-muted-foreground">Venmo</span><span>{coach.venmo}</span></div>}
+                            {coach.zelle && <div className="flex justify-between"><span className="text-muted-foreground">Zelle</span><span>{coach.zelle}</span></div>}
+                            {coach.cashapp && <div className="flex justify-between"><span className="text-muted-foreground">Cash App</span><span>{coach.cashapp}</span></div>}
+                            {coach.paypal && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">PayPal</span>
+                                <a
+                                  href={`https://paypal.me/${coach.paypal.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '')}${session.total_price ? '/' + session.total_price : ''}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="text-blue-400 underline hover:text-blue-300 font-medium"
+                                >
+                                  Pay via PayPal{session.total_price ? ` ($${session.total_price})` : ''}
+                                </a>
+                              </div>
+                            )}
+                            {coach.cash_accepted && <div className="flex justify-between"><span className="text-muted-foreground">Cash</span><span>Accepted</span></div>}
+                          </>
+                        ) : session.payment_method === 'electronic' ? (
+                          // Show only electronic methods
+                          <>
+                            {coach.venmo && <div className="flex justify-between"><span className="text-muted-foreground">Venmo</span><span>{coach.venmo}</span></div>}
+                            {coach.zelle && <div className="flex justify-between"><span className="text-muted-foreground">Zelle</span><span>{coach.zelle}</span></div>}
+                            {coach.cashapp && <div className="flex justify-between"><span className="text-muted-foreground">Cash App</span><span>{coach.cashapp}</span></div>}
+                            {coach.paypal && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">PayPal</span>
+                                <a
+                                  href={`https://paypal.me/${coach.paypal.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '')}${session.total_price ? '/' + session.total_price : ''}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="text-blue-400 underline hover:text-blue-300 font-medium"
+                                >
+                                  Pay via PayPal{session.total_price ? ` ($${session.total_price})` : ''}
+                                </a>
+                              </div>
+                            )}
+                            {!coach.venmo && !coach.zelle && !coach.cashapp && !coach.paypal && (
+                              <p className="text-xs text-muted-foreground">No electronic payment methods on file. Contact your coach.</p>
+                            )}
+                          </>
+                        ) : (
+                          // Credits — paid, no action needed
+                          <p className="text-sm text-primary">Session paid via credits. No additional payment required.</p>
                         )}
-                        {coach.cash_accepted && <div className="flex justify-between"><span className="text-muted-foreground">Cash</span><span>Accepted</span></div>}
                       </div>
                     </div>
                   )}

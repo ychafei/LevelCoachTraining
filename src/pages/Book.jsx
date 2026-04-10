@@ -53,6 +53,7 @@ export default function Book() {
   const [goals, setGoals]                     = useState(saved?.goals || '');
   const [selectedTags, setSelectedTags]       = useState(saved?.selectedTags || []);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [skipToSchedule, setSkipToSchedule] = useState(false);
   const [creditRecord, setCreditRecord]       = useState(null);
 
   // Schedule later state
@@ -88,14 +89,15 @@ export default function Book() {
   }, [coach]);
 
   useEffect(() => {
-    if (user && selectedPackage) {
-      base44.entities.SessionCredit.filter({ client_email: user.email, package_id: selectedPackage.id }).then(credits => {
-        const active = credits.find(c => c.used_credits < c.total_credits);
+    if (user) {
+      base44.entities.SessionCredit.filter({ client_email: user.email }).then(credits => {
+        // Find any active credit with > 0.5 hours remaining
+        const active = credits.find(c => (c.total_credits - c.used_credits) > 0.5);
         setExistingCredit(active || null);
         setUseExistingCredit(!!active);
       });
     }
-  }, [user, selectedPackage]);
+  }, [user]);
 
   const isDateBlocked = (date) => {
     const d = startOfDay(date);
@@ -138,7 +140,7 @@ export default function Book() {
     : null;
 
   // Called after user confirms payment
-  const handlePaymentConfirmed = async () => {
+  const handlePaymentConfirmed = async (method) => {
     if (!user) {
       sessionStorage.setItem('lc_booking', JSON.stringify({ step, county, coach, selectedPackage, duration, goals, selectedTags }));
       base44.auth.redirectToLogin(window.location.href);
@@ -149,26 +151,25 @@ export default function Book() {
 
     let credit;
     if (useExistingCredit && existingCredit) {
-      // Deduct from existing credits (in hours)
       const hoursUsed = duration.hours;
       credit = await base44.entities.SessionCredit.update(existingCredit.id, {
         used_credits: existingCredit.used_credits + hoursUsed
       });
       setCreditRecord({ ...existingCredit, used_credits: existingCredit.used_credits + hoursUsed });
     } else {
-      // New package — create credits
       credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
         client_name: user.full_name || user.email,
         package_id: selectedPackage.id,
         package_name: selectedPackage.name,
-        total_credits: (selectedPackage.sessions || 1) * 1, // total credit hours = sessions * 1hr base
+        total_credits: (selectedPackage.sessions || 1) * 1,
         used_credits: 0,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
       });
       setCreditRecord(credit);
     }
 
+    setPaymentMethod(method);
     setSubmitting(false);
     setPaymentConfirmed(true);
   };
@@ -178,6 +179,7 @@ export default function Book() {
     if (!selectedDate || !selectedTime) return;
     setSubmitting(true);
     const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
+    const pmMethod = useExistingCredit ? 'credits' : paymentMethod === 'cash' ? 'cash' : 'electronic';
     await base44.entities.Session.create({
       coach_id: coach.id,
       client_email: user.email,
@@ -187,6 +189,7 @@ export default function Book() {
       duration_minutes: duration.minutes,
       status: 'pending',
       payment_status: paymentMethod === 'cash' ? 'unpaid' : 'paid',
+      payment_method: pmMethod,
       county,
       session_goals: sessionGoals,
       total_price: sessionPrice,
@@ -210,7 +213,7 @@ export default function Book() {
   };
 
   // ── Payment confirmed screen ──────────────────────────────────────────────
-  if (paymentConfirmed) {
+  if (paymentConfirmed || skipToSchedule) {
     const remainingCredits = parseFloat(((creditRecord?.total_credits || selectedPackage?.sessions || 1) - (creditRecord?.used_credits ?? duration?.hours ?? 1)).toFixed(2));
 
     if (sessionBooked) {
@@ -412,12 +415,19 @@ export default function Book() {
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
                 <p className="text-primary font-oswald tracking-wider text-sm uppercase mb-1">You have existing credits!</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  {existingCredit.total_credits - existingCredit.used_credits} session(s) remaining on <strong>{existingCredit.package_name}</strong>.
+                  <strong>{parseFloat((existingCredit.total_credits - existingCredit.used_credits).toFixed(2))}</strong> credit hour(s) remaining on <strong>{existingCredit.package_name}</strong>.
                 </p>
-                <div className="flex gap-3">
-                  <button onClick={() => setUseExistingCredit(true)}
-                    className={`px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all ${useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
-                    Use Existing Credits
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => {
+                      setUseExistingCredit(true);
+                      setSkipToSchedule(true);
+                      setPaymentConfirmed(true);
+                      setCreditRecord(existingCredit);
+                      setScheduling(true);
+                    }}
+                    className="px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
+                    ✓ Use Existing Credits → Schedule Now
                   </button>
                   <button onClick={() => setUseExistingCredit(false)}
                     className={`px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
@@ -574,14 +584,14 @@ export default function Book() {
                         packageName={selectedPackage?.name}
                         packageSessions={selectedPackage?.sessions || 1}
                         sessionDurationMinutes={duration?.minutes}
-                        onSuccess={() => { setPaymentMethod('paypal'); return handlePaymentConfirmed(); }}
+                        onSuccess={() => handlePaymentConfirmed('electronic')}
                       />
                     </div>
                     <div className="border-t border-border pt-4">
                       <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pay with Cash</p>
                       <p className="text-xs text-muted-foreground mb-3">Bring exact cash to your session. Your coach will collect payment at the time of training.</p>
                       <Button
-                        onClick={() => { setPaymentMethod('cash'); handlePaymentConfirmed(); }}
+                        onClick={() => handlePaymentConfirmed('cash')}
                         className="w-full bg-secondary border border-border text-foreground font-oswald tracking-wider uppercase hover:bg-secondary/80 h-12"
                       >
                         💵 Pay with Cash at Session
@@ -601,7 +611,7 @@ export default function Book() {
             </div>
 
             {useExistingCredit && (
-              <Button onClick={handlePaymentConfirmed} disabled={submitting}
+              <Button onClick={() => handlePaymentConfirmed('credits')} disabled={submitting}
                 className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
                 {submitting ? 'Activating Credits...' : 'Use My Credits & Continue'}
               </Button>

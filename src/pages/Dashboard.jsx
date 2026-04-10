@@ -51,30 +51,32 @@ export default function Dashboard() {
   }, [user, isCoach]);
 
   const handleCancel = async (session) => {
+    if (!isCoach) {
+      alert('Only your coach can cancel or reschedule sessions. Please contact your coach directly or email support@lctrainings.com.');
+      return;
+    }
     const now = new Date();
     const sessionTime = new Date(`${session.date}T${session.start_time}`);
     const isLateCancel = isBefore(sessionTime, addHours(now, 24));
 
-    if (isLateCancel) {
-      alert('This session is within 24 hours. Credits cannot be automatically refunded. Please contact support@lctrainings.com to speak with a rep.');
-      return;
-    }
-
-    const ok = confirm('Are you sure you want to cancel this session? Your credit hours will be returned to your balance.');
+    const msg = isLateCancel
+      ? 'This session is within 24 hours. Cancel anyway? The client will need to contact support to get credits back.'
+      : 'Cancel this session? Credits will be refunded to the client automatically.';
+    const ok = confirm(msg);
     if (!ok) return;
 
-    await base44.entities.Session.update(session.id, { status: 'cancelled', cancellation_reason: 'Client cancelled' });
+    await base44.entities.Session.update(session.id, { status: 'cancelled', cancellation_reason: 'Cancelled by coach' });
     setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'cancelled' } : s));
 
-    // Refund credits if session was paid
-    if (session.payment_status === 'paid') {
+    // Refund credits to client if session was paid with credits/electronic and not a late cancel
+    if (!isLateCancel && (session.payment_method === 'credits' || session.payment_status === 'paid')) {
       const hoursToRefund = (session.duration_minutes || 60) / 60;
-      const activeCredit = credits.find(c => c.client_email === user.email && c.used_credits > 0);
+      const clientCredits = await base44.entities.SessionCredit.filter({ client_email: session.client_email });
+      const activeCredit = clientCredits.find(c => c.used_credits > 0);
       if (activeCredit) {
-        const updated = await base44.entities.SessionCredit.update(activeCredit.id, {
+        await base44.entities.SessionCredit.update(activeCredit.id, {
           used_credits: Math.max(0, activeCredit.used_credits - hoursToRefund)
         });
-        setCredits(prev => prev.map(c => c.id === activeCredit.id ? updated : c));
       }
     }
   };
@@ -214,6 +216,18 @@ export default function Dashboard() {
                             ) : coach ? (
                               <p className="text-sm text-muted-foreground mt-1">Coach: {coach.first_name} {coach.last_name}</p>
                             ) : null}
+                            {isCoach && session.session_goals && (
+                              <p className="text-xs text-muted-foreground mt-1">Goals: {session.session_goals}</p>
+                            )}
+                            {!isCoach && session.payment_method && (
+                              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase ${
+                                session.payment_method === 'cash' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                session.payment_method === 'credits' ? 'bg-primary/10 text-primary border border-primary/20' :
+                                'bg-green-500/10 text-green-400 border border-green-500/20'
+                              }`}>
+                                {session.payment_method === 'cash' ? '💵 Cash' : session.payment_method === 'credits' ? '⚡ Credits' : '💳 Electronic'}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge className={`${sc?.color} border`}>
@@ -232,19 +246,23 @@ export default function Dashboard() {
                               </Button>
                             </Link>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCancel(session)}
-                            className="font-oswald tracking-wider uppercase text-xs text-destructive hover:text-destructive"
-                          >
-                            Cancel
-                          </Button>
+                          {isCoach && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCancel(session)}
+                              className="font-oswald tracking-wider uppercase text-xs text-destructive hover:text-destructive"
+                            >
+                              Cancel
+                            </Button>
+                          )}
                         </div>
                         {/* Cancellation policy reminder */}
-                        <p className="text-xs text-muted-foreground/60 mt-3">
-                          Free cancellation &gt;24h before session. Within 24h — contact <span className="text-accent">support@lctrainings.com</span> to get credits back.
-                        </p>
+                        {!isCoach && (
+                          <p className="text-xs text-muted-foreground/60 mt-3">
+                            To cancel or reschedule, contact your coach directly or email <span className="text-accent">support@lctrainings.com</span>.
+                          </p>
+                        )}
                       </div>
                     );
                   })}
