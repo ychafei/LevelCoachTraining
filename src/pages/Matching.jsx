@@ -18,17 +18,8 @@ export default function Matching() {
   }, [user]);
 
   const loadData = async () => {
-    const allUsers = await base44.entities.User.filter({ matching_opted_in: true });
-    // Only show first name and player age — no other info
-    const eligible = allUsers
-      .filter(u => u.email !== user.email)
-      .map(u => ({
-        email: u.email,
-        first_name: u.full_name?.split(' ')[0] || 'Player',
-        age_min: u.matching_age_min,
-        age_max: u.matching_age_max,
-      }));
-    setClients(eligible);
+    const res = await base44.functions.invoke('getMatchingPlayers', {});
+    setClients(res.data.players || []);
 
     const reqs = await base44.entities.MatchRequest.filter({});
     setRequests(reqs.filter(r => r.requester_email === user.email || r.target_email === user.email));
