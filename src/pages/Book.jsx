@@ -91,8 +91,8 @@ export default function Book() {
   useEffect(() => {
     if (user) {
       base44.entities.SessionCredit.filter({ client_email: user.email }).then(credits => {
-        // Find any active credit with > 0.5 hours remaining
-        const active = credits.find(c => (c.total_credits - c.used_credits) > 0.5);
+        // Find any active credit with remaining hours > 0
+        const active = credits.find(c => (c.total_credits - c.used_credits) > 0);
         setExistingCredit(active || null);
         setUseExistingCredit(!!active);
       });
@@ -184,8 +184,9 @@ export default function Book() {
     const clientAge = user.dob ? Math.floor((Date.now() - new Date(user.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
     // Deduct credits when using the "Use Existing Credits → Schedule Now" direct path
-    if (useExistingCredit && skipToSchedule && existingCredit && duration) {
-      const hoursUsed = duration.hours;
+    // (normal credit path deducts in handlePaymentConfirmed)
+    if (useExistingCredit && skipToSchedule && existingCredit) {
+      const hoursUsed = duration?.hours ?? 1;
       await base44.entities.SessionCredit.update(existingCredit.id, {
         used_credits: existingCredit.used_credits + hoursUsed
       });
