@@ -28,7 +28,8 @@ export default function AdminUsers() {
   const [warnDialog, setWarnDialog] = useState(null);
   const [warnMessage, setWarnMessage] = useState('');
   const [creditDialog, setCreditDialog] = useState(null);
-  const [creditAmount, setCreditAmount] = useState('');
+  const [creditSessions, setCreditSessions] = useState('');
+  const [creditDuration, setCreditDuration] = useState('60');
   const [creditPackageName, setCreditPackageName] = useState('Admin Grant');
   const [creditSaving, setCreditSaving] = useState(false);
 
@@ -166,7 +167,7 @@ export default function AdminUsers() {
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(u); setCreditAmount(''); setCreditPackageName('Admin Grant'); }}>
+                        <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(u); setCreditSessions(''); setCreditDuration('60'); setCreditPackageName('Admin Grant'); }}>
                           <Zap className="w-3 h-3 mr-1" /> Credits
                         </Button>
                         <Button size="sm" variant="ghost" className="text-yellow-400 h-7 text-xs" onClick={() => { setWarnDialog(u); setWarnMessage(''); }}>
@@ -247,20 +248,35 @@ export default function AdminUsers() {
       {/* Credits Dialog */}
       <Dialog open={!!creditDialog} onOpenChange={() => setCreditDialog(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">ISSUE CREDITS</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-oswald tracking-wider">ISSUE SESSIONS</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{creditDialog?.full_name} ({creditDialog?.email})</p>
           <div className="space-y-4 mt-4">
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Credit Hours to Add</Label>
-              <Input type="number" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} placeholder="e.g. 5" className="bg-secondary border-border mt-1" min="0.5" step="0.5" />
+              <Label className="font-oswald tracking-wider uppercase text-xs">Number of Sessions</Label>
+              <Input type="number" value={creditSessions} onChange={e => setCreditSessions(e.target.value)} placeholder="e.g. 5" className="bg-secondary border-border mt-1" min="1" step="1" />
             </div>
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Package / Reason</Label>
+              <Label className="font-oswald tracking-wider uppercase text-xs">Duration per Session</Label>
+              <Select value={creditDuration} onValueChange={setCreditDuration}>
+                <SelectTrigger className="w-full mt-1 bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="60">1 Hour</SelectItem>
+                  <SelectItem value="90">1.5 Hours</SelectItem>
+                  <SelectItem value="120">2 Hours</SelectItem>
+                  <SelectItem value="150">2.5 Hours</SelectItem>
+                  <SelectItem value="180">3 Hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="font-oswald tracking-wider uppercase text-xs">Package Name</Label>
               <Input value={creditPackageName} onChange={e => setCreditPackageName(e.target.value)} className="bg-secondary border-border mt-1" />
             </div>
           </div>
           <Button
-            disabled={!creditAmount || parseFloat(creditAmount) <= 0 || creditSaving}
+            disabled={!creditSessions || parseInt(creditSessions) <= 0 || creditSaving}
             onClick={async () => {
               setCreditSaving(true);
               await base44.entities.SessionCredit.create({
@@ -268,16 +284,17 @@ export default function AdminUsers() {
                 client_name: creditDialog.full_name || creditDialog.email,
                 package_id: 'admin_grant',
                 package_name: creditPackageName,
-                total_credits: parseFloat(creditAmount),
+                total_credits: parseInt(creditSessions),
                 used_credits: 0,
+                session_duration_minutes: parseInt(creditDuration),
               });
-              toast.success(`${creditAmount} credit hour(s) added to ${creditDialog.email}`);
+              toast.success(`${creditSessions} session(s) at ${parseInt(creditDuration) / 60} hr(s) added to ${creditDialog.email}`);
               setCreditDialog(null);
               setCreditSaving(false);
             }}
             className="mt-4 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
           >
-            {creditSaving ? 'Saving...' : `Issue ${creditAmount || '?'} Credit Hour(s)`}
+            {creditSaving ? 'Saving...' : `Issue ${creditSessions || '?'} Session(s)`}
           </Button>
         </DialogContent>
       </Dialog>
