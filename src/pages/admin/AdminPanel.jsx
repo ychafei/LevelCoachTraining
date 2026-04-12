@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import useCurrentUser from '@/hooks/useCurrentUser';
-import { Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare, Shield, MailX } from 'lucide-react';
+import { Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare, Shield, MailX, Zap } from 'lucide-react';
 
 const adminLinks = [
   { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage coach profiles' },
   { label: 'Bookings', path: '/admin/bookings', icon: Calendar, desc: 'View all sessions' },
+  { label: 'Credits', path: '/admin/credits', icon: Zap, desc: 'View & edit session credits' },
   { label: 'Content', path: '/admin/content', icon: FileText, desc: 'Edit site content' },
   { label: 'Pricing', path: '/admin/pricing', icon: DollarSign, desc: 'Manage packages' },
   { label: 'Applications', path: '/admin/applications', icon: Briefcase, desc: 'Review applications' },
