@@ -31,7 +31,7 @@ export default function OnboardingModal({ user, onComplete }) {
 
   const isCoach = user?.role === 'coach' || user?.role === 'admin';
   const age = form.dob ? Math.floor((Date.now() - new Date(form.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-  const isUnder18 = !isCoach && age !== null && age < 18;
+  const isUnder18 = age !== null && age < 18;
 
   const totalSteps = isUnder18 ? 3 : 2;
 
