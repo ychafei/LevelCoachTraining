@@ -40,6 +40,7 @@ import AdminBlog from '@/pages/admin/AdminBlog';
 import AdminUsers from '@/pages/admin/AdminUsers';
 import AdminMessages from '@/pages/admin/AdminMessages';
 import AdminUnsubscribes from '@/pages/admin/AdminUnsubscribes';
+import AdminCredits from '@/pages/admin/AdminCredits';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -86,6 +87,7 @@ const AuthenticatedApp = () => {
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/admin/coaches" element={<AdminCoaches />} />
         <Route path="/admin/bookings" element={<AdminBookings />} />
+        <Route path="/admin/credits" element={<AdminCredits />} />
         <Route path="/admin/content" element={<AdminContent />} />
         <Route path="/admin/pricing" element={<AdminPricing />} />
         <Route path="/admin/applications" element={<AdminApplications />} />
