@@ -57,9 +57,7 @@ Deno.serve(async (req) => {
       if (parts.length >= 4) {
         const [clientEmail, packageId, packageName, packageSessionsStr, durationMinutesStr] = parts;
         const packageSessions = parseInt(packageSessionsStr) || 1;
-        const durationHours = (parseInt(durationMinutesStr) || 60) / 60;
-        // Total credit hours = number of sessions × hours per session
-        const totalCreditHours = packageSessions * durationHours;
+        const sessionDurationMinutes = parseInt(durationMinutesStr) || 60;
 
         // Use the capture ID for idempotency instead of checking credit balance
         const captureId = payload.resource?.id;
@@ -74,11 +72,12 @@ Deno.serve(async (req) => {
             client_name: clientEmail,
             package_id: captureId || packageId,
             package_name: packageName,
-            total_credits: totalCreditHours,
+            total_credits: packageSessions,
             used_credits: 0,
+            session_duration_minutes: sessionDurationMinutes,
             per_session_base_price: 0,
           });
-          console.log(`Credits created for ${clientEmail}, package ${packageName}, ${totalCreditHours} hours`);
+          console.log(`Credits created for ${clientEmail}, package ${packageName}, ${packageSessions} sessions x ${sessionDurationMinutes} min each`);
         }
       }
     }
