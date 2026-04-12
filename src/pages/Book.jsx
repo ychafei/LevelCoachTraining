@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, MapPin, User, Clock, Timer, CheckCircle2, Packag
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import PayPalCheckout from '@/components/PayPalCheckout';
+import OnboardingModal from '@/components/OnboardingModal';
 
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
@@ -37,7 +38,8 @@ function calcPrice(pkg, dur) {
 export default function Book() {
   const urlParams = new URLSearchParams(window.location.search);
   const preCounty = urlParams.get('county');
-  const { user } = useCurrentUser();
+  const { user, refetch } = useCurrentUser();
+  const [showProfileGate, setShowProfileGate] = useState(false);
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
 
@@ -151,18 +153,29 @@ export default function Book() {
 
     let credit;
     if (useExistingCredit && existingCredit) {
+      // Check that remaining credits are sufficient for this session duration
       const hoursUsed = duration.hours;
+      const remaining = existingCredit.total_credits - existingCredit.used_credits;
+      if (remaining < hoursUsed) {
+        setSubmitting(false);
+        alert(`Not enough credits. You have ${remaining} hour(s) remaining but this session requires ${hoursUsed} hour(s).`);
+        return;
+      }
       credit = await base44.entities.SessionCredit.update(existingCredit.id, {
         used_credits: existingCredit.used_credits + hoursUsed
       });
-      setCreditRecord({ ...existingCredit, used_credits: existingCredit.used_credits + hoursUsed });
-    } else {
+      const updatedUsed = existingCredit.used_credits + hoursUsed;
+      setCreditRecord({ ...existingCredit, used_credits: updatedUsed });
+      setExistingCredit((existingCredit.total_credits - updatedUsed) > 0 ? { ...existingCredit, used_credits: updatedUsed } : null);
+    } else if (method !== 'cash') {
+      // Only create credit record for electronic payments, NOT cash
+      const totalHours = (selectedPackage.sessions || 1) * (duration?.hours ?? 1);
       credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
         client_name: user.full_name || user.email,
         package_id: selectedPackage.id,
         package_name: selectedPackage.name,
-        total_credits: (selectedPackage.sessions || 1) * 1,
+        total_credits: totalHours,
         used_credits: 0,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
       });
@@ -187,9 +200,17 @@ export default function Book() {
     // (normal credit path deducts in handlePaymentConfirmed)
     if (useExistingCredit && skipToSchedule && existingCredit) {
       const hoursUsed = duration?.hours ?? 1;
+      const remaining = existingCredit.total_credits - existingCredit.used_credits;
+      if (remaining < hoursUsed) {
+        setSubmitting(false);
+        alert(`Not enough credits. You have ${remaining} hour(s) remaining but this session requires ${hoursUsed} hour(s).`);
+        return;
+      }
+      const updatedUsed = existingCredit.used_credits + hoursUsed;
       await base44.entities.SessionCredit.update(existingCredit.id, {
-        used_credits: existingCredit.used_credits + hoursUsed
+        used_credits: updatedUsed
       });
+      setExistingCredit((existingCredit.total_credits - updatedUsed) > 0 ? { ...existingCredit, used_credits: updatedUsed } : null);
     }
 
     await base44.entities.Session.create({
@@ -334,7 +355,7 @@ export default function Book() {
       case 1: return !!coach;
       case 2: return !!selectedPackage;
       case 3: return !!duration;
-      case 4: return true;
+      case 4: return !user || user.profile_setup_complete;
       case 5: return true;
       default: return false;
     }
@@ -423,6 +444,25 @@ export default function Book() {
           <div>
             <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SELECT A PACKAGE</h2>
             <p className="text-muted-foreground text-sm mb-8">Multi-session packages give you credits to schedule sessions whenever you're ready.</p>
+
+            {user && !existingCredit && (
+              <div className="mb-6 flex flex-wrap gap-3">
+                <button
+                  onClick={() => { setUseExistingCredit(false); }}
+                  className="px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent">
+                  Buy Credits
+                </button>
+                <button
+                  onClick={() => {
+                    setUseExistingCredit(false);
+                    const singlePkg = packages.find(p => (p.sessions || 1) === 1);
+                    if (singlePkg) { setSelectedPackage(singlePkg); setStep(3); }
+                  }}
+                  className="px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all border-border text-muted-foreground hover:border-accent/30">
+                  Pay Per Session
+                </button>
+              </div>
+            )}
 
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
@@ -528,24 +568,38 @@ export default function Book() {
             <Textarea placeholder="Any additional goals or notes for your sessions..."
               value={goals} onChange={(e) => setGoals(e.target.value)}
               className="bg-card border-border" rows={4} />
+
+            {user && !user.profile_setup_complete && (
+              <div className="mt-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
+                <p className="text-accent font-oswald tracking-wider uppercase text-sm mb-1">Profile Setup Required</p>
+                <p className="text-xs text-muted-foreground mb-3">Complete your profile before proceeding to checkout.</p>
+                <Button
+                  onClick={() => setShowProfileGate(true)}
+                  size="sm"
+                  className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                >
+                  Set Up Profile
+                </Button>
+              </div>
+            )}
           </div>
+        )}
+
+        {showProfileGate && user && (
+          <OnboardingModal
+            user={user}
+            onComplete={() => {
+              setShowProfileGate(false);
+              refetch();
+              setStep(5);
+            }}
+          />
         )}
 
         {/* Step 5: Checkout */}
         {step === 5 && (
           <div>
             <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">CHECKOUT</h2>
-
-            {/* Profile gate */}
-            {user && !user.profile_setup_complete && (
-              <div className="mb-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
-                <p className="text-accent font-oswald tracking-wider uppercase text-sm mb-1">Complete Your Profile First</p>
-                <p className="text-xs text-muted-foreground mb-3">You must complete your profile before booking a session.</p>
-                <Button onClick={() => window.location.href = '/settings'} size="sm" className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
-                  Go to Settings
-                </Button>
-              </div>
-            )}
 
             {/* Order Summary */}
             <div className="bg-card border border-border rounded-lg p-6 mb-6">
