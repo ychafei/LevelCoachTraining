@@ -38,6 +38,7 @@ function calcPrice(pkg, dur) {
 export default function Book() {
   const urlParams = new URLSearchParams(window.location.search);
   const preCounty = urlParams.get('county');
+  const preCreditId = urlParams.get('credit_id');
   const { user, refetch } = useCurrentUser();
   const [showProfileGate, setShowProfileGate] = useState(false);
 
@@ -93,10 +94,30 @@ export default function Book() {
   useEffect(() => {
     if (user) {
       base44.entities.SessionCredit.filter({ client_email: user.email }).then(credits => {
-        // Find any active credit with remaining hours > 0
-        const active = credits.find(c => (c.total_credits - c.used_credits) > 0);
+        // If coming from Dashboard with a specific credit_id, use that one
+        let active;
+        if (preCreditId) {
+          active = credits.find(c => c.id === preCreditId && (c.total_credits - c.used_credits) > 0);
+        }
+        if (!active) {
+          active = credits.find(c => (c.total_credits - c.used_credits) > 0);
+        }
         setExistingCredit(active || null);
         setUseExistingCredit(!!active);
+
+        // Auto-skip to scheduling when arriving from Dashboard with a valid credit
+        if (preCreditId && active) {
+          setCreditRecord(active);
+          setPaymentConfirmed(true);
+          setSkipToSchedule(true);
+          if (active.session_duration_minutes) {
+            const creditDur = DURATIONS.find(d => d.minutes === active.session_duration_minutes);
+            if (creditDur) setDuration(creditDur);
+          }
+          setScheduling(true);
+          // Jump to county selection (step 0) so they pick coach → schedule
+          setStep(0);
+        }
       });
     }
   }, [user]);
@@ -153,30 +174,30 @@ export default function Book() {
 
     let credit;
     if (useExistingCredit && existingCredit) {
-      // Check that remaining credits are sufficient for this session duration
-      const hoursUsed = duration.hours;
+      // Check that remaining sessions are sufficient
       const remaining = existingCredit.total_credits - existingCredit.used_credits;
-      if (remaining < hoursUsed) {
+      if (remaining < 1) {
         setSubmitting(false);
-        alert(`Not enough credits. You have ${remaining} hour(s) remaining but this session requires ${hoursUsed} hour(s).`);
+        alert('No sessions remaining on this credit package.');
         return;
       }
+      const updatedUsed = existingCredit.used_credits + 1;
       credit = await base44.entities.SessionCredit.update(existingCredit.id, {
-        used_credits: existingCredit.used_credits + hoursUsed
+        used_credits: updatedUsed
       });
-      const updatedUsed = existingCredit.used_credits + hoursUsed;
       setCreditRecord({ ...existingCredit, used_credits: updatedUsed });
       setExistingCredit((existingCredit.total_credits - updatedUsed) > 0 ? { ...existingCredit, used_credits: updatedUsed } : null);
     } else if (method !== 'cash') {
       // Only create credit record for electronic payments, NOT cash
-      const totalHours = (selectedPackage.sessions || 1) * (duration?.hours ?? 1);
+      // total_credits = number of sessions, session_duration_minutes = duration per session
       credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
         client_name: user.full_name || user.email,
         package_id: selectedPackage.id,
         package_name: selectedPackage.name,
-        total_credits: totalHours,
+        total_credits: selectedPackage.sessions || 1,
         used_credits: 0,
+        session_duration_minutes: duration?.minutes ?? 60,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
       });
       setCreditRecord(credit);
@@ -196,17 +217,16 @@ export default function Book() {
     const durationMinutes = duration?.minutes ?? 60;
     const clientAge = user.dob ? Math.floor((Date.now() - new Date(user.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
-    // Deduct credits when using the "Use Existing Credits → Schedule Now" direct path
+    // Deduct 1 session when using the "Use Existing Credits → Schedule Now" direct path
     // (normal credit path deducts in handlePaymentConfirmed)
     if (useExistingCredit && skipToSchedule && existingCredit) {
-      const hoursUsed = duration?.hours ?? 1;
       const remaining = existingCredit.total_credits - existingCredit.used_credits;
-      if (remaining < hoursUsed) {
+      if (remaining < 1) {
         setSubmitting(false);
-        alert(`Not enough credits. You have ${remaining} hour(s) remaining but this session requires ${hoursUsed} hour(s).`);
+        alert('No sessions remaining on this credit package.');
         return;
       }
-      const updatedUsed = existingCredit.used_credits + hoursUsed;
+      const updatedUsed = existingCredit.used_credits + 1;
       await base44.entities.SessionCredit.update(existingCredit.id, {
         used_credits: updatedUsed
       });
@@ -248,7 +268,7 @@ export default function Book() {
 
   // ── Payment confirmed screen ──────────────────────────────────────────────
   if (paymentConfirmed || skipToSchedule) {
-    const remainingCredits = parseFloat(((creditRecord?.total_credits || selectedPackage?.sessions || 1) - (creditRecord?.used_credits ?? duration?.hours ?? 1)).toFixed(2));
+    const remainingSessions = (creditRecord?.total_credits || selectedPackage?.sessions || 1) - (creditRecord?.used_credits ?? 1);
 
     if (sessionBooked) {
       return (
@@ -330,9 +350,9 @@ export default function Book() {
             Your <strong>{selectedPackage?.name}</strong> package is active.
           </p>
           <div className="bg-card border border-border rounded-lg p-4 mb-8">
-            <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-2">Your Credit Hours</p>
-            <p className="font-oswald text-4xl font-bold text-accent">{remainingCredits}</p>
-            <p className="text-sm text-muted-foreground">credit hour{remainingCredits !== 1 ? 's' : ''} remaining</p>
+            <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-2">Your Sessions</p>
+            <p className="font-oswald text-4xl font-bold text-accent">{remainingSessions}</p>
+            <p className="text-sm text-muted-foreground">session{remainingSessions !== 1 ? 's' : ''} remaining</p>
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => setScheduling(true)}
@@ -447,9 +467,10 @@ export default function Book() {
 
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                <p className="text-primary font-oswald tracking-wider text-sm uppercase mb-1">You have existing credits!</p>
+                <p className="text-primary font-oswald tracking-wider text-sm uppercase mb-1">You have existing sessions!</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  <strong>{parseFloat((existingCredit.total_credits - existingCredit.used_credits).toFixed(2))}</strong> credit hour(s) remaining on <strong>{existingCredit.package_name}</strong>.
+                  <strong>{existingCredit.total_credits - existingCredit.used_credits}</strong> session(s) remaining on <strong>{existingCredit.package_name}</strong>
+                  {existingCredit.session_duration_minutes ? ` · ${existingCredit.session_duration_minutes / 60} hr each` : ''}.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -458,10 +479,15 @@ export default function Book() {
                       setSkipToSchedule(true);
                       setPaymentConfirmed(true);
                       setCreditRecord(existingCredit);
+                      // Auto-set duration from the credit record
+                      if (existingCredit.session_duration_minutes) {
+                        const creditDur = DURATIONS.find(d => d.minutes === existingCredit.session_duration_minutes);
+                        if (creditDur) setDuration(creditDur);
+                      }
                       setScheduling(true);
                     }}
                     className="px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
-                    ✓ Use Existing Credits → Schedule Now
+                    ✓ Use Existing Sessions → Schedule Now
                   </button>
                   <button onClick={() => setUseExistingCredit(false)}
                     className={`px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
