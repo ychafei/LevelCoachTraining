@@ -247,6 +247,7 @@ export default function Book() {
       county,
       session_goals: sessionGoals,
       total_price: sessionPrice ?? 0,
+      credit_id: existingCredit?.id || null,
     });
 
     await base44.functions.invoke('sendBookingEmails', {
