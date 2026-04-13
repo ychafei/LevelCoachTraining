@@ -8,6 +8,14 @@ export default function useCurrentUser() {
   const fetchUser = useCallback(async () => {
     try {
       const me = await base44.auth.me();
+      // Backfill first_name / last_name in-memory for legacy users who only have full_name.
+      // Non-destructive: we do not write back to the server; OnboardingModal will persist
+      // real values the next time the user edits their profile.
+      if (me && (!me.first_name || !me.last_name) && me.full_name) {
+        const parts = me.full_name.trim().split(/\s+/);
+        if (!me.first_name) me.first_name = parts[0] || '';
+        if (!me.last_name) me.last_name = parts.slice(1).join(' ') || '';
+      }
       setUser(me);
     } catch {
       setUser(null);

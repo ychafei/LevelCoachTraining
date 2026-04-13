@@ -85,6 +85,11 @@ export default function Navbar() {
             <div className="ml-4">
               {authenticated ? (
                 <div className="flex items-center gap-3">
+                  {user?.first_name && (
+                    <span className="font-oswald tracking-wide uppercase text-xs text-muted-foreground hidden lg:inline">
+                      Hi, <span className="text-accent">{user.first_name}</span>
+                    </span>
+                  )}
                   <Link to="/settings">
                     <Button variant="ghost" size="sm" className="font-oswald tracking-wide uppercase text-xs">
                       Settings

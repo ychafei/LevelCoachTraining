@@ -190,9 +190,10 @@ export default function Book() {
     } else if (method !== 'cash') {
       // Only create credit record for electronic payments, NOT cash
       // total_credits = number of sessions, session_duration_minutes = duration per session
+      const clientFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
       credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
-        client_name: user.full_name || user.email,
+        client_name: clientFullName,
         package_id: selectedPackage.id,
         package_name: selectedPackage.name,
         total_credits: selectedPackage.sessions || 1,
@@ -233,10 +234,11 @@ export default function Book() {
       setExistingCredit((existingCredit.total_credits - updatedUsed) > 0 ? { ...existingCredit, used_credits: updatedUsed } : null);
     }
 
+    const clientFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
     await base44.entities.Session.create({
       coach_id: coach.id,
       client_email: user.email,
-      client_name: user.full_name || user.email,
+      client_name: clientFullName,
       client_age: clientAge,
       date: format(selectedDate, 'yyyy-MM-dd'),
       start_time: selectedTime,
@@ -252,7 +254,7 @@ export default function Book() {
 
     await base44.functions.invoke('sendBookingEmails', {
       clientEmail: user.email,
-      clientName: user.full_name || user.email,
+      clientName: clientFullName,
       coachEmail: coach.email,
       coachName: `${coach.first_name} ${coach.last_name}`,
       dateStr: format(selectedDate, 'EEEE, MMMM d, yyyy'),

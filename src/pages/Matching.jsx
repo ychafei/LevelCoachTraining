@@ -44,7 +44,7 @@ export default function Matching() {
 
     await base44.entities.MatchRequest.create({
       requester_email: user.email,
-      requester_name: user.full_name?.split(' ')[0] || 'Player',
+      requester_name: user.first_name || user.full_name?.split(' ')[0] || 'Player',
       requester_player_age: userAge,
       target_email: target.email,
       target_name: target.first_name,

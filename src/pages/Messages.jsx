@@ -66,10 +66,11 @@ export default function Messages() {
   const handleSend = async () => {
     if (!newMsg.trim() || !selectedConvo) return;
     setSending(true);
+    const senderFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
     await base44.entities.Message.create({
       conversation_id: selectedConvo.id,
       sender_email: user.email,
-      sender_name: user.full_name || user.email,
+      sender_name: senderFullName,
       content: newMsg.trim(),
       read_by: [user.email],
     });
@@ -95,10 +96,11 @@ export default function Messages() {
       !c.is_archived
     );
     if (!convo) {
+      const userFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
       convo = await base44.entities.Conversation.create({
         type: 'coach_client',
         participant_emails: [String(user.email), String(coach.email)],
-        participant_names: [user.full_name || user.email, `${coach.first_name} ${coach.last_name}`],
+        participant_names: [userFullName, `${coach.first_name} ${coach.last_name}`],
         coach_id: coach.id,
       });
     }

@@ -16,7 +16,8 @@ Deno.serve(async (req) => {
     .filter(u => u.email !== user.email)
     .map(u => ({
       email: u.email,
-      first_name: u.full_name?.split(' ')[0] || 'Player',
+      // Prefer explicit first_name; fall back to splitting legacy full_name for older accounts
+      first_name: u.first_name || u.full_name?.split(' ')[0] || 'Player',
       player_age: calcAge(u.dob),
       matching_age_group: u.matching_age_group || null,
     }));

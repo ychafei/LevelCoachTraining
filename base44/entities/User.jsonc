@@ -15,6 +15,14 @@
       "type": "boolean",
       "default": false
     },
+    "first_name": {
+      "type": "string",
+      "description": "Client's first name — shown casually (peer matching, greetings)"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Client's last name — shown formally alongside first name (bookings, coach-facing views)"
+    },
     "phone": {
       "type": "string"
     },

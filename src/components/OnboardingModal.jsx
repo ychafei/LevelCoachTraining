@@ -15,8 +15,14 @@ const hasNumbers = (val) => /\d/.test(val);
 const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
 export default function OnboardingModal({ user, onComplete }) {
+  // Derive initial first/last from existing data: explicit fields first, else split full_name
+  const derivedFirst = user?.first_name || user?.full_name?.trim().split(/\s+/)[0] || '';
+  const derivedLast = user?.last_name || user?.full_name?.trim().split(/\s+/).slice(1).join(' ') || '';
+
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
+    first_name: derivedFirst,
+    last_name: derivedLast,
     phone: user?.phone || '',
     dob: user?.dob || '',
     position: user?.position || '',
@@ -36,9 +42,11 @@ export default function OnboardingModal({ user, onComplete }) {
   const totalSteps = isUnder18 ? 3 : 2;
 
   const phoneValid = isValidPhone(form.phone);
+  const firstNameOk = form.first_name.trim().length > 0 && !hasNumbers(form.first_name);
+  const lastNameOk = form.last_name.trim().length > 0 && !hasNumbers(form.last_name);
   const canProceedStep1 = isCoach
-    ? form.phone && form.dob && phoneValid
-    : form.phone && form.dob && form.position && form.skill_level && phoneValid;
+    ? firstNameOk && lastNameOk && form.phone && form.dob && phoneValid
+    : firstNameOk && lastNameOk && form.phone && form.dob && form.position && form.skill_level && phoneValid;
 
   const parentFirstOk = form.parent_first_name.trim().length > 0 && !hasNumbers(form.parent_first_name);
   const parentLastOk = form.parent_last_name.trim().length > 0 && !hasNumbers(form.parent_last_name);
@@ -49,7 +57,12 @@ export default function OnboardingModal({ user, onComplete }) {
 
   const handleSave = async () => {
     setSaving(true);
+    const firstName = form.first_name.trim();
+    const lastName = form.last_name.trim();
     await base44.auth.updateMe({
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`,
       phone: cleanPhone(form.phone),
       dob: form.dob,
       position: form.position,
@@ -63,7 +76,7 @@ export default function OnboardingModal({ user, onComplete }) {
 
     // Notify parent/guardian via email if under 18
     if (isUnder18 && form.parent_email) {
-      const childName = user?.full_name || user?.email || 'Your child';
+      const childName = `${firstName} ${lastName}`.trim() || user?.email || 'Your child';
       try {
         await base44.integrations.Core.SendEmail({
           to: form.parent_email,
@@ -118,6 +131,32 @@ export default function OnboardingModal({ user, onComplete }) {
         {/* Step 1: Basic Info */}
         {step === 1 && (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>First Name <span className="text-destructive">*</span></Label>
+                <Input
+                  value={form.first_name}
+                  onChange={e => setForm({ ...form, first_name: e.target.value })}
+                  placeholder="First name"
+                  className="mt-1"
+                />
+                {form.first_name && hasNumbers(form.first_name) && (
+                  <p className="text-xs text-destructive mt-1">No numbers allowed</p>
+                )}
+              </div>
+              <div>
+                <Label>Last Name <span className="text-destructive">*</span></Label>
+                <Input
+                  value={form.last_name}
+                  onChange={e => setForm({ ...form, last_name: e.target.value })}
+                  placeholder="Last name"
+                  className="mt-1"
+                />
+                {form.last_name && hasNumbers(form.last_name) && (
+                  <p className="text-xs text-destructive mt-1">No numbers allowed</p>
+                )}
+              </div>
+            </div>
             <div>
               <Label>Phone Number <span className="text-destructive">*</span></Label>
               <Input
