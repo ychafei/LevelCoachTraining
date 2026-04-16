@@ -25,8 +25,9 @@ export default function StripeCheckout({ amount, packageId, packageName, package
         setError('Could not start checkout. Please try again.');
       }
     } catch (err) {
-      console.error('Stripe checkout error:', err);
-      setError('Payment failed. Please try again.');
+      const detail = err?.response?.data?.stripe_error || err?.response?.data?.error || err?.message || 'Unknown error';
+      console.error('Stripe checkout error detail:', detail, err?.response?.data);
+      setError(`Payment failed: ${detail}`);
     } finally {
       setLoading(false);
     }
