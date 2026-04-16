@@ -245,7 +245,7 @@ export default function Book() {
 
   // Book a specific session after credits are awarded
   const handleBookSession = async () => {
-    if (!selectedDate || !selectedTime) return;
+    if (!selectedDate || !selectedTime || !coach) return;
     setSubmitting(true);
     const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
     const pmMethod = useExistingCredit ? 'credits' : paymentMethod === 'cash' ? 'cash' : 'electronic';
@@ -366,6 +366,47 @@ export default function Book() {
     }
 
     if (scheduling) {
+      // If coach not yet selected (e.g. Stripe redirect / credit flow), show county + coach picker first
+      if (!coach) {
+        return (
+          <div className="min-h-[80vh] py-12">
+            <div className="max-w-3xl mx-auto px-4 sm:px-6">
+              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY & COACH</h2>
+              <p className="text-muted-foreground text-sm mb-6">Choose your county to see available coaches.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                {['Oakland', 'Macomb', 'Wayne'].map((c) => (
+                  <button key={c} onClick={() => setCounty(c)}
+                    className={`p-6 rounded-lg border text-center transition-all ${county === c ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
+                    <MapPin className={`w-5 h-5 mx-auto mb-2 ${county === c ? 'text-accent' : 'text-muted-foreground'}`} />
+                    <span className="font-oswald text-base font-bold tracking-wider">{c.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
+              {county && (() => {
+                const countyCoaches = coaches.filter(c => c.county === county);
+                if (countyCoaches.length === 0) return <p className="text-muted-foreground text-sm">No coaches available in {county} County.</p>;
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {countyCoaches.map((c) => (
+                      <button key={c.id} onClick={() => setCoach(c)}
+                        className="p-6 rounded-lg border text-left transition-all flex items-center gap-4 border-border bg-card hover:border-accent/30">
+                        <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                          {c.photo_url ? <img src={c.photo_url} alt={c.first_name} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-muted-foreground" />}
+                        </div>
+                        <div>
+                          <p className="font-oswald text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
+                          {c.is_head_coach && <p className="text-xs text-accent font-oswald tracking-wider uppercase">Head Coach</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-[80vh] py-12">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
