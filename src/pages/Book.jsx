@@ -332,7 +332,7 @@ export default function Book() {
             </div>
             <h1 className="font-oswald text-3xl font-bold tracking-tight mb-4">SESSION BOOKED!</h1>
             <p className="text-muted-foreground mb-2">
-              Your session has been confirmed with {coach.first_name} {coach.last_name}.
+              Your session has been confirmed{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.
             </p>
             <p className="text-sm text-muted-foreground mb-6">A confirmation email has been sent.</p>
 
@@ -370,7 +370,7 @@ export default function Book() {
         <div className="min-h-[80vh] py-12">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
             <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SCHEDULE YOUR SESSION</h2>
-            <p className="text-muted-foreground text-sm mb-8">Pick a date and time with {coach.first_name} {coach.last_name}.</p>
+            <p className="text-muted-foreground text-sm mb-8">Pick a date and time{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
