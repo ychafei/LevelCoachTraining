@@ -16,6 +16,11 @@ export default function Settings() {
   const [coach, setCoach] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [expectedCode, setExpectedCode] = useState('');
+  const [enteredCode, setEnteredCode] = useState('');
+  const [emailFlow, setEmailFlow] = useState('idle'); // 'idle' | 'sending' | 'code_sent' | 'verifying'
+
   useEffect(() => {
     if (user) {
       setProfile({
@@ -55,6 +60,78 @@ export default function Settings() {
     await base44.entities.Coach.update(coach.id, coach);
     setSaving(false);
     toast.success('Coach profile saved');
+  };
+
+  const sendVerificationCode = async () => {
+    const email = pendingEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Enter a valid email address');
+      return;
+    }
+    if (coach?.email_verified_at && email === (coach.email || '').toLowerCase()) {
+      toast.error('That email is already verified');
+      return;
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setEmailFlow('sending');
+    try {
+      await base44.integrations.Core.SendEmail({
+        to: email,
+        subject: 'LC Training — Email Verification Code',
+        body: `
+          <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0f0f0f; color: #fff;">
+            <h2 style="color: #f97316; margin: 0 0 16px;">Verify your LC Training coach email</h2>
+            <p style="color: #d1d5db; line-height: 1.5;">Enter this 6-digit code in your Settings page to confirm <strong>${email}</strong> as your coach contact address.</p>
+            <div style="text-align:center; margin: 24px 0;">
+              <span style="display:inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #f97316; background:#1a1a1a; padding: 16px 24px; border-radius: 8px;">${code}</span>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px;">If you didn't request this, you can ignore this email.</p>
+          </div>
+        `,
+      });
+      setExpectedCode(code);
+      setEnteredCode('');
+      setEmailFlow('code_sent');
+      toast.success(`Code sent to ${email}`);
+    } catch {
+      setEmailFlow('idle');
+      toast.error('Could not send verification email. Try again.');
+    }
+  };
+
+  const verifyAndSaveEmail = async () => {
+    if (enteredCode.trim() !== expectedCode) {
+      toast.error('Incorrect code');
+      return;
+    }
+    setEmailFlow('verifying');
+    try {
+      const updated = {
+        ...coach,
+        email: pendingEmail.trim().toLowerCase(),
+        email_verified_at: new Date().toISOString(),
+      };
+      await base44.entities.Coach.update(coach.id, {
+        email: updated.email,
+        email_verified_at: updated.email_verified_at,
+      });
+      setCoach(updated);
+      setPendingEmail('');
+      setEnteredCode('');
+      setExpectedCode('');
+      setEmailFlow('idle');
+      toast.success('Email verified and saved');
+    } catch {
+      setEmailFlow('code_sent');
+      toast.error('Could not save email. Try again.');
+    }
+  };
+
+  const cancelEmailFlow = () => {
+    setEmailFlow('idle');
+    setExpectedCode('');
+    setEnteredCode('');
+    setPendingEmail('');
   };
 
   return (
@@ -147,6 +224,72 @@ export default function Settings() {
           {/* Payment Tab (coaches only) */}
           {isCoach && coach && (
             <TabsContent value="payment" className="space-y-6">
+              <div className="border border-border bg-card rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="font-oswald text-sm tracking-widest uppercase text-muted-foreground">Contact Email</h3>
+                  {coach.email_verified_at ? (
+                    <span className="text-[10px] font-oswald tracking-widest uppercase text-green-400 border border-green-400/30 bg-green-400/10 px-2 py-0.5 rounded">Verified</span>
+                  ) : coach.email ? (
+                    <span className="text-[10px] font-oswald tracking-widest uppercase text-yellow-400 border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 rounded">Unverified</span>
+                  ) : null}
+                </div>
+                {coach.email && (
+                  <p className="text-sm text-foreground">Current: <span className="text-muted-foreground">{coach.email}</span></p>
+                )}
+                <p className="text-xs text-muted-foreground">Clients and admins use this address to reach you. Changes require a code sent to the new address.</p>
+
+                {emailFlow === 'idle' && (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="email"
+                      placeholder="you@lctrainings.com"
+                      value={pendingEmail}
+                      onChange={e => setPendingEmail(e.target.value)}
+                      className="bg-background border-border"
+                    />
+                    <Button
+                      onClick={sendVerificationCode}
+                      disabled={!pendingEmail.trim()}
+                      className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                    >
+                      Send Code
+                    </Button>
+                  </div>
+                )}
+
+                {emailFlow === 'sending' && (
+                  <p className="text-sm text-muted-foreground">Sending code to {pendingEmail}...</p>
+                )}
+
+                {(emailFlow === 'code_sent' || emailFlow === 'verifying') && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">We sent a 6-digit code to <strong className="text-foreground">{pendingEmail}</strong>. Enter it below to confirm.</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="123456"
+                        value={enteredCode}
+                        onChange={e => setEnteredCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="bg-background border-border tracking-[0.4em] font-mono text-center"
+                      />
+                      <Button
+                        onClick={verifyAndSaveEmail}
+                        disabled={enteredCode.length !== 6 || emailFlow === 'verifying'}
+                        className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                      >
+                        {emailFlow === 'verifying' ? 'Saving...' : 'Verify & Save'}
+                      </Button>
+                    </div>
+                    <div className="flex gap-3 text-xs">
+                      <button type="button" onClick={sendVerificationCode} className="text-accent hover:underline">Resend code</button>
+                      <span className="text-muted-foreground">·</span>
+                      <button type="button" onClick={cancelEmailFlow} className="text-muted-foreground hover:text-foreground">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="font-oswald tracking-wider uppercase text-xs">Venmo</Label>
