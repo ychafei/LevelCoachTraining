@@ -75,27 +75,15 @@ export default function Settings() {
     const code = String(Math.floor(100000 + Math.random() * 900000));
     setEmailFlow('sending');
     try {
-      await base44.integrations.Core.SendEmail({
-        to: email,
-        subject: 'LC Training — Email Verification Code',
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0f0f0f; color: #fff;">
-            <h2 style="color: #f97316; margin: 0 0 16px;">Verify your LC Training coach email</h2>
-            <p style="color: #d1d5db; line-height: 1.5;">Enter this 6-digit code in your Settings page to confirm <strong>${email}</strong> as your coach contact address.</p>
-            <div style="text-align:center; margin: 24px 0;">
-              <span style="display:inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #f97316; background:#1a1a1a; padding: 16px 24px; border-radius: 8px;">${code}</span>
-            </div>
-            <p style="color: #9ca3af; font-size: 12px;">If you didn't request this, you can ignore this email.</p>
-          </div>
-        `,
-      });
+      const res = await base44.functions.invoke('sendCoachEmailVerification', { to: email, code });
+      if (res?.data?.error) throw new Error(res.data.error);
       setExpectedCode(code);
       setEnteredCode('');
       setEmailFlow('code_sent');
       toast.success(`Code sent to ${email}`);
-    } catch {
+    } catch (err) {
       setEmailFlow('idle');
-      toast.error('Could not send verification email. Try again.');
+      toast.error(err?.message || 'Could not send verification email. Try again.');
     }
   };
 
