@@ -26,7 +26,7 @@ function generateToken() {
 }
 
 export default function Matching() {
-  const { user, isCoach, isAdmin, refetch } = useCurrentUser();
+  const { user, refetch } = useCurrentUser();
   const [clients, setClients] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,17 +39,29 @@ export default function Matching() {
   const consentPending = !!user?.parent_consent_sent_at && !consentVerified;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     loadData();
   }, [user]);
 
   const loadData = async () => {
-    const res = await base44.functions.invoke('getMatchingPlayers', {});
-    setClients(res.data.players || []);
+    try {
+      const res = await base44.functions.invoke('getMatchingPlayers', {});
+      setClients(res.data.players || []);
 
-    const reqs = await base44.entities.MatchRequest.filter({});
-    setRequests(reqs.filter(r => r.requester_email === user.email || r.target_email === user.email));
-    setLoading(false);
+      // NOTE: MatchRequest has no participant query helper; we filter client-side.
+      // This should move behind a server function once volume grows.
+      const reqs = await base44.entities.MatchRequest.filter({});
+      setRequests(reqs.filter(r => r.requester_email === user.email || r.target_email === user.email));
+    } catch (err) {
+      console.error('Matching load failed', err);
+      setClients([]);
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const sendRequest = async (target) => {
@@ -94,16 +106,6 @@ export default function Matching() {
 
   if (loading) {
     return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
-  }
-
-  if (isCoach || isAdmin) {
-    return (
-      <div className="py-24 text-center max-w-md mx-auto px-4">
-        <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
-        <p className="text-muted-foreground text-sm">Player matching is for clients only.</p>
-      </div>
-    );
   }
 
   if (!user?.matching_opted_in) {

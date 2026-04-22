@@ -222,7 +222,9 @@ export default function Book() {
       }
       // If webhook hasn't fired yet, user can still proceed — credit will appear on Dashboard
     } else if (method === 'cash') {
-      // Cash: create credit record on frontend (no webhook for cash)
+      // Cash: create credit record on frontend (no webhook for cash).
+      // Credits are usable immediately — client pays coach directly at the session.
+      // Processor = 'cash_pending' so admin/coach views can distinguish from fully-paid ones.
       const credit = await base44.entities.SessionCredit.create({
         client_email: user.email,
         client_name: clientFullName,
@@ -232,7 +234,7 @@ export default function Book() {
         used_credits: 0,
         session_duration_minutes: duration?.minutes ?? 60,
         per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
-        payment_processor: 'admin_grant',
+        payment_processor: 'cash_pending',
       });
       setCreditRecord(credit);
       setExistingCredit(credit);

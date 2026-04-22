@@ -26,17 +26,32 @@ export default function AdminBookings() {
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
-    const load = async () => {
-      const s = await base44.entities.Session.list('-date');
-      setSessions(s);
-      const c = await base44.entities.Coach.list();
-      const map = {};
-      c.forEach(coach => { map[coach.id] = coach; });
-      setCoaches(map);
+    if (!isAdmin) {
       setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [s, c] = await Promise.all([
+          base44.entities.Session.list('-date'),
+          base44.entities.Coach.list(),
+        ]);
+        if (cancelled) return;
+        setSessions(s);
+        const map = {};
+        c.forEach(coach => { map[coach.id] = coach; });
+        setCoaches(map);
+      } catch (err) {
+        console.error('AdminBookings load failed', err);
+        if (!cancelled) toast.error('Could not load bookings.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     load();
-  }, []);
+    return () => { cancelled = true; };
+  }, [isAdmin]);
 
   const updateStatus = async (session, status) => {
     if (status === session.status) return;

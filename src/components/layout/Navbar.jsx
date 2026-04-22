@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { base44 } from '@/api/base44Client';
-import useCurrentUser from '@/hooks/useCurrentUser';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const { user, isAdmin, isCoach } = useCurrentUser();
+  const { user, isAuthenticated, isAdmin, isCoach, logout, navigateToLogin } = useAuth();
+  const authenticated = isAuthenticated;
   const location = useLocation();
-
-  useEffect(() => {
-    base44.auth.isAuthenticated().then(setAuthenticated);
-  }, []);
 
   const getNavLinks = () => {
     if (!authenticated || !user) {
@@ -103,7 +98,7 @@ export default function Navbar() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => base44.auth.logout('/')}
+                    onClick={() => logout()}
                     className="font-oswald tracking-wide uppercase text-xs border-border"
                   >
                     Logout
@@ -114,14 +109,14 @@ export default function Navbar() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => base44.auth.redirectToLogin()}
+                    onClick={() => navigateToLogin()}
                     className="font-oswald tracking-wide uppercase text-xs"
                   >
                     Sign In
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => base44.auth.redirectToLogin()}
+                    onClick={() => navigateToLogin()}
                     className="bg-accent text-accent-foreground font-oswald tracking-wide uppercase text-xs hover:bg-accent/90"
                   >
                     Sign Up
@@ -174,7 +169,7 @@ export default function Navbar() {
                   <Button
                     variant="outline"
                     className="w-full font-oswald tracking-wide uppercase text-xs"
-                    onClick={() => base44.auth.logout('/')}
+                    onClick={() => logout()}
                   >
                     Logout
                   </Button>

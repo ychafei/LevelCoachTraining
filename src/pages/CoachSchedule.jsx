@@ -12,7 +12,7 @@ import WeeklyAvailabilityEditor, { hasAvailabilityErrors } from '@/components/co
 import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function CoachSchedule() {
-  const { user, isCoach, isAdmin } = useCurrentUser();
+  const { user } = useCurrentUser();
   const [blocks, setBlocks] = useState([]);
   const [coach, setCoach] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,22 +22,31 @@ export default function CoachSchedule() {
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
-    if (!user) return;
-    if (!user.coach_id) {
+    // Route guard already checks for user + coach_id; this is defensive.
+    if (!user || !user.coach_id) {
       setLoading(false);
       return;
     }
+    let cancelled = false;
     const load = async () => {
-      const coaches = await base44.entities.Coach.filter({ id: user.coach_id });
-      if (coaches.length > 0) {
-        setCoach(coaches[0]);
-        setAvailability(coaches[0].availability || {});
+      try {
+        const coaches = await base44.entities.Coach.filter({ id: user.coach_id });
+        if (cancelled) return;
+        if (coaches.length > 0) {
+          setCoach(coaches[0]);
+          setAvailability(coaches[0].availability || {});
+        }
+        const b = await base44.entities.CoachBlock.filter({ coach_id: user.coach_id, is_active: true }, '-start_date');
+        if (!cancelled) setBlocks(b);
+      } catch (err) {
+        console.error('CoachSchedule load failed', err);
+        if (!cancelled) toast.error('Could not load schedule. Please refresh.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      const b = await base44.entities.CoachBlock.filter({ coach_id: user.coach_id, is_active: true }, '-start_date');
-      setBlocks(b);
-      setLoading(false);
     };
     load();
+    return () => { cancelled = true; };
   }, [user]);
 
   const addBlock = async () => {
@@ -106,24 +115,6 @@ export default function CoachSchedule() {
 
   if (loading) {
     return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
-  }
-
-  if (!isCoach && !isAdmin) {
-    return (
-      <div className="py-24 text-center space-y-2">
-        <p className="text-foreground font-oswald text-xl uppercase tracking-wider">Access Denied</p>
-        <p className="text-muted-foreground text-sm">This page is for coaches only.</p>
-      </div>
-    );
-  }
-
-  if (!user?.coach_id) {
-    return (
-      <div className="py-24 text-center space-y-2">
-        <p className="text-foreground font-oswald text-xl uppercase tracking-wider">Coach Profile Not Linked</p>
-        <p className="text-muted-foreground text-sm">Your user account is not linked to a Coach profile yet.<br />Please ask an admin to set your <strong>coach_id</strong> in the Users panel.</p>
-      </div>
-    );
   }
 
   return (

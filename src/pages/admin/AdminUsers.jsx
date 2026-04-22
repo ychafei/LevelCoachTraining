@@ -8,11 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Shield, Ban, UserPlus, AlertTriangle, Zap } from 'lucide-react';
+import { Shield, Ban, UserPlus, AlertTriangle, Zap, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
-
-const PROTECTED_EMAIL = 'yousef.elchafei@gmail.com';
 
 export default function AdminUsers() {
   const { isAdmin, isSuperAdmin, user: me } = useCurrentUser();
@@ -33,22 +31,63 @@ export default function AdminUsers() {
   const [creditPackageName, setCreditPackageName] = useState('Admin Grant');
   const [creditSaving, setCreditSaving] = useState(false);
 
+  // Only fetch user/ban data once admin status is confirmed.
+  // The route guard also blocks non-admins, but this prevents a brief
+  // window during auth transition where data would be fetched unnecessarily.
   useEffect(() => {
-    const load = async () => {
-      const [u, b] = await Promise.all([
-        base44.entities.User.list(),
-        base44.entities.UserBan.filter({ is_active: true }),
-      ]);
-      setUsers(u);
-      setBans(b);
+    if (!isAdmin) {
       setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [u, b] = await Promise.all([
+          base44.entities.User.list(),
+          base44.entities.UserBan.filter({ is_active: true }),
+        ]);
+        if (cancelled) return;
+        setUsers(u);
+        setBans(b);
+      } catch (err) {
+        console.error('AdminUsers load failed', err);
+        if (!cancelled) toast.error('Could not load users.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     load();
-  }, []);
+    return () => { cancelled = true; };
+  }, [isAdmin]);
 
-  const updateRole = async (userId, role) => {
-    await base44.entities.User.update(userId, { role });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+  // Non-super-admins cannot edit super-admins, cannot demote the last super-admin,
+  // and cannot promote someone to admin. Super-admins are the only ones who can
+  // escalate to admin. This is also enforced server-side in Base44 permissions
+  // (see remaining-risks summary).
+  const canEditUser = (target) => {
+    if (!target) return false;
+    if (target.email === me?.email) return false; // cannot self-edit
+    if (target.is_super_admin && !isSuperAdmin) return false;
+    return true;
+  };
+
+  const updateRole = async (targetUser, role) => {
+    if (!canEditUser(targetUser)) {
+      toast.error('You do not have permission to edit this user.');
+      return;
+    }
+    // Only super admins can promote to admin.
+    if (role === 'admin' && !isSuperAdmin) {
+      toast.error('Only a super admin can promote a user to admin.');
+      return;
+    }
+    // Prevent demoting an admin unless you are super admin (or they are non-super).
+    if (targetUser.role === 'admin' && role !== 'admin' && !isSuperAdmin) {
+      toast.error('Only a super admin can change an admin\'s role.');
+      return;
+    }
+    await base44.entities.User.update(targetUser.id, { role });
+    setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role } : u));
     toast.success('Role updated');
   };
 
@@ -79,22 +118,31 @@ export default function AdminUsers() {
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) { toast.error('Please enter an email'); return; }
-    setInviting(true);
-    await base44.users.inviteUser(inviteEmail.trim(), inviteRole);
-    if (inviteRole === 'coach') {
-      await base44.entities.Coach.create({
-        first_name: inviteEmail.split('@')[0],
-        last_name: '',
-        email: inviteEmail.trim(),
-        county: 'Oakland',
-        is_active: false,
-      });
+    if (inviteRole === 'admin' && !isSuperAdmin) {
+      toast.error('Only a super admin can invite a new admin.');
+      return;
     }
-    toast.success(`Invitation sent to ${inviteEmail}${inviteRole === 'coach' ? ' — a coach profile was created for them' : ''}`);
-    setInviteDialog(false);
-    setInviteEmail('');
-    setInviteRole('user');
-    setInviting(false);
+    setInviting(true);
+    try {
+      await base44.users.inviteUser(inviteEmail.trim(), inviteRole);
+      if (inviteRole === 'coach') {
+        await base44.entities.Coach.create({
+          first_name: inviteEmail.split('@')[0],
+          last_name: '',
+          email: inviteEmail.trim(),
+          county: 'Oakland',
+          is_active: false,
+        });
+      }
+      toast.success(`Invitation sent to ${inviteEmail}${inviteRole === 'coach' ? ' — a coach profile was created for them' : ''}`);
+      setInviteDialog(false);
+      setInviteEmail('');
+      setInviteRole('user');
+    } catch (err) {
+      toast.error(err?.message || 'Invite failed.');
+    } finally {
+      setInviting(false);
+    }
   };
 
   const sendWarning = async () => {
@@ -147,51 +195,73 @@ export default function AdminUsers() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {row.email === PROTECTED_EMAIL ? (
-            <span className="text-xs font-oswald tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded">🔒 Protected</span>
-          ) : (
-            <>
-              <Select value={row.role || 'user'} onValueChange={v => updateRole(row.id, v)}>
-                <SelectTrigger className="w-28 h-7 text-xs bg-secondary border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">Client</SelectItem>
-                  <SelectItem value="coach">Coach</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(row); setCreditSessions(''); setCreditDuration('60'); setCreditPackageName('Admin Grant'); }}>
-                <Zap className="w-3 h-3 mr-1" /> Credits
-              </Button>
-              <Button size="sm" variant="ghost" className="text-yellow-400 h-7 text-xs" onClick={() => { setWarnDialog(row); setWarnMessage(''); }}>
-                <AlertTriangle className="w-3 h-3 mr-1" /> Warn
-              </Button>
-              {!row._is_banned ? (
-                <Button size="sm" variant="ghost" className="text-destructive h-7 text-xs" onClick={() => { setBanDialog(row); setBanReason(''); }}>
-                  <Ban className="w-3 h-3 mr-1" /> Ban
-                </Button>
-              ) : (
-                <Button size="sm" variant="ghost" className="text-green-400 h-7 text-xs" onClick={() => unban(row.email)}>
-                  Unban
-                </Button>
+      cell: (row) => {
+        const editable = canEditUser(row);
+        const isSelf = row.email === me?.email;
+        if (!editable) {
+          return (
+            <div className="flex items-center gap-2 justify-end">
+              {isSelf && <span className="text-xs font-oswald tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
+              {row.is_super_admin && (
+                <span className="text-xs font-oswald tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Super admin
+                </span>
               )}
-            </>
-          )}
-        </div>
-      ),
+            </div>
+          );
+        }
+        // Role options are filtered based on caller's privileges.
+        const canAssignAdmin = isSuperAdmin;
+        const canEditExistingAdmin = row.role !== 'admin' || isSuperAdmin;
+        return (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Select
+              value={row.role || 'user'}
+              onValueChange={v => updateRole(row, v)}
+              disabled={!canEditExistingAdmin}
+            >
+              <SelectTrigger className="w-28 h-7 text-xs bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">Client</SelectItem>
+                <SelectItem value="coach">Coach</SelectItem>
+                {canAssignAdmin && <SelectItem value="admin">Admin</SelectItem>}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(row); setCreditSessions(''); setCreditDuration('60'); setCreditPackageName('Admin Grant'); }}>
+              <Zap className="w-3 h-3 mr-1" /> Credits
+            </Button>
+            <Button size="sm" variant="ghost" className="text-yellow-400 h-7 text-xs" onClick={() => { setWarnDialog(row); setWarnMessage(''); }}>
+              <AlertTriangle className="w-3 h-3 mr-1" /> Warn
+            </Button>
+            {!row._is_banned ? (
+              <Button size="sm" variant="ghost" className="text-destructive h-7 text-xs" onClick={() => { setBanDialog(row); setBanReason(''); }}>
+                <Ban className="w-3 h-3 mr-1" /> Ban
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-green-400 h-7 text-xs" onClick={() => unban(row.email)}>
+                Unban
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
-
-  if (!isAdmin) return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
 
   return (
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">USER MANAGEMENT</h1>
+          <div>
+            <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">USER MANAGEMENT</h1>
+            {isSuperAdmin && (
+              <p className="text-xs text-accent font-oswald tracking-wider uppercase mt-1 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Super admin session
+              </p>
+            )}
+          </div>
           <Button onClick={() => setInviteDialog(true)} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
             <UserPlus className="w-4 h-4 mr-2" /> Invite User
           </Button>
@@ -246,7 +316,7 @@ export default function AdminUsers() {
                 <SelectContent>
                   <SelectItem value="user">Client — Regular user</SelectItem>
                   <SelectItem value="coach">Coach — Will have a coach profile</SelectItem>
-                  <SelectItem value="admin">Admin — Full access</SelectItem>
+                  {isSuperAdmin && <SelectItem value="admin">Admin — Full access</SelectItem>}
                 </SelectContent>
               </Select>
               {inviteRole === 'coach' && (
@@ -254,6 +324,9 @@ export default function AdminUsers() {
               )}
               {inviteRole === 'admin' && (
                 <p className="text-xs text-destructive mt-2">Admin users have full access to the admin panel.</p>
+              )}
+              {!isSuperAdmin && (
+                <p className="text-xs text-muted-foreground mt-2">Only a super admin can invite new admins.</p>
               )}
             </div>
           </div>

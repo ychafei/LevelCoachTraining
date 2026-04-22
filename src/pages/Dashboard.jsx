@@ -4,14 +4,15 @@ import { base44 } from '@/api/base44Client';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, MessageSquare, Settings, Shield, Clock, CheckCircle2, XCircle, Zap, CalendarClock } from 'lucide-react';
+import { Calendar as CalendarIcon, MessageSquare, Settings, Shield, Clock, CheckCircle2, XCircle, Zap, CalendarClock, AlertTriangle } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
-import { format, isBefore, addHours, startOfDay, parseISO, isWithinInterval } from 'date-fns';
+import { format, startOfDay, parseISO, isBefore, isWithinInterval } from 'date-fns';
 import PaymentHandles from '@/components/shared/PaymentHandles';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { formatTimeET, formatLongDateET, formatSessionRangeET } from '@/lib/formatInET';
+import { isSessionPast, isWithinHoursFromNow } from '@/lib/scheduleET';
 
 export default function Dashboard() {
   const { user, isAdmin, isCoach } = useCurrentUser();
@@ -37,59 +38,83 @@ export default function Dashboard() {
   const timeToMinutes = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
   useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      let allSessions;
-      if (isCoach && user.coach_id) {
-        allSessions = await base44.entities.Session.filter({ coach_id: user.coach_id }, '-date');
-      } else {
-        allSessions = await base44.entities.Session.filter({ client_email: user.email }, '-date');
-      }
-
-      // Auto-complete past sessions (once per day per user, client-side gate)
-      const now = new Date();
-      const todayKey = `autocomplete_${user.email}_${now.toISOString().slice(0, 10)}`;
-      if (!localStorage.getItem(todayKey)) {
-        const overdue = allSessions.filter(s =>
-          (s.status === 'pending' || s.status === 'confirmed') &&
-          new Date(`${s.date}T${s.start_time}`) < now
-        );
-        if (overdue.length > 0) {
-          await Promise.all(overdue.map(s => base44.entities.Session.update(s.id, { status: 'completed' })));
-          overdue.forEach(s => { s.status = 'completed'; });
-        }
-        try { localStorage.setItem(todayKey, '1'); } catch {}
-      }
-
-      setSessions(allSessions);
-
-      const coachList = await base44.entities.Coach.list();
-      const map = {};
-      coachList.forEach(c => { map[c.id] = c; });
-      setCoaches(map);
-
-      const userCredits = await base44.entities.SessionCredit.filter({ client_email: user.email });
-      setCredits(userCredits);
-
-      const convos = await base44.entities.Conversation.filter({});
-      const myConvos = convos.filter(c => c.participant_emails?.includes(user.email));
-      const msgs = await base44.entities.Message.filter({});
-      let unread = 0;
-      msgs.forEach(m => {
-        if (myConvos.some(c => c.id === m.conversation_id) && m.sender_email !== user.email && !m.read_by?.includes(user.email)) {
-          unread++;
-        }
-      });
-      setUnreadCount(unread);
+    // Defensive: Route guard ensures user is present, but if it ever isn't,
+    // don't sit on a spinner forever — flip loading to false and render the empty state.
+    if (!user) {
       setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        let allSessions;
+        if (isCoach && user.coach_id) {
+          allSessions = await base44.entities.Session.filter({ coach_id: user.coach_id }, '-date');
+        } else {
+          allSessions = await base44.entities.Session.filter({ client_email: user.email }, '-date');
+        }
+
+        // Auto-complete past sessions (once per day per user, client-side gate).
+        // Uses ET-aware comparison so a user in any timezone sees the same "past" cutoff.
+        const todayKey = `autocomplete_${user.email}_${new Date().toISOString().slice(0, 10)}`;
+        if (!localStorage.getItem(todayKey)) {
+          const overdue = allSessions.filter(s =>
+            (s.status === 'pending' || s.status === 'confirmed') &&
+            isSessionPast(s.date, s.start_time)
+          );
+          if (overdue.length > 0) {
+            await Promise.all(overdue.map(s => base44.entities.Session.update(s.id, { status: 'completed' })));
+            overdue.forEach(s => { s.status = 'completed'; });
+          }
+          try { localStorage.setItem(todayKey, '1'); } catch {}
+        }
+
+        if (cancelled) return;
+        setSessions(allSessions);
+
+        const coachList = await base44.entities.Coach.list();
+        if (cancelled) return;
+        const map = {};
+        coachList.forEach(c => { map[c.id] = c; });
+        setCoaches(map);
+
+        const userCredits = await base44.entities.SessionCredit.filter({ client_email: user.email });
+        if (cancelled) return;
+        setCredits(userCredits);
+
+        // Targeted unread count — only my conversations and their messages.
+        // NOTE: Base44 SDK doesn't expose an OR filter on arrays, so we fetch
+        // conversations where I'm a participant by scanning; see risks section.
+        const convos = await base44.entities.Conversation.filter({});
+        const myConvos = convos.filter(c => c.participant_emails?.includes(user.email));
+        let unread = 0;
+        if (myConvos.length > 0) {
+          // One query per conversation is bounded by myConvos.length, usually small.
+          const msgBatches = await Promise.all(
+            myConvos.map(c => base44.entities.Message.filter({ conversation_id: c.id }))
+          );
+          msgBatches.forEach(msgs => {
+            msgs.forEach(m => {
+              if (m.sender_email !== user.email && !m.read_by?.includes(user.email)) unread++;
+            });
+          });
+        }
+        if (cancelled) return;
+        setUnreadCount(unread);
+      } catch (err) {
+        console.error('Dashboard load failed:', err);
+        if (!cancelled) toast.error('Could not load your dashboard. Please refresh.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     load();
+    return () => { cancelled = true; };
   }, [user, isCoach]);
 
   const handleCancel = async (session) => {
-    const now = new Date();
-    const sessionTime = new Date(`${session.date}T${session.start_time}`);
-    const isLateCancel = isBefore(sessionTime, addHours(now, 24));
+    const isLateCancel = isWithinHoursFromNow(session.date, session.start_time, 24);
     const cancelledBy = isCoach ? 'coach' : 'client';
 
     const title = isLateCancel ? 'Late cancellation — within 24 hours' : 'Cancel this session?';
@@ -555,6 +580,15 @@ export default function Dashboard() {
                                 {session.payment_method === 'cash' ? '💵 Cash' : session.payment_method === 'credits' ? '⚡ Credits' : '💳 Electronic'}
                               </span>
                             )}
+                            {session.payment_method === 'cash' && session.payment_status === 'unpaid' && (
+                              <div className="mt-2 flex items-start gap-2 text-xs text-yellow-400/90 bg-yellow-500/10 border border-yellow-500/20 rounded px-2 py-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <span>
+                                  Cash is paid directly to your coach at the session.
+                                  {session.total_price ? <> Bring <strong>${session.total_price}</strong>.</> : null}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge className={`${sc?.color} border`}>
@@ -591,8 +625,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           {!isCoach && (() => {
-                            const sessionDateTime = new Date(`${session.date}T${session.start_time}`);
-                            const isOver24Hours = !isBefore(sessionDateTime, addHours(new Date(), 24));
+                            const isOver24Hours = !isWithinHoursFromNow(session.date, session.start_time, 24);
                             return (
                               <div className="flex flex-col gap-2">
                                 <div className="flex gap-2 items-center">

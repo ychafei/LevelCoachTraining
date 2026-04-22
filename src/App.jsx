@@ -5,6 +5,13 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import {
+  RequireAuth,
+  RequireCoach,
+  RequireLinkedCoach,
+  RequireAdmin,
+  RequireClient,
+} from '@/components/guards/RouteGuards';
 
 // Layouts
 import PublicLayout from '@/components/layout/PublicLayout';
@@ -44,7 +51,7 @@ import AdminUnsubscribes from '@/pages/admin/AdminUnsubscribes';
 import AdminCredits from '@/pages/admin/AdminCredits';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -54,17 +61,14 @@ const AuthenticatedApp = () => {
     );
   }
 
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    }
-    // For auth_required, just let them see public pages — Navbar has Sign In button
+  if (authError?.type === 'user_not_registered') {
+    return <UserNotRegisteredError />;
   }
 
   return (
     <Routes>
-      {/* Public routes wrapped in PublicLayout */}
       <Route element={<PublicLayout />}>
+        {/* Public routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/about" element={<About />} />
         <Route path="/book" element={<Book />} />
@@ -77,26 +81,41 @@ const AuthenticatedApp = () => {
         <Route path="/pay" element={<Pay />} />
         <Route path="/parent-consent" element={<ParentConsent />} />
 
-        {/* Authenticated routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/messages" element={<Messages />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/matching" element={<Matching />} />
-        <Route path="/coach-schedule" element={<CoachSchedule />} />
-        <Route path="/coach-setup" element={<CoachSetupGuide />} />
+        {/* Authenticated — any signed-in user */}
+        <Route element={<RequireAuth />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
 
-        {/* Admin routes */}
-        <Route path="/admin" element={<AdminPanel />} />
-        <Route path="/admin/coaches" element={<AdminCoaches />} />
-        <Route path="/admin/bookings" element={<AdminBookings />} />
-        <Route path="/admin/credits" element={<AdminCredits />} />
-        <Route path="/admin/content" element={<AdminContent />} />
-        <Route path="/admin/pricing" element={<AdminPricing />} />
-        <Route path="/admin/applications" element={<AdminApplications />} />
-        <Route path="/admin/blog" element={<AdminBlog />} />
-        <Route path="/admin/users" element={<AdminUsers />} />
-        <Route path="/admin/messages" element={<AdminMessages />} />
-        <Route path="/admin/unsubscribes" element={<AdminUnsubscribes />} />
+        {/* Client-only */}
+        <Route element={<RequireClient />}>
+          <Route path="/matching" element={<Matching />} />
+        </Route>
+
+        {/* Coach-only (must have linked coach_id) */}
+        <Route element={<RequireLinkedCoach />}>
+          <Route path="/coach-schedule" element={<CoachSchedule />} />
+        </Route>
+        {/* Coach-only (does not require coach_id yet) */}
+        <Route element={<RequireCoach />}>
+          <Route path="/coach-setup" element={<CoachSetupGuide />} />
+        </Route>
+
+        {/* Admin-only */}
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/admin/coaches" element={<AdminCoaches />} />
+          <Route path="/admin/bookings" element={<AdminBookings />} />
+          <Route path="/admin/credits" element={<AdminCredits />} />
+          <Route path="/admin/content" element={<AdminContent />} />
+          <Route path="/admin/pricing" element={<AdminPricing />} />
+          <Route path="/admin/applications" element={<AdminApplications />} />
+          <Route path="/admin/blog" element={<AdminBlog />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/messages" element={<AdminMessages />} />
+          <Route path="/admin/unsubscribes" element={<AdminUnsubscribes />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<PageNotFound />} />

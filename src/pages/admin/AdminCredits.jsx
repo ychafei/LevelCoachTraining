@@ -21,12 +21,24 @@ export default function AdminCredits() {
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const loadCredits = async () => {
-    const all = await base44.entities.SessionCredit.list();
-    setCredits(all);
-    setLoading(false);
+    try {
+      const all = await base44.entities.SessionCredit.list();
+      setCredits(all);
+    } catch (err) {
+      console.error('AdminCredits load failed', err);
+      toast.error('Could not load credits.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { loadCredits(); }, []);
+  useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
+    loadCredits();
+  }, [isAdmin]);
 
   const handleDelete = async (credit) => {
     const remaining = (credit.total_credits || 0) - (credit.used_credits || 0);

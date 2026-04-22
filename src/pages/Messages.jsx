@@ -19,16 +19,32 @@ export default function Messages() {
   const msgEndRef = useRef(null);
 
   useEffect(() => {
-    if (!user) return;
+    // Defensive: route guard ensures user exists, but never sit on a spinner.
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     loadConversations();
-    base44.entities.Coach.filter({ is_active: true }).then(data => setCoaches(data.filter(c => c.email)));
+    base44.entities.Coach.filter({ is_active: true })
+      .then(data => setCoaches(data.filter(c => c.email)))
+      .catch(() => setCoaches([]));
   }, [user]);
 
   const loadConversations = async () => {
-    const all = await base44.entities.Conversation.filter({}, '-last_message_at');
-    const mine = all.filter(c => c.participant_emails?.includes(user.email) && !c.is_archived);
-    setConversations(mine);
-    setLoading(false);
+    try {
+      // NOTE: Base44 SDK doesn't expose an "array-contains" OR filter, so we
+      // fetch all conversations and narrow client-side. When conversation
+      // volume grows this should move behind a server function that returns
+      // only rows the caller participates in.
+      const all = await base44.entities.Conversation.filter({}, '-last_message_at');
+      const mine = all.filter(c => c.participant_emails?.includes(user.email) && !c.is_archived);
+      setConversations(mine);
+    } catch (err) {
+      console.error('loadConversations failed', err);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadMessages = async (convo) => {
