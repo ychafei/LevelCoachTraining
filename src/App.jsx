@@ -17,7 +17,7 @@ import CoachOverview from '@/pages/coach/CoachOverview';
 import CoachClients from '@/pages/coach/CoachClients';
 import CoachClientDetail from '@/pages/coach/CoachClientDetail';
 import CoachEarnings from '@/pages/coach/CoachEarnings';
-import CoachPlaceholder from '@/pages/coach/CoachPlaceholder';
+import CoachProfile from '@/pages/coach/CoachProfile';
 
 // Layouts
 import PublicLayout from '@/components/layout/PublicLayout';
@@ -108,16 +108,7 @@ const AuthenticatedApp = () => {
             <Route path="/coach/clients" element={<CoachClients />} />
             <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
             <Route path="/coach/earnings" element={<CoachEarnings />} />
-            <Route
-              path="/coach/profile"
-              element={
-                <CoachPlaceholder
-                  title="Coach Profile"
-                  blurb="A dedicated profile editor with a live preview of what clients see. Payment handles and the email verification flow move here."
-                  phase="Phase 4"
-                />
-              }
-            />
+            <Route path="/coach/profile" element={<CoachProfile />} />
           </Route>
         </Route>
 

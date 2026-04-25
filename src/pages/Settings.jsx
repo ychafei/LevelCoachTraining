@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
@@ -8,19 +9,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Settings() {
   const { user, isCoach, refetch } = useCurrentUser();
   const [profile, setProfile] = useState({});
-  const [coach, setCoach] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [expectedCode, setExpectedCode] = useState('');
-  const [enteredCode, setEnteredCode] = useState('');
-  const [emailFlow, setEmailFlow] = useState('idle'); // 'idle' | 'sending' | 'code_sent' | 'verifying'
-  const [emailStatus, setEmailStatus] = useState(null); // { kind: 'info'|'error'|'success', message }
 
   useEffect(() => {
     if (user) {
@@ -38,12 +33,6 @@ export default function Settings() {
         matching_opted_in: user.matching_opted_in || false,
         matching_age_group: user.matching_age_group || '',
       });
-
-      if (user.coach_id) {
-        base44.entities.Coach.filter({ id: user.coach_id }).then(res => {
-          if (res.length > 0) setCoach(res[0]);
-        });
-      }
     }
   }, [user]);
 
@@ -55,149 +44,34 @@ export default function Settings() {
     toast.success('Profile saved');
   };
 
-  const saveCoach = async () => {
-    if (!coach) return;
-    setSaving(true);
-    await base44.entities.Coach.update(coach.id, coach);
-    setSaving(false);
-    toast.success('Coach profile saved');
-  };
-
-  const sendVerificationCode = async () => {
-    const email = pendingEmail.trim().toLowerCase();
-    setEmailStatus(null);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailStatus({ kind: 'error', message: 'Enter a valid email address.' });
-      return;
-    }
-    if (coach?.email_verified_at && email === (coach.email || '').toLowerCase()) {
-      setEmailStatus({ kind: 'error', message: 'That email is already verified.' });
-      return;
-    }
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setEmailFlow('sending');
-    console.log('[email-verify] sending code to', email);
-
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0A0E14; color: #F8FAFC;">
-        <h2 style="color: #F59E0B; margin: 0 0 16px;">Verify your LC Training coach email</h2>
-        <p style="color: #E2E8F0; line-height: 1.5;">Enter this 6-digit code in your Settings page to confirm <strong>${email}</strong> as your coach contact address.</p>
-        <div style="text-align:center; margin: 24px 0;">
-          <span style="display:inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #F59E0B; background:#1a1a1a; padding: 16px 24px; border-radius: 8px;">${code}</span>
-        </div>
-        <p style="color: #94A3B8; font-size: 12px;">If you didn't request this, you can ignore this email.</p>
-      </div>
-    `;
-
-    let serverFnError = null;
-    let coreError = null;
-    let delivered = false;
-
-    // Path 1: dedicated server function (Resend via support@lctrainings.com)
-    try {
-      const res = await base44.functions.invoke('sendCoachEmailVerification', { to: email, code });
-      console.log('[email-verify] server-fn response', res);
-      const payload = res?.data ?? res;
-      if (payload?.error) {
-        throw new Error(typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error));
-      }
-      if (res?.status && res.status >= 400) {
-        throw new Error(`Server function returned ${res.status}${payload ? ': ' + JSON.stringify(payload) : ''}`);
-      }
-      delivered = true;
-    } catch (err) {
-      // invoke() may throw with a Response-ish object — try to pull JSON body
-      let detail = err?.message || String(err);
-      try {
-        if (err?.response?.json) {
-          const body = await err.response.json();
-          detail = body?.error || JSON.stringify(body);
-        } else if (err?.response?.data) {
-          detail = JSON.stringify(err.response.data);
-        } else if (err?.data) {
-          detail = typeof err.data === 'string' ? err.data : JSON.stringify(err.data);
-        }
-      } catch {}
-      serverFnError = detail;
-      console.warn('[email-verify] server function failed:', detail, err);
-    }
-
-    // Path 2: fallback to Base44 Core.SendEmail integration
-    if (!delivered) {
-      try {
-        const res = await base44.integrations.Core.SendEmail({
-          to: email,
-          subject: 'LC Training — Email Verification Code',
-          body: emailHtml,
-        });
-        console.log('[email-verify] Core.SendEmail response', res);
-        delivered = true;
-      } catch (err) {
-        coreError = err?.message || String(err);
-        console.error('[email-verify] Core.SendEmail failed:', coreError);
-      }
-    }
-
-    if (delivered) {
-      setExpectedCode(code);
-      setEnteredCode('');
-      setEmailFlow('code_sent');
-      setEmailStatus({ kind: 'success', message: `Code sent to ${email}. Check your inbox (and spam folder).` });
-    } else {
-      setEmailFlow('idle');
-      setEmailStatus({
-        kind: 'error',
-        message: `Could not send email. Server function: ${serverFnError || 'n/a'}. Core.SendEmail: ${coreError || 'n/a'}.`,
-      });
-    }
-  };
-
-  const verifyAndSaveEmail = async () => {
-    if (enteredCode.trim() !== expectedCode) {
-      setEmailStatus({ kind: 'error', message: 'Incorrect code. Double-check the email we sent.' });
-      return;
-    }
-    setEmailFlow('verifying');
-    try {
-      const updated = {
-        ...coach,
-        email: pendingEmail.trim().toLowerCase(),
-        email_verified_at: new Date().toISOString(),
-      };
-      await base44.entities.Coach.update(coach.id, {
-        email: updated.email,
-        email_verified_at: updated.email_verified_at,
-      });
-      setCoach(updated);
-      setPendingEmail('');
-      setEnteredCode('');
-      setExpectedCode('');
-      setEmailFlow('idle');
-      setEmailStatus({ kind: 'success', message: 'Email verified and saved.' });
-      toast.success('Email verified and saved');
-    } catch (err) {
-      setEmailFlow('code_sent');
-      setEmailStatus({ kind: 'error', message: err?.message || 'Could not save email. Try again.' });
-    }
-  };
-
-  const cancelEmailFlow = () => {
-    setEmailFlow('idle');
-    setExpectedCode('');
-    setEnteredCode('');
-    setPendingEmail('');
-    setEmailStatus(null);
-  };
-
   return (
     <div className="py-12">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">SETTINGS</h1>
 
+        {isCoach && (
+          <Link
+            to="/coach/profile"
+            className="block mb-6 bg-card border border-accent/30 rounded-lg p-4 hover:border-accent/60 transition-colors"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <UserCircle className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-oswald tracking-wider text-foreground text-sm uppercase">Coaching Profile</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Bio, quote, training area, payment handles, and email verification live in your coach portal.
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-accent flex-shrink-0" />
+            </div>
+          </Link>
+        )}
+
         <Tabs defaultValue="profile">
           <TabsList className="bg-card border border-border mb-8">
             <TabsTrigger value="profile" className="font-oswald tracking-wider uppercase text-xs">Profile</TabsTrigger>
-            {isCoach && <TabsTrigger value="payment" className="font-oswald tracking-wider uppercase text-xs">Payment</TabsTrigger>}
             {!isCoach && <TabsTrigger value="matching" className="font-oswald tracking-wider uppercase text-xs">Matching</TabsTrigger>}
           </TabsList>
 
@@ -275,134 +149,6 @@ export default function Settings() {
               {saving ? 'Saving...' : 'Save Profile'}
             </Button>
           </TabsContent>
-
-          {/* Payment Tab (coaches only) */}
-          {isCoach && coach && (
-            <TabsContent value="payment" className="space-y-6">
-              <div className="border border-border bg-card rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h3 className="font-oswald text-sm tracking-widest uppercase text-muted-foreground">Contact Email</h3>
-                  {coach.email_verified_at ? (
-                    <span className="text-[10px] font-oswald tracking-widest uppercase text-green-400 border border-green-400/30 bg-green-400/10 px-2 py-0.5 rounded">Verified</span>
-                  ) : coach.email ? (
-                    <span className="text-[10px] font-oswald tracking-widest uppercase text-yellow-400 border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 rounded">Unverified</span>
-                  ) : null}
-                </div>
-                {coach.email && (
-                  <p className="text-sm text-foreground">Current: <span className="text-muted-foreground">{coach.email}</span></p>
-                )}
-                <p className="text-xs text-muted-foreground">Clients and admins use this address to reach you. Changes require a code sent to the new address.</p>
-
-                {emailStatus && (
-                  <div
-                    className={`text-xs rounded border p-3 break-words ${
-                      emailStatus.kind === 'error'
-                        ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                        : emailStatus.kind === 'success'
-                        ? 'border-green-400/30 bg-green-400/10 text-green-300'
-                        : 'border-border bg-secondary/50 text-muted-foreground'
-                    }`}
-                  >
-                    {emailStatus.message}
-                  </div>
-                )}
-
-                {emailFlow === 'idle' && (
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      type="email"
-                      placeholder="you@lctrainings.com"
-                      value={pendingEmail}
-                      onChange={e => setPendingEmail(e.target.value)}
-                      className="bg-background border-border"
-                    />
-                    <Button
-                      onClick={sendVerificationCode}
-                      disabled={!pendingEmail.trim()}
-                      className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
-                    >
-                      Send Code
-                    </Button>
-                  </div>
-                )}
-
-                {emailFlow === 'sending' && (
-                  <p className="text-sm text-muted-foreground">Sending code to {pendingEmail}...</p>
-                )}
-
-                {(emailFlow === 'code_sent' || emailFlow === 'verifying') && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">We sent a 6-digit code to <strong className="text-foreground">{pendingEmail}</strong>. Enter it below to confirm.</p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Input
-                        inputMode="numeric"
-                        maxLength={6}
-                        placeholder="123456"
-                        value={enteredCode}
-                        onChange={e => setEnteredCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        className="bg-background border-border tracking-[0.4em] font-mono text-center"
-                      />
-                      <Button
-                        onClick={verifyAndSaveEmail}
-                        disabled={enteredCode.length !== 6 || emailFlow === 'verifying'}
-                        className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
-                      >
-                        {emailFlow === 'verifying' ? 'Saving...' : 'Verify & Save'}
-                      </Button>
-                    </div>
-                    <div className="flex gap-3 text-xs">
-                      <button type="button" onClick={sendVerificationCode} className="text-accent hover:underline">Resend code</button>
-                      <span className="text-muted-foreground">·</span>
-                      <button type="button" onClick={cancelEmailFlow} className="text-muted-foreground hover:text-foreground">Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Venmo</Label>
-                  <Input value={coach.venmo || ''} onChange={e => setCoach({...coach, venmo: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-                <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Zelle</Label>
-                  <Input value={coach.zelle || ''} onChange={e => setCoach({...coach, zelle: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-                <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Cash App</Label>
-                  <Input value={coach.cashapp || ''} onChange={e => setCoach({...coach, cashapp: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-                <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">PayPal</Label>
-                  <Input value={coach.paypal || ''} onChange={e => setCoach({...coach, paypal: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch checked={coach.cash_accepted || false} onCheckedChange={v => setCoach({...coach, cash_accepted: v})} />
-                <Label className="text-sm">Accept Cash</Label>
-              </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="font-oswald text-sm tracking-widest uppercase text-muted-foreground mb-4">Coach Profile</h3>
-                <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Bio</Label>
-                  <Textarea value={coach.bio || ''} onChange={e => setCoach({...coach, bio: e.target.value})} className="bg-card border-border mt-1" rows={3} />
-                </div>
-                <div className="mt-4">
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Quote</Label>
-                  <Input value={coach.quote || ''} onChange={e => setCoach({...coach, quote: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-                <div className="mt-4">
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Training Area</Label>
-                  <Input value={coach.training_area || ''} onChange={e => setCoach({...coach, training_area: e.target.value})} className="bg-card border-border mt-1" />
-                </div>
-              </div>
-
-              <Button onClick={saveCoach} disabled={saving} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
-                {saving ? 'Saving...' : 'Save Payment & Profile'}
-              </Button>
-            </TabsContent>
-          )}
 
           {/* Matching Tab */}
           <TabsContent value="matching" className="space-y-6">
