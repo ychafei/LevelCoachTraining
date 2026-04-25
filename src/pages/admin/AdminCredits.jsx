@@ -40,6 +40,31 @@ export default function AdminCredits() {
     loadCredits();
   }, [isAdmin]);
 
+  const bulkDelete = async () => {
+    if (credits.length === 0) return;
+    const ok = await confirm({
+      title: `Delete all ${credits.length} credit records?`,
+      description: 'Permanently removes every SessionCredit record. There is no undo.',
+      consequences: [
+        'Every client loses any remaining package credits.',
+        'Existing Session bookings are not deleted — handle those separately on the Bookings page.',
+        'Use this for test data cleanup only.',
+      ],
+      confirmLabel: `Delete ${credits.length}`,
+      variant: 'destructive',
+    });
+    if (!ok) return;
+
+    const ids = credits.map(c => c.id);
+    const results = await Promise.allSettled(ids.map(id => base44.entities.SessionCredit.delete(id)));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    const deletedSet = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
+    setCredits(prev => prev.filter(c => !deletedSet.has(c.id)));
+    if (failed === 0) toast.success(`Deleted ${deletedSet.size} credit record${deletedSet.size === 1 ? '' : 's'}`);
+    else toast.error(`Deleted ${deletedSet.size}, ${failed} failed — see console`);
+    if (failed > 0) console.error('Failed credit deletes:', results.filter(r => r.status === 'rejected'));
+  };
+
   const handleDelete = async (credit) => {
     const remaining = (credit.total_credits || 0) - (credit.used_credits || 0);
     const ok = await confirm({
@@ -145,7 +170,18 @@ export default function AdminCredits() {
   return (
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-2">SESSION CREDITS</h1>
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">SESSION CREDITS</h1>
+          <Button
+            variant="outline"
+            onClick={bulkDelete}
+            disabled={credits.length === 0}
+            className="font-oswald tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+            title="Permanently delete every SessionCredit record"
+          >
+            <Trash2 className="w-3 h-3 mr-2" /> Delete all {credits.length}
+          </Button>
+        </div>
         <p className="text-muted-foreground text-sm mb-6">View, edit, or delete client session credit records.</p>
 
         {loading ? (

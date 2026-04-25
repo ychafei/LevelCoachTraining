@@ -81,6 +81,28 @@ export default function AdminBookings() {
     if (failed > 0) console.error('Failed deletes:', results.filter(r => r.status === 'rejected'));
   };
 
+  const deleteOne = async (session) => {
+    const ok = await confirm({
+      title: 'Delete this session?',
+      description: `${session.client_name} · ${format(new Date(session.date), 'MMM d, yyyy')} at ${session.start_time} with ${session.coach_name}`,
+      consequences: [
+        'Permanently removes the Session record. There is no undo.',
+        'Linked SessionCredit usage is not refunded automatically.',
+      ],
+      confirmLabel: 'Delete session',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    try {
+      await base44.entities.Session.delete(session.id);
+      setSessions(prev => prev.filter(s => s.id !== session.id));
+      toast.success('Session deleted');
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not delete session');
+    }
+  };
+
   const updateStatus = async (session, status) => {
     if (status === session.status) return;
     if (status === 'cancelled') {
@@ -173,19 +195,30 @@ export default function AdminBookings() {
     },
     {
       key: 'action',
-      header: 'Change',
+      header: 'Actions',
       cell: (row) => (
-        <Select value={row.status} onValueChange={v => updateStatus(row, v)}>
-          <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={row.status} onValueChange={v => updateStatus(row, v)}>
+            <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => deleteOne(row)}
+            className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Permanently delete this session"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
       ),
     },
   ];
