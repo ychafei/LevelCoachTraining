@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { formatTimeET, formatLongDateET } from '@/lib/formatInET';
 import { isSessionPast } from '@/lib/scheduleET';
+import { summarizeSessions, formatCurrency } from '@/lib/earnings';
 import OnboardingChecklist, { computeChecklist } from '@/components/coach-portal/OnboardingChecklist';
 
 // Helpers --------------------------------------------------------------------
@@ -113,10 +114,7 @@ export default function CoachOverview() {
       if (ms >= cutoff) recentClientEmails.add(s.client_email);
     });
 
-    const unpaidCashSessions = sessions.filter(s =>
-      s.payment_method === 'cash' && s.payment_status === 'unpaid' && s.status !== 'cancelled'
-    );
-    const pendingCashAmount = unpaidCashSessions.reduce((sum, s) => sum + (s.total_price || 0), 0);
+    const earnings = summarizeSessions(sessions, coach);
 
     const recent = sessions
       .filter(s => s.status === 'completed')
@@ -126,15 +124,15 @@ export default function CoachOverview() {
       todaySessions: todaySsns,
       upcoming7: nextWeek,
       recentCompleted: recent,
-      unpaidCash: { count: unpaidCashSessions.length, amount: pendingCashAmount },
+      unpaidCash: { count: earnings.pendingCashCount, amount: earnings.pendingCashAmount },
       stats: {
         thisWeek: weekSessions.length,
         activeClients: recentClientEmails.size,
         completedThisMonth: completedThisMonth.length,
-        pendingCash: pendingCashAmount,
+        pendingCash: earnings.pendingCashAmount,
       },
     };
-  }, [sessions]);
+  }, [sessions, coach]);
 
   const checklist = useMemo(() => computeChecklist(user, coach), [user, coach]);
 
@@ -166,7 +164,7 @@ export default function CoachOverview() {
     alerts.push({
       tone: 'info',
       icon: DollarSign,
-      text: `$${unpaidCash.amount} in ${unpaidCash.count} unpaid cash session${unpaidCash.count === 1 ? '' : 's'}.`,
+      text: `${formatCurrency(unpaidCash.amount)} in ${unpaidCash.count} unpaid cash session${unpaidCash.count === 1 ? '' : 's'}.`,
       cta: { label: 'Open earnings', href: '/coach/earnings' },
     });
   }
@@ -275,7 +273,7 @@ export default function CoachOverview() {
           { label: 'This Week',          value: stats.thisWeek,         icon: CalendarClock },
           { label: 'Active Clients 30d', value: stats.activeClients,    icon: Users },
           { label: 'Completed / Month',  value: stats.completedThisMonth, icon: CheckCircle2 },
-          { label: 'Pending Cash',       value: `$${stats.pendingCash}`, icon: DollarSign },
+          { label: 'Pending Cash',       value: formatCurrency(stats.pendingCash), icon: DollarSign },
         ].map(s => (
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -326,7 +324,7 @@ export default function CoachOverview() {
                     <div className="flex items-center gap-2">
                       {s.payment_method === 'cash' && s.payment_status === 'unpaid' && (
                         <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px]">
-                          Unpaid · ${s.total_price || 0}
+                          Unpaid · {formatCurrency(s.total_price || 0)}
                         </Badge>
                       )}
                       <Link to="/coach/messages">

@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, MapPin, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { describeFee } from '@/lib/earnings';
 
-const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false };
+const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
 export default function AdminCoaches() {
   const { isAdmin } = useCurrentUser();
@@ -165,6 +166,44 @@ export default function AdminCoaches() {
                       <Label className="font-oswald tracking-wider uppercase text-xs">Zelle</Label>
                       <Input value={editing.zelle || ''} onChange={e => setEditing({...editing, zelle: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
+                  </div>
+                  <div className="border border-border rounded-lg p-3 space-y-3">
+                    <Label className="font-oswald tracking-wider uppercase text-xs">Platform Fee</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { v: 'none', label: 'None' },
+                        { v: 'percent', label: 'Percent' },
+                        { v: 'fixed', label: 'Fixed $' },
+                      ].map(opt => {
+                        const active = (editing.platform_fee_type || 'none') === opt.v;
+                        return (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => setEditing({ ...editing, platform_fee_type: opt.v, platform_fee_value: opt.v === 'none' ? 0 : (editing.platform_fee_value || 0) })}
+                            className={`px-3 py-2 text-xs font-oswald tracking-wider uppercase rounded border transition-colors ${active ? 'bg-accent text-accent-foreground border-accent' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(editing.platform_fee_type === 'percent' || editing.platform_fee_type === 'fixed') && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground text-sm w-4">{editing.platform_fee_type === 'fixed' ? '$' : ''}</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={editing.platform_fee_type === 'percent' ? 100 : undefined}
+                          step={editing.platform_fee_type === 'percent' ? 1 : 0.5}
+                          value={editing.platform_fee_value ?? 0}
+                          onChange={e => setEditing({ ...editing, platform_fee_value: Number(e.target.value) })}
+                          className="bg-secondary border-border"
+                        />
+                        <span className="text-muted-foreground text-sm w-4">{editing.platform_fee_type === 'percent' ? '%' : ''}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">{describeFee(editing)}</p>
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2"><Switch checked={editing.is_active} onCheckedChange={v => setEditing({...editing, is_active: v})} /><Label className="text-sm">Active</Label></div>

@@ -86,6 +86,17 @@
     "display_order": {
       "type": "number",
       "default": 0
+    },
+    "platform_fee_type": {
+      "type": "string",
+      "enum": ["none", "percent", "fixed"],
+      "default": "none",
+      "description": "How the platform's cut is calculated for this coach"
+    },
+    "platform_fee_value": {
+      "type": "number",
+      "default": 0,
+      "description": "Fee value — percent (0-100) when type=percent, dollars per session when type=fixed"
     }
   },
   "required": [

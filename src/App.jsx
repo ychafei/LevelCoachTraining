@@ -14,6 +14,9 @@ import {
 } from '@/components/guards/RouteGuards';
 import CoachLayout from '@/components/coach-portal/CoachLayout';
 import CoachOverview from '@/pages/coach/CoachOverview';
+import CoachClients from '@/pages/coach/CoachClients';
+import CoachClientDetail from '@/pages/coach/CoachClientDetail';
+import CoachEarnings from '@/pages/coach/CoachEarnings';
 import CoachPlaceholder from '@/pages/coach/CoachPlaceholder';
 
 // Layouts
@@ -102,26 +105,9 @@ const AuthenticatedApp = () => {
             <Route path="/coach" element={<CoachOverview />} />
             <Route path="/coach/schedule" element={<CoachSchedule />} />
             <Route path="/coach/messages" element={<Messages />} />
-            <Route
-              path="/coach/clients"
-              element={
-                <CoachPlaceholder
-                  title="My Clients"
-                  blurb="A dedicated client roster with session history, private notes, goals, and quick-open messages is coming next."
-                  phase="Phase 2 — up next"
-                />
-              }
-            />
-            <Route
-              path="/coach/earnings"
-              element={
-                <CoachPlaceholder
-                  title="Earnings"
-                  blurb="Gross revenue, pending cash, paid sessions, and a weekly trend — derived from your session history."
-                  phase="Phase 3"
-                />
-              }
-            />
+            <Route path="/coach/clients" element={<CoachClients />} />
+            <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
+            <Route path="/coach/earnings" element={<CoachEarnings />} />
             <Route
               path="/coach/profile"
               element={
