@@ -1,0 +1,40 @@
+{
+  "name": "MatchRequest",
+  "type": "object",
+  "properties": {
+    "requester_email": {
+      "type": "string"
+    },
+    "requester_name": {
+      "type": "string"
+    },
+    "requester_player_age": {
+      "type": "number"
+    },
+    "target_email": {
+      "type": "string"
+    },
+    "target_name": {
+      "type": "string"
+    },
+    "target_player_age": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "declined"
+      ],
+      "default": "pending"
+    },
+    "conversation_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requester_email",
+    "target_email"
+  ]
+}

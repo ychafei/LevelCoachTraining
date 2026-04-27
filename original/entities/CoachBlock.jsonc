@@ -1,0 +1,43 @@
+{
+  "name": "CoachBlock",
+  "type": "object",
+  "properties": {
+    "coach_id": {
+      "type": "string",
+      "description": "Reference to Coach entity"
+    },
+    "label": {
+      "type": "string",
+      "description": "Reason for block"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "block_all_day": {
+      "type": "boolean",
+      "default": true
+    },
+    "blocked_start_time": {
+      "type": "string",
+      "description": "HH:MM if not all day"
+    },
+    "blocked_end_time": {
+      "type": "string",
+      "description": "HH:MM if not all day"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "coach_id",
+    "start_date",
+    "end_date"
+  ]
+}

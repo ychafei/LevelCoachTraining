@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, Users, DollarSign, UserCircle, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ClipboardList, Users, DollarSign, UserCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
 // Coach portal shell — rendered inside PublicLayout's main, so Navbar/Footer still wrap it.
@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 
 const NAV = [
   { to: '/coach',           label: 'Overview',  icon: LayoutDashboard, end: true },
+  { to: '/coach/sessions',  label: 'Sessions',  icon: ClipboardList },
   { to: '/coach/schedule',  label: 'Schedule',  icon: CalendarDays },
   { to: '/coach/clients',   label: 'Clients',   icon: Users },
   { to: '/coach/earnings',  label: 'Earnings',  icon: DollarSign },

@@ -1,0 +1,44 @@
+{
+  "name": "SessionCredit",
+  "type": "object",
+  "properties": {
+    "client_email": {
+      "type": "string"
+    },
+    "client_name": {
+      "type": "string"
+    },
+    "package_id": {
+      "type": "string"
+    },
+    "package_name": {
+      "type": "string"
+    },
+    "total_credits": {
+      "type": "number",
+      "description": "Total number of sessions purchased"
+    },
+    "used_credits": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of sessions used"
+    },
+    "session_duration_minutes": {
+      "type": "number",
+      "description": "Duration in minutes of each session in this package (e.g. 60, 90, 180)"
+    },
+    "per_session_base_price": {
+      "type": "number"
+    },
+    "payment_processor": {
+      "type": "string",
+      "enum": ["paypal", "stripe", "admin_grant"],
+      "description": "Which payment processor was used to create this credit"
+    }
+  },
+  "required": [
+    "client_email",
+    "package_id",
+    "total_credits"
+  ]
+}

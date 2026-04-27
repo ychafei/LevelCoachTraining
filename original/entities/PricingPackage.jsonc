@@ -1,0 +1,41 @@
+{
+  "name": "PricingPackage",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "sessions": {
+      "type": "number"
+    },
+    "price": {
+      "type": "number"
+    },
+    "badge": {
+      "type": "string",
+      "description": "Badge text like Most Popular"
+    },
+    "description": {
+      "type": "string"
+    },
+    "includes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of included features"
+    },
+    "display_order": {
+      "type": "number",
+      "default": 0
+    },
+    "is_visible": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "price"
+  ]
+}

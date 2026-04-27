@@ -83,24 +83,24 @@ export default function OnboardingModal({ user, onComplete }) {
           subject: 'Your Child Has Signed Up for LC Training',
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #D4A843;">LC Training — Parent/Guardian Notification</h2>
+              <h2 style="color: #B89A45;">LC Training — Parent/Guardian Notification</h2>
               <p>Hi ${form.parent_first_name},</p>
               <p><strong>${childName}</strong> (age ${age}) has created an account on <strong>LC Training</strong>, a private soccer coaching platform.</p>
-              <h3 style="color: #D4A843;">What is LC Training?</h3>
+              <h3 style="color: #B89A45;">What is LC Training?</h3>
               <p>LC Training provides one-on-one and small group soccer coaching sessions for players of all ages and skill levels in Oakland, Macomb, and Wayne counties.</p>
-              <h3 style="color: #D4A843;">What your child can do on the platform:</h3>
+              <h3 style="color: #B89A45;">What your child can do on the platform:</h3>
               <ul>
                 <li>Book private coaching sessions with certified coaches</li>
                 <li>Connect with other players their age through our matching system (first name and age only are visible)</li>
                 <li>Message matched players (all messages are monitored for safety)</li>
               </ul>
-              <h3 style="color: #D4A843;">Your information on file:</h3>
+              <h3 style="color: #B89A45;">Your information on file:</h3>
               <ul>
                 <li>Name: ${form.parent_first_name} ${form.parent_last_name}</li>
                 <li>Phone: ${form.parent_phone}</li>
                 <li>Email: ${form.parent_email}</li>
               </ul>
-              <p>If you have any questions or did not authorize this, please contact us immediately at <a href="mailto:support@lctrainings.com" style="color: #D4A843;">support@lctrainings.com</a>.</p>
+              <p>If you have any questions or did not authorize this, please contact us immediately at <a href="mailto:support@lctrainings.com" style="color: #B89A45;">support@lctrainings.com</a>.</p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
               <p style="font-size: 12px; color: #999;">LC Training — Private Soccer Coaching<br/>${window.location.origin}</p>
             </div>

@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Shield, Ban, UserPlus, AlertTriangle, Zap, Lock } from 'lucide-react';
+import { Ban, UserPlus, AlertTriangle, Zap, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
+import { logAdminAction } from '@/lib/audit';
 
 export default function AdminUsers() {
   const { isAdmin, isSuperAdmin, user: me } = useCurrentUser();
@@ -86,19 +87,38 @@ export default function AdminUsers() {
       toast.error('Only a super admin can change an admin\'s role.');
       return;
     }
+    const before = { role: targetUser.role || 'user' };
     await base44.entities.User.update(targetUser.id, { role });
     setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role } : u));
+    await logAdminAction({
+      actor: me,
+      action: 'user.role_change',
+      entityType: 'User',
+      entityId: targetUser.id,
+      before,
+      after: { role },
+      metadata: { target_email: targetUser.email },
+    });
     toast.success('Role updated');
   };
 
   const banUser = async () => {
     if (!banReason.trim()) { toast.error('Please provide a reason'); return; }
-    await base44.entities.UserBan.create({
+    const created = await base44.entities.UserBan.create({
       banned_email: banDialog.email,
       banned_by_email: me.email,
       reason: banReason,
       is_permanent: true,
       is_active: true,
+    });
+    await logAdminAction({
+      actor: me,
+      action: 'user.ban',
+      entityType: 'UserBan',
+      entityId: created?.id || '',
+      after: { is_active: true, is_permanent: true },
+      reason: banReason,
+      metadata: { target_email: banDialog.email, target_user_id: banDialog.id },
     });
     toast.success('User banned');
     setBanDialog(null);
@@ -112,6 +132,15 @@ export default function AdminUsers() {
     if (ban) {
       await base44.entities.UserBan.update(ban.id, { is_active: false, unbanned_by_email: me.email, unbanned_at: new Date().toISOString() });
       setBans(prev => prev.filter(b => b.id !== ban.id));
+      await logAdminAction({
+        actor: me,
+        action: 'user.unban',
+        entityType: 'UserBan',
+        entityId: ban.id,
+        before: { is_active: true },
+        after: { is_active: false },
+        metadata: { target_email: email },
+      });
       toast.success('User unbanned');
     }
   };
@@ -134,6 +163,12 @@ export default function AdminUsers() {
           is_active: false,
         });
       }
+      await logAdminAction({
+        actor: me,
+        action: 'user.invite',
+        entityType: 'User',
+        metadata: { target_email: inviteEmail.trim(), invited_role: inviteRole },
+      });
       toast.success(`Invitation sent to ${inviteEmail}${inviteRole === 'coach' ? ' — a coach profile was created for them' : ''}`);
       setInviteDialog(false);
       setInviteEmail('');
@@ -151,6 +186,14 @@ export default function AdminUsers() {
       to: warnDialog.email,
       subject: 'Account Warning — LC Training',
       body: `<p>Hi ${warnDialog.full_name || warnDialog.email},</p><p>${warnMessage}</p><p>If you have questions, reply to this email or contact support@lctrainings.com.</p><p>— LC Training Team</p>`,
+    });
+    await logAdminAction({
+      actor: me,
+      action: 'user.warn',
+      entityType: 'User',
+      entityId: warnDialog.id,
+      reason: warnMessage,
+      metadata: { target_email: warnDialog.email },
     });
     toast.success(`Warning sent to ${warnDialog.email}`);
     setWarnDialog(null);
@@ -370,7 +413,7 @@ export default function AdminUsers() {
             disabled={!creditSessions || parseInt(creditSessions) <= 0 || creditSaving}
             onClick={async () => {
               setCreditSaving(true);
-              await base44.entities.SessionCredit.create({
+              const created = await base44.entities.SessionCredit.create({
                 client_email: creditDialog.email,
                 client_name: creditDialog.full_name || creditDialog.email,
                 package_id: 'admin_grant',
@@ -378,6 +421,21 @@ export default function AdminUsers() {
                 total_credits: parseInt(creditSessions),
                 used_credits: 0,
                 session_duration_minutes: parseInt(creditDuration),
+              });
+              await logAdminAction({
+                actor: me,
+                action: 'credit.grant',
+                entityType: 'SessionCredit',
+                entityId: created?.id || '',
+                after: {
+                  total_credits: parseInt(creditSessions),
+                  session_duration_minutes: parseInt(creditDuration),
+                  package_name: creditPackageName,
+                },
+                metadata: {
+                  target_email: creditDialog.email,
+                  target_user_id: creditDialog.id,
+                },
               });
               toast.success(`${creditSessions} session(s) at ${parseInt(creditDuration) / 60} hr(s) added to ${creditDialog.email}`);
               setCreditDialog(null);

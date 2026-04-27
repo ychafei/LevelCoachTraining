@@ -148,16 +148,16 @@ export default function Matching() {
           subject: `Consent Requested: ${childName} wants to use LC Training Player Matching`,
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #D4A843;">LC Training — Parent/Guardian Consent</h2>
+              <h2 style="color: #B89A45;">LC Training — Parent/Guardian Consent</h2>
               <p>Hi,</p>
               <p><strong>${childName}</strong>${userAge ? ` (age ${userAge})` : ''} has requested your consent to use the Player Matching feature on LC Training.</p>
               <p>Player Matching lets your child connect with other players in the Oakland, Macomb, and Wayne county areas. Only first name and age are visible to other players, and all messages are monitored for safety.</p>
               <p style="margin: 24px 0;">
-                <a href="${consentUrl}" style="background:#D4A843; color:#000; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:bold;">Review &amp; Respond</a>
+                <a href="${consentUrl}" style="background:#B89A45; color:#000; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:bold;">Review &amp; Respond</a>
               </p>
               <p style="font-size: 12px; color: #666;">Or copy this link into your browser:<br/>${consentUrl}</p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">If you did not expect this email, you can ignore it. Questions? <a href="mailto:support@lctrainings.com" style="color: #D4A843;">support@lctrainings.com</a></p>
+              <p style="font-size: 12px; color: #999;">If you did not expect this email, you can ignore it. Questions? <a href="mailto:support@lctrainings.com" style="color: #B89A45;">support@lctrainings.com</a></p>
             </div>
           `,
         });
@@ -279,6 +279,17 @@ export default function Matching() {
             </div>
           </div>
         )}
+
+        {/* Safety banner — privacy reminder for everyone */}
+        <div className="mb-8 bg-card border border-border rounded-lg p-4 text-xs text-muted-foreground leading-relaxed">
+          <p className="font-oswald tracking-widest uppercase text-foreground text-[10px] mb-1">How matching keeps you safe</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Only your <strong className="text-foreground">first name</strong> and age are shown to other players. Email and phone are never shared.</li>
+            <li>Players under 18 need a parent/guardian to consent before matching unlocks.</li>
+            <li>Messages route through LC Training so a coach or admin can step in if anything feels off — <a href="mailto:support@lctrainings.com" className="text-accent hover:underline">tell us</a>.</li>
+            <li>You can opt out any time from <Link to="/settings" className="text-accent hover:underline">Settings</Link>.</li>
+          </ul>
+        </div>
 
         {/* Discover */}
         <h2 className="font-oswald text-lg tracking-widest uppercase text-muted-foreground mb-4">Discover Players</h2>

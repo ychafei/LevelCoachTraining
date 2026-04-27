@@ -12,11 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, MapPin, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { describeFee } from '@/lib/earnings';
+import { logAdminAction } from '@/lib/audit';
 
 const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
 export default function AdminCoaches() {
-  const { isAdmin } = useCurrentUser();
+  const { user, isAdmin } = useCurrentUser();
   const [coaches, setCoaches] = useState([]);
   const [users, setUsers] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -45,18 +46,75 @@ export default function AdminCoaches() {
     const updateData = { coach_id: linkDialog.id };
     // Don't downgrade admins — only set role to 'coach' if not already admin
     if (targetUser?.role !== 'admin') updateData.role = 'coach';
+    const before = { coach_id: targetUser?.coach_id || null, role: targetUser?.role || 'user' };
     await base44.entities.User.update(userId, updateData);
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updateData } : u));
+    await logAdminAction({
+      actor: user,
+      action: 'coach.link_user',
+      entityType: 'User',
+      entityId: userId,
+      before,
+      after: updateData,
+      metadata: {
+        coach_id: linkDialog.id,
+        coach_name: `${linkDialog.first_name || ''} ${linkDialog.last_name || ''}`.trim(),
+        target_email: targetUser?.email,
+      },
+    });
     toast.success('User linked as coach');
     setLinkDialog(null);
   };
 
   const save = async () => {
-    if (editing.id) {
+    const isUpdate = !!editing.id;
+    const previous = isUpdate ? coaches.find(c => c.id === editing.id) : null;
+    if (isUpdate) {
       await base44.entities.Coach.update(editing.id, editing);
     } else {
-      await base44.entities.Coach.create(editing);
+      const created = await base44.entities.Coach.create(editing);
+      // Capture the new id for audit metadata.
+      if (created?.id) editing.id = created.id;
     }
+
+    if (isUpdate && previous && previous.is_active !== editing.is_active) {
+      await logAdminAction({
+        actor: user,
+        action: editing.is_active ? 'coach.activate' : 'coach.deactivate',
+        entityType: 'Coach',
+        entityId: editing.id,
+        before: { is_active: previous.is_active },
+        after: { is_active: editing.is_active },
+        metadata: {
+          coach_name: `${editing.first_name || ''} ${editing.last_name || ''}`.trim(),
+        },
+      });
+    }
+    await logAdminAction({
+      actor: user,
+      action: isUpdate ? 'coach.update' : 'coach.create',
+      entityType: 'Coach',
+      entityId: editing.id || '',
+      before: isUpdate ? {
+        first_name: previous?.first_name,
+        last_name: previous?.last_name,
+        county: previous?.county,
+        is_active: previous?.is_active,
+        is_head_coach: previous?.is_head_coach,
+        platform_fee_type: previous?.platform_fee_type,
+        platform_fee_value: previous?.platform_fee_value,
+      } : undefined,
+      after: {
+        first_name: editing.first_name,
+        last_name: editing.last_name,
+        county: editing.county,
+        is_active: editing.is_active,
+        is_head_coach: editing.is_head_coach,
+        platform_fee_type: editing.platform_fee_type,
+        platform_fee_value: editing.platform_fee_value,
+      },
+    });
+
     toast.success('Coach saved');
     setOpen(false);
     loadCoaches();

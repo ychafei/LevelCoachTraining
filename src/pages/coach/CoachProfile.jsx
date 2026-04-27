@@ -1,26 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
-  Save, Upload, Mail, AlertTriangle, Eye, BadgeCheck, RotateCcw,
+  Save, Upload, Mail, AlertTriangle, Eye, BadgeCheck, RotateCcw, Wallet, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
 
 // Editable sections of the Coach record. Photo and email are saved out-of-band (photo on
-// upload, email after verification); everything else lives in `draft` and saves together.
-const EDITABLE_KEYS = ['bio', 'quote', 'training_area', 'specializations', 'venmo', 'zelle', 'cashapp', 'paypal', 'cash_accepted'];
+// upload, email after verification); payment handles are edited in /coach/earnings;
+// everything else lives in `draft` and saves together.
+const EDITABLE_KEYS = ['bio', 'quote', 'training_area', 'specializations'];
 
 function pickEditable(coach) {
   if (!coach) return { specializations: [] };
   const out = {};
-  EDITABLE_KEYS.forEach(k => { out[k] = coach[k] ?? (k === 'specializations' ? [] : k === 'cash_accepted' ? false : ''); });
+  EDITABLE_KEYS.forEach(k => { out[k] = coach[k] ?? (k === 'specializations' ? [] : ''); });
   return out;
 }
 
@@ -31,8 +32,7 @@ function shallowEqual(a, b) {
       if (!Array.isArray(av) || !Array.isArray(bv)) return false;
       if (av.length !== bv.length || av.some((v, i) => v !== bv[i])) return false;
     } else if ((av || '') !== (bv || '')) {
-      // boolean falsy "" vs false collapse the same way (Switch off vs unset string)
-      if (!(av === false && bv === '') && !(av === '' && bv === false)) return false;
+      return false;
     }
   }
   return true;
@@ -437,33 +437,33 @@ export default function CoachProfile() {
             )}
           </Section>
 
-          {/* Payment handles */}
-          <Section title="Payment">
-            <p className="text-xs text-muted-foreground mb-3">Shown to clients on the payment screen so they can pay you directly. (Also editable from <a href="/coach/earnings" className="text-accent hover:underline">/coach/earnings</a>.)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Payment — read-only summary; full editor lives in /coach/earnings */}
+          <Section title="Payment" icon={Wallet}>
+            <p className="text-xs text-muted-foreground mb-3">
+              Payment handles and cash acceptance are managed from your Earnings page so they live next to your unpaid totals.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               {[
-                { key: 'venmo',   label: 'Venmo',    placeholder: '@your-venmo' },
-                { key: 'zelle',   label: 'Zelle',    placeholder: 'phone or email' },
-                { key: 'cashapp', label: 'Cash App', placeholder: '$cashtag' },
-                { key: 'paypal',  label: 'PayPal',   placeholder: 'paypal.me/you' },
+                { key: 'venmo',   label: 'Venmo' },
+                { key: 'zelle',   label: 'Zelle' },
+                { key: 'cashapp', label: 'Cash App' },
+                { key: 'paypal',  label: 'PayPal' },
               ].map(h => (
-                <div key={h.key}>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">{h.label}</Label>
-                  <Input
-                    value={draft[h.key] || ''}
-                    onChange={e => updateDraft({ [h.key]: e.target.value })}
-                    className="bg-secondary border-border mt-1"
-                    placeholder={h.placeholder}
-                  />
+                <div key={h.key} className="bg-secondary/40 border border-border rounded p-2">
+                  <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{h.label}</p>
+                  <p className="text-sm text-foreground truncate">{coach[h.key] || <span className="text-muted-foreground/60">—</span>}</p>
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-3 mt-4">
-              <Switch
-                checked={!!draft.cash_accepted}
-                onCheckedChange={v => updateDraft({ cash_accepted: v })}
-              />
-              <Label className="text-sm">Accept cash payments at sessions</Label>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm text-muted-foreground">
+                Cash at session: <span className="text-foreground">{coach.cash_accepted ? 'Accepted' : 'Not accepted'}</span>
+              </p>
+              <Link to="/coach/earnings">
+                <Button variant="outline" size="sm" className="font-oswald tracking-wider uppercase text-xs">
+                  <ExternalLink className="w-3 h-3 mr-1" /> Manage in Earnings
+                </Button>
+              </Link>
             </div>
           </Section>
 

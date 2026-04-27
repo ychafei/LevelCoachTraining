@@ -1,0 +1,50 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "actor_email": {
+      "type": "string",
+      "description": "Email of the admin who performed the action"
+    },
+    "actor_role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "super_admin"
+      ],
+      "description": "Role at the time the action was performed"
+    },
+    "action": {
+      "type": "string",
+      "description": "Dotted action key, e.g. session.delete, credit.adjust, user.ban, user.role_change"
+    },
+    "entity_type": {
+      "type": "string",
+      "description": "Affected entity name (Session, SessionCredit, User, Coach, etc.)"
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "ID of the affected record. Empty for bulk actions — see metadata.bulk_ids."
+    },
+    "before": {
+      "type": "object",
+      "description": "Snapshot of relevant fields before the change"
+    },
+    "after": {
+      "type": "object",
+      "description": "Snapshot of relevant fields after the change"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional admin-provided reason for the action"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free-form context — bulk_ids, filters, counts, target email, etc."
+    }
+  },
+  "required": [
+    "actor_email",
+    "action"
+  ]
+}

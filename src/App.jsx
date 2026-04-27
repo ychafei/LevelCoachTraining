@@ -14,6 +14,7 @@ import {
 } from '@/components/guards/RouteGuards';
 import CoachLayout from '@/components/coach-portal/CoachLayout';
 import CoachOverview from '@/pages/coach/CoachOverview';
+import CoachSessions from '@/pages/coach/CoachSessions';
 import CoachClients from '@/pages/coach/CoachClients';
 import CoachClientDetail from '@/pages/coach/CoachClientDetail';
 import CoachEarnings from '@/pages/coach/CoachEarnings';
@@ -26,6 +27,7 @@ import PublicLayout from '@/components/layout/PublicLayout';
 import Landing from '@/pages/Landing';
 import About from '@/pages/About';
 import Book from '@/pages/Book';
+import CoachDetail from '@/pages/CoachDetail';
 import Blog from '@/pages/Blog';
 import BlogPostPage from '@/pages/BlogPost';
 import Apply from '@/pages/Apply';
@@ -77,6 +79,7 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Landing />} />
         <Route path="/about" element={<About />} />
         <Route path="/book" element={<Book />} />
+        <Route path="/coaches/:coachId" element={<CoachDetail />} />
         <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<BlogPostPage />} />
         <Route path="/apply" element={<Apply />} />
@@ -103,6 +106,7 @@ const AuthenticatedApp = () => {
         <Route element={<RequireCoach />}>
           <Route element={<CoachLayout />}>
             <Route path="/coach" element={<CoachOverview />} />
+            <Route path="/coach/sessions" element={<CoachSessions />} />
             <Route path="/coach/schedule" element={<CoachSchedule />} />
             <Route path="/coach/messages" element={<Messages />} />
             <Route path="/coach/clients" element={<CoachClients />} />

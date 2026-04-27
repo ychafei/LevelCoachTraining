@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
+import { logAdminAction } from '@/lib/audit';
 
 const statusColor = {
   pending: 'bg-accent/10 text-accent border-accent/20',
@@ -15,7 +16,7 @@ const statusColor = {
 };
 
 export default function AdminApplications() {
-  const { isAdmin } = useCurrentUser();
+  const { user, isAdmin } = useCurrentUser();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,8 +25,21 @@ export default function AdminApplications() {
   }, []);
 
   const update = async (id, status) => {
+    const previous = apps.find(a => a.id === id);
     await base44.entities.CoachApplication.update(id, { status });
     setApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    await logAdminAction({
+      actor: user,
+      action: 'application.status_change',
+      entityType: 'CoachApplication',
+      entityId: id,
+      before: { status: previous?.status || 'pending' },
+      after: { status },
+      metadata: {
+        applicant_email: previous?.email,
+        applicant_name: `${previous?.first_name || ''} ${previous?.last_name || ''}`.trim(),
+      },
+    });
     toast.success('Status updated');
   };
 

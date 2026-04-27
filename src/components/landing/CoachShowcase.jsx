@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { MapPin } from 'lucide-react';
+import { ArrowRight, MapPin, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function CoachShowcase() {
@@ -26,9 +27,11 @@ export default function CoachShowcase() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {coaches.map((coach) => (
-            <div
+            <Link
               key={coach.id}
-              className="group relative bg-card border border-border rounded-lg overflow-hidden hover:border-accent/30 transition-all duration-500"
+              to={`/coaches/${coach.id}`}
+              className="group relative bg-card border border-border rounded-lg overflow-hidden hover:border-accent/30 transition-all duration-500 block focus:outline-none focus:ring-2 focus:ring-accent/40"
+              aria-label={`View profile for ${coach.first_name} ${coach.last_name}`}
             >
               {/* Photo */}
               <div className="aspect-[3/4] bg-secondary relative overflow-hidden">
@@ -47,6 +50,11 @@ export default function CoachShowcase() {
                 )}
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+                {coach.is_head_coach && (
+                  <Badge className="absolute top-3 right-3 bg-accent text-accent-foreground border-0 text-[10px] font-oswald tracking-widest uppercase">
+                    <Star className="w-3 h-3 mr-1" /> Head Coach
+                  </Badge>
+                )}
               </div>
 
               {/* Info */}
@@ -75,8 +83,11 @@ export default function CoachShowcase() {
                     "{coach.quote}"
                   </p>
                 )}
+                <div className="mt-5 flex items-center gap-1 text-xs font-oswald tracking-widest uppercase text-accent group-hover:gap-2 transition-all">
+                  View profile <ArrowRight className="w-3 h-3" />
+                </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

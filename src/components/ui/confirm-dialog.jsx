@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +21,16 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'default',
+  requireTyped,
   onConfirm,
 }) {
+  const [typed, setTyped] = useState('');
+  // Reset the typed value every time the dialog opens so a previous match doesn't
+  // carry over into the next confirm prompt.
+  useEffect(() => { if (open) setTyped(''); }, [open]);
+
+  const typedOk = !requireTyped || typed === requireTyped;
+
   const actionClass =
     variant === 'destructive'
       ? cn(buttonVariants(), 'bg-red-600 text-white hover:bg-red-700')
@@ -42,13 +50,32 @@ export function ConfirmDialog({
             ))}
           </ul>
         )}
+        {requireTyped && (
+          <div className="mt-2">
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Type <code className="font-mono bg-secondary text-foreground px-1.5 py-0.5 rounded text-[11px]">{requireTyped}</code> to confirm.
+            </p>
+            <input
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={requireTyped}
+              className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel className="font-oswald tracking-wider uppercase text-xs">
             {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction
+            disabled={!typedOk}
             onClick={onConfirm}
-            className={cn(actionClass, 'font-oswald tracking-wider uppercase text-xs')}
+            className={cn(
+              actionClass,
+              'font-oswald tracking-wider uppercase text-xs',
+              !typedOk && 'opacity-50 cursor-not-allowed pointer-events-none',
+            )}
           >
             {confirmLabel}
           </AlertDialogAction>

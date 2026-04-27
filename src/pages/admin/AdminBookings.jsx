@@ -4,12 +4,13 @@ import useCurrentUser from '@/hooks/useCurrentUser';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
-import { Clock, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, Trash2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { formatSessionDateTimeET } from '@/lib/formatInET';
+import { logAdminAction } from '@/lib/audit';
 
 const statusConfig = {
   pending: { icon: Clock, color: 'bg-accent/10 text-accent border-accent/20' },
@@ -19,7 +20,7 @@ const statusConfig = {
 };
 
 export default function AdminBookings() {
-  const { isAdmin } = useCurrentUser();
+  const { user, isAdmin, isSuperAdmin } = useCurrentUser();
   const [sessions, setSessions] = useState([]);
   const [coaches, setCoaches] = useState({});
   const [filter, setFilter] = useState('all');
@@ -41,7 +42,7 @@ export default function AdminBookings() {
         if (cancelled) return;
         setSessions(s);
         const map = {};
-        c.forEach(coach => { map[coach.id] = coach; });
+        c.forEach((coach) => { map[coach.id] = coach; });
         setCoaches(map);
       } catch (err) {
         console.error('AdminBookings load failed', err);
@@ -54,8 +55,23 @@ export default function AdminBookings() {
     return () => { cancelled = true; };
   }, [isAdmin]);
 
+  const enriched = useMemo(() => sessions.map((s) => {
+    const coach = coaches[s.coach_id];
+    return {
+      ...s,
+      coach_name: coach ? `${coach.first_name} ${coach.last_name}` : 'Unknown',
+      when_sort: `${s.date} ${s.start_time || '00:00'}`,
+    };
+  }), [sessions, coaches]);
+
+  const filtered = filter === 'all' ? enriched : enriched.filter((s) => s.status === filter);
+
   const bulkDelete = async () => {
-    const ids = filtered.map(s => s.id);
+    if (!isSuperAdmin) {
+      toast.error('Only a super admin can bulk-delete bookings. Use individual cancel/delete instead.');
+      return;
+    }
+    const ids = filtered.map((s) => s.id);
     if (ids.length === 0) return;
     const filterLabel = filter === 'all' ? 'all bookings' : `${filter} bookings`;
     const ok = await confirm({
@@ -67,18 +83,31 @@ export default function AdminBookings() {
         'Use this for test data cleanup — confirm the filter above shows only what you want to remove.',
       ],
       confirmLabel: `Delete ${ids.length}`,
+      cancelLabel: 'Cancel',
       variant: 'destructive',
+      requireTyped: `DELETE ${ids.length}`,
     });
     if (!ok) return;
 
-    const results = await Promise.allSettled(ids.map(id => base44.entities.Session.delete(id)));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    const deleted = results.length - failed;
+    const results = await Promise.allSettled(ids.map((id) => base44.entities.Session.delete(id)));
+    const failed = results.filter((r) => r.status === 'rejected').length;
     const deletedSet = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
-    setSessions(prev => prev.filter(s => !deletedSet.has(s.id)));
-    if (failed === 0) toast.success(`Deleted ${deleted} session${deleted === 1 ? '' : 's'}`);
-    else toast.error(`Deleted ${deleted}, ${failed} failed — see console`);
-    if (failed > 0) console.error('Failed deletes:', results.filter(r => r.status === 'rejected'));
+    setSessions((prev) => prev.filter((s) => !deletedSet.has(s.id)));
+    await logAdminAction({
+      actor: user,
+      action: 'session.bulk_delete',
+      entityType: 'Session',
+      metadata: {
+        filter,
+        attempted: ids.length,
+        deleted: deletedSet.size,
+        failed,
+        bulk_ids: Array.from(deletedSet),
+      },
+    });
+    if (failed === 0) toast.success(`Deleted ${deletedSet.size} session${deletedSet.size === 1 ? '' : 's'}`);
+    else toast.error(`Deleted ${deletedSet.size}, ${failed} failed — see console`);
+    if (failed > 0) console.error('Failed deletes:', results.filter((r) => r.status === 'rejected'));
   };
 
   const deleteOne = async (session) => {
@@ -88,14 +117,34 @@ export default function AdminBookings() {
       consequences: [
         'Permanently removes the Session record. There is no undo.',
         'Linked SessionCredit usage is not refunded automatically.',
+        'Prefer cancelling (status → cancelled) for live data.',
       ],
       confirmLabel: 'Delete session',
+      cancelLabel: 'Keep session',
       variant: 'destructive',
+      requireTyped: 'DELETE',
     });
     if (!ok) return;
+    const before = {
+      status: session.status,
+      payment_status: session.payment_status,
+      date: session.date,
+      start_time: session.start_time,
+    };
     try {
       await base44.entities.Session.delete(session.id);
-      setSessions(prev => prev.filter(s => s.id !== session.id));
+      setSessions((prev) => prev.filter((s) => s.id !== session.id));
+      await logAdminAction({
+        actor: user,
+        action: 'session.delete',
+        entityType: 'Session',
+        entityId: session.id,
+        before,
+        metadata: {
+          client_email: session.client_email,
+          coach_id: session.coach_id,
+        },
+      });
       toast.success('Session deleted');
     } catch (err) {
       console.error(err);
@@ -114,25 +163,33 @@ export default function AdminBookings() {
           'No automatic credit refund is issued from this panel — handle refunds in the Credits page.',
         ],
         confirmLabel: 'Cancel booking',
+        cancelLabel: 'Keep booking',
         variant: 'destructive',
       });
       if (!ok) return;
     }
-    await base44.entities.Session.update(session.id, { status });
-    setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status } : s));
-    toast.success('Status updated');
+    const before = { status: session.status };
+    try {
+      await base44.entities.Session.update(session.id, { status });
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, status } : s)));
+      await logAdminAction({
+        actor: user,
+        action: 'session.status_change',
+        entityType: 'Session',
+        entityId: session.id,
+        before,
+        after: { status },
+        metadata: {
+          client_email: session.client_email,
+          coach_id: session.coach_id,
+        },
+      });
+      toast.success('Status updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not update status');
+    }
   };
-
-  const enriched = useMemo(() => sessions.map(s => {
-    const coach = coaches[s.coach_id];
-    return {
-      ...s,
-      coach_name: coach ? `${coach.first_name} ${coach.last_name}` : 'Unknown',
-      when_sort: `${s.date} ${s.start_time || '00:00'}`,
-    };
-  }), [sessions, coaches]);
-
-  const filtered = filter === 'all' ? enriched : enriched.filter(s => s.status === filter);
 
   const columns = [
     {
@@ -198,7 +255,7 @@ export default function AdminBookings() {
       header: 'Actions',
       cell: (row) => (
         <div className="flex items-center gap-2">
-          <Select value={row.status} onValueChange={v => updateStatus(row, v)}>
+          <Select value={row.status} onValueChange={(v) => updateStatus(row, v)}>
             <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border">
               <SelectValue />
             </SelectTrigger>
@@ -231,15 +288,18 @@ export default function AdminBookings() {
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">ALL BOOKINGS</h1>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={bulkDelete}
-              disabled={filtered.length === 0}
-              className="font-oswald tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-              title="Permanently delete every session matching the current filter"
-            >
-              <Trash2 className="w-3 h-3 mr-2" /> Delete {filtered.length} {filter === 'all' ? '' : filter}
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="outline"
+                onClick={bulkDelete}
+                disabled={filtered.length === 0}
+                className="font-oswald tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                title="Permanently delete every session matching the current filter (super admin)"
+              >
+                <Lock className="w-3 h-3 mr-1.5" />
+                <Trash2 className="w-3 h-3 mr-1.5" /> Delete {filtered.length} {filter === 'all' ? '' : filter}
+              </Button>
+            )}
             <Select value={filter} onValueChange={setFilter}>
               <SelectTrigger className="w-40 bg-secondary border-border">
                 <SelectValue />
@@ -256,7 +316,9 @@ export default function AdminBookings() {
         </div>
 
         {loading ? (
-          <div className="text-center py-12"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>
+          <div className="text-center py-12">
+            <div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" />
+          </div>
         ) : (
           <DataTable
             columns={columns}

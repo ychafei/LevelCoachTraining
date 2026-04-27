@@ -1,0 +1,55 @@
+{
+  "name": "CoachApplication",
+  "type": "object",
+  "properties": {
+    "first_name": {
+      "type": "string"
+    },
+    "last_name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "dob": {
+      "type": "string",
+      "format": "date"
+    },
+    "county": {
+      "type": "string",
+      "enum": [
+        "Oakland",
+        "Macomb",
+        "Wayne"
+      ]
+    },
+    "coaching_background": {
+      "type": "string"
+    },
+    "resume_url": {
+      "type": "string"
+    },
+    "background_check_consent": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "reviewed",
+        "accepted",
+        "rejected"
+      ],
+      "default": "pending"
+    }
+  },
+  "required": [
+    "first_name",
+    "last_name",
+    "email"
+  ]
+}

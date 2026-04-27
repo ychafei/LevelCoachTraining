@@ -10,33 +10,84 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { logAdminAction } from '@/lib/audit';
 
 const empty = { name: '', sessions: '', price: '', badge: '', description: '', includes: [], is_visible: true, display_order: 0 };
 
 export default function AdminPricing() {
-  const { isAdmin } = useCurrentUser();
+  const { user, isAdmin } = useCurrentUser();
   const [packages, setPackages] = useState([]);
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
   const [includeInput, setIncludeInput] = useState('');
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => { load(); }, []);
   const load = () => base44.entities.PricingPackage.list('display_order').then(setPackages);
 
   const save = async () => {
     const data = { ...editing, sessions: Number(editing.sessions), price: Number(editing.price), display_order: Number(editing.display_order) };
-    if (editing.id) {
+    const isUpdate = !!editing.id;
+    const previous = isUpdate ? packages.find(p => p.id === editing.id) : null;
+    let savedId = editing.id;
+    if (isUpdate) {
       await base44.entities.PricingPackage.update(editing.id, data);
     } else {
-      await base44.entities.PricingPackage.create(data);
+      const created = await base44.entities.PricingPackage.create(data);
+      savedId = created?.id;
     }
+    await logAdminAction({
+      actor: user,
+      action: isUpdate ? 'pricing.update' : 'pricing.create',
+      entityType: 'PricingPackage',
+      entityId: savedId || '',
+      before: isUpdate ? {
+        name: previous?.name,
+        sessions: previous?.sessions,
+        price: previous?.price,
+        is_visible: previous?.is_visible,
+      } : undefined,
+      after: {
+        name: data.name,
+        sessions: data.sessions,
+        price: data.price,
+        is_visible: data.is_visible,
+      },
+    });
     toast.success('Package saved');
     setOpen(false);
     load();
   };
 
-  const remove = async (id) => {
-    await base44.entities.PricingPackage.delete(id);
+  const remove = async (pkg) => {
+    const ok = await confirm({
+      title: 'Delete this package?',
+      description: `${pkg.name} · ${pkg.sessions} session${pkg.sessions === 1 ? '' : 's'} · $${pkg.price}`,
+      consequences: [
+        'Permanently removes the pricing package.',
+        'Existing SessionCredit records that reference this package by id remain intact.',
+        'Booking flow will no longer offer this option to clients.',
+      ],
+      confirmLabel: 'Delete package',
+      cancelLabel: 'Keep package',
+      variant: 'destructive',
+      requireTyped: 'DELETE',
+    });
+    if (!ok) return;
+    await base44.entities.PricingPackage.delete(pkg.id);
+    await logAdminAction({
+      actor: user,
+      action: 'pricing.delete',
+      entityType: 'PricingPackage',
+      entityId: pkg.id,
+      before: {
+        name: pkg.name,
+        sessions: pkg.sessions,
+        price: pkg.price,
+        is_visible: pkg.is_visible,
+      },
+    });
     toast.success('Package deleted');
     load();
   };
@@ -123,13 +174,14 @@ export default function AdminPricing() {
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={() => { setEditing({ ...pkg }); setOpen(true); }}><Pencil className="w-4 h-4" /></Button>
-                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(pkg.id)}><Trash2 className="w-4 h-4" /></Button>
+                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(pkg)}><Trash2 className="w-4 h-4" /></Button>
               </div>
             </div>
           ))}
           {packages.length === 0 && <p className="text-center text-muted-foreground py-8">No packages yet.</p>}
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

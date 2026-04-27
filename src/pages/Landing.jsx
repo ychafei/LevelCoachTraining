@@ -5,6 +5,7 @@ import CountySelector from '@/components/landing/CountySelector';
 import CoachShowcase from '@/components/landing/CoachShowcase';
 import PricingSection from '@/components/landing/PricingSection';
 import ParentTestimonials from '@/components/landing/ParentTestimonials';
+import TrustFaqSection from '@/components/landing/TrustFaqSection';
 import CTABanner from '@/components/landing/CTABanner';
 
 export default function Landing() {
@@ -16,6 +17,7 @@ export default function Landing() {
       <CoachShowcase />
       <PricingSection />
       <ParentTestimonials />
+      <TrustFaqSection />
       <CTABanner />
     </div>
   );

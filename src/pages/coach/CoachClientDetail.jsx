@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft, User as UserIcon, MapPin, Users, Zap,
   Clock, CheckCircle2, XCircle, MessageSquare, StickyNote, Save, Check,
+  ClipboardList, Lock, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatLongDateET, formatTimeET } from '@/lib/formatInET';
@@ -95,6 +96,166 @@ function SessionNotesEditor({ session, onSaved }) {
             Cancel
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ----- Coaching plan editor ------------------------------------------------
+// Coach-private structured plan. Stored on the most relevant Session: the next
+// upcoming session if one exists, otherwise the most recent past session. The
+// plan reads from the most recent session that has any plan field populated, so
+// older entries don't disappear when a new session is created.
+
+const PLAN_FIELDS = [
+  { key: 'training_plan',        label: 'Training Plan',        placeholder: 'Long-term plan for this client.',                        visibility: 'private' },
+  { key: 'strengths',            label: 'Strengths',            placeholder: 'What this client does well.',                            visibility: 'private' },
+  { key: 'weaknesses',           label: 'Weaknesses',           placeholder: 'Areas to develop.',                                      visibility: 'private' },
+  { key: 'next_session_focus',   label: 'Next Session Focus',   placeholder: 'What to work on at the next session.',                   visibility: 'private' },
+  { key: 'homework',             label: 'Homework',             placeholder: 'Between-session work — the client sees this.',           visibility: 'shared' },
+  { key: 'client_visible_notes', label: 'Notes for Client',     placeholder: 'Anything else you want the client to see on their dashboard.', visibility: 'shared' },
+];
+
+function pickTargetSession(sessions) {
+  if (!sessions || sessions.length === 0) return null;
+  const upcoming = sessions
+    .filter(s => s.status === 'pending' || s.status === 'confirmed')
+    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
+  if (upcoming.length > 0) return upcoming[0];
+  // Otherwise most recent by date (sessions list comes pre-sorted desc)
+  return sessions[0];
+}
+
+function pickPlanSnapshot(sessions) {
+  // Walk sessions from newest to oldest; the first non-empty value per field wins.
+  const out = {};
+  PLAN_FIELDS.forEach(f => { out[f.key] = ''; });
+  for (const s of sessions) {
+    PLAN_FIELDS.forEach(f => {
+      if (!out[f.key] && s[f.key]) out[f.key] = s[f.key];
+    });
+    if (PLAN_FIELDS.every(f => out[f.key])) break;
+  }
+  return out;
+}
+
+function CoachingPlan({ sessions, onSaved }) {
+  const targetSession = useMemo(() => pickTargetSession(sessions), [sessions]);
+  const snapshot = useMemo(() => pickPlanSnapshot(sessions), [sessions]);
+  const [draft, setDraft] = useState(snapshot);
+  const [saving, setSaving] = useState(false);
+
+  // Reset draft when the snapshot changes (e.g. after save propagates).
+  useEffect(() => { setDraft(snapshot); }, [snapshot]);
+
+  const dirty = useMemo(
+    () => PLAN_FIELDS.some(f => (draft[f.key] || '') !== (snapshot[f.key] || '')),
+    [draft, snapshot]
+  );
+
+  if (!targetSession) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <ClipboardList className="w-4 h-4 text-accent" />
+          <h2 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The plan saves to your most relevant session with this client. Book or hold a session first to start the plan.
+        </p>
+      </div>
+    );
+  }
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const patch = {};
+      PLAN_FIELDS.forEach(f => { patch[f.key] = draft[f.key] || ''; });
+      await base44.entities.Session.update(targetSession.id, patch);
+      onSaved?.(targetSession.id, patch);
+      toast.success('Coaching plan saved');
+    } catch (err) {
+      console.error('plan save failed', err);
+      toast.error('Could not save coaching plan');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const targetLabel = (targetSession.status === 'pending' || targetSession.status === 'confirmed')
+    ? `next session · ${formatLongDateET(targetSession.date)}`
+    : `most recent session · ${formatLongDateET(targetSession.date)}`;
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-4 h-4 text-accent" />
+          <h2 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Saves to your <span className="text-foreground">{targetLabel}</span>. Past entries stay attached to their session — this view always shows the latest values.
+      </p>
+
+      {/* Private — coach only */}
+      <div className="flex items-center gap-2 mb-2">
+        <Lock className="w-3 h-3 text-muted-foreground" />
+        <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Private — coach only</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+        {PLAN_FIELDS.filter(f => f.visibility === 'private').map(f => (
+          <div key={f.key} className={f.key === 'training_plan' ? 'md:col-span-2' : ''}>
+            <label className="font-oswald tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
+            <Textarea
+              value={draft[f.key] || ''}
+              onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              rows={f.key === 'training_plan' ? 4 : 3}
+              className="bg-secondary border-border mt-1 text-sm"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Shared — visible to client */}
+      <div className="flex items-center gap-2 mb-2">
+        <Eye className="w-3 h-3 text-accent" />
+        <p className="text-[10px] font-oswald tracking-widest uppercase text-accent">Shared — visible on client dashboard</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {PLAN_FIELDS.filter(f => f.visibility === 'shared').map(f => (
+          <div key={f.key}>
+            <label className="font-oswald tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
+            <Textarea
+              value={draft[f.key] || ''}
+              onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              rows={3}
+              className="bg-secondary border-accent/30 mt-1 text-sm"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-end gap-2 mt-4">
+        {dirty && (
+          <button
+            type="button"
+            onClick={() => setDraft(snapshot)}
+            className="text-[11px] font-oswald tracking-widest uppercase text-muted-foreground hover:text-foreground"
+          >
+            Revert
+          </button>
+        )}
+        <Button
+          size="sm"
+          onClick={save}
+          disabled={!dirty || saving}
+          className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
+        >
+          <Save className="w-3 h-3 mr-1" /> {saving ? 'Saving…' : 'Save Plan'}
+        </Button>
       </div>
     </div>
   );
@@ -317,6 +478,14 @@ export default function CoachClientDetail() {
             })}
           </div>
         </div>
+      )}
+
+      {/* Coaching plan (coach-private; mirrors onto most relevant session) */}
+      {sessions.length > 0 && (
+        <CoachingPlan
+          sessions={sessions}
+          onSaved={(id, patch) => setSessions(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))}
+        />
       )}
 
       {/* Session history */}

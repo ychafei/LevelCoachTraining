@@ -5,9 +5,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calendar, CalendarClock, Users, DollarSign, MessageSquare, User as UserIcon,
-  Clock, CheckCircle2, AlertTriangle, Zap, MapPin, StickyNote,
+  Calendar, CalendarClock, ClipboardList, Users, DollarSign, MessageSquare, User as UserIcon,
+  Clock, CheckCircle2, AlertTriangle, MapPin, StickyNote,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatTimeET, formatLongDateET } from '@/lib/formatInET';
 import { isSessionPast } from '@/lib/scheduleET';
 import { summarizeSessions, formatCurrency } from '@/lib/earnings';
@@ -302,39 +303,36 @@ export default function CoachOverview() {
             ) : (
               <div className="space-y-2">
                 {todaySessions.map(s => (
-                  <div key={s.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="text-center flex-shrink-0">
-                        <p className="font-oswald text-xl font-bold text-accent leading-none">
-                          {formatTimeET(s.date, s.start_time).replace(' ET', '')}
-                        </p>
-                        <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mt-1">
-                          {s.duration_minutes} min
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-oswald tracking-wider text-foreground truncate">
-                          {s.client_name}{s.client_age ? ` · ${s.client_age}` : ''}
-                        </p>
-                        {s.session_goals && (
-                          <p className="text-xs text-muted-foreground truncate">{s.session_goals}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {s.payment_method === 'cash' && s.payment_status === 'unpaid' && (
-                        <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px]">
-                          Unpaid · {formatCurrency(s.total_price || 0)}
-                        </Badge>
-                      )}
-                      <Link to="/coach/messages">
-                        <Button size="sm" variant="outline" className="font-oswald tracking-wider uppercase text-xs">
-                          <MessageSquare className="w-3 h-3 mr-1" /> Chat
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
+                  <TodaySessionCard
+                    key={s.id}
+                    session={s}
+                    onMarkCompleted={async () => {
+                      try {
+                        await base44.entities.Session.update(s.id, { status: 'completed' });
+                        setSessions(prev => prev.map(x => x.id === s.id ? { ...x, status: 'completed' } : x));
+                        toast.success('Session marked completed');
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Could not mark as completed');
+                      }
+                    }}
+                    onMarkPaid={async () => {
+                      try {
+                        await base44.entities.Session.update(s.id, { payment_status: 'paid' });
+                        setSessions(prev => prev.map(x => x.id === s.id ? { ...x, payment_status: 'paid' } : x));
+                        toast.success('Marked as paid');
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Could not mark as paid');
+                      }
+                    }}
+                  />
                 ))}
+                <div className="text-right">
+                  <Link to="/coach/sessions" className="text-xs font-oswald tracking-wider uppercase text-accent hover:underline">
+                    View all sessions →
+                  </Link>
+                </div>
               </div>
             )}
           </div>
@@ -419,6 +417,11 @@ export default function CoachOverview() {
           <div className="bg-card border border-border rounded-lg p-4">
             <h3 className="font-oswald text-xs font-bold tracking-widest uppercase text-muted-foreground mb-3">Quick Actions</h3>
             <div className="space-y-1.5">
+              <Link to="/coach/sessions" className="block">
+                <Button variant="ghost" className="w-full justify-start text-sm">
+                  <ClipboardList className="w-4 h-4 mr-2" /> Manage Sessions
+                </Button>
+              </Link>
               <Link to="/coach/schedule" className="block">
                 <Button variant="ghost" className="w-full justify-start text-sm">
                   <CalendarClock className="w-4 h-4 mr-2" /> Edit Availability
@@ -437,6 +440,67 @@ export default function CoachOverview() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Today card — links to client detail and supports inline mark-completed / mark-paid.
+function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
+  const cashUnpaid = s.payment_method === 'cash' && s.payment_status === 'unpaid';
+  return (
+    <div className="bg-card border border-border rounded-lg p-4 flex items-start justify-between gap-3 flex-wrap">
+      <Link
+        to={`/coach/clients/${encodeURIComponent(s.client_email)}`}
+        className="flex items-center gap-3 min-w-0 flex-1 hover:text-accent transition-colors"
+      >
+        <div className="text-center flex-shrink-0">
+          <p className="font-oswald text-xl font-bold text-accent leading-none">
+            {formatTimeET(s.date, s.start_time).replace(' ET', '')}
+          </p>
+          <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mt-1">
+            {s.duration_minutes} min
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="font-oswald tracking-wider text-foreground truncate">
+            {s.client_name}{s.client_age ? ` · ${s.client_age}` : ''}
+          </p>
+          {s.session_goals && (
+            <p className="text-xs text-muted-foreground truncate">{s.session_goals}</p>
+          )}
+        </div>
+      </Link>
+      <div className="flex items-center gap-2 flex-wrap">
+        {cashUnpaid && (
+          <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px]">
+            Unpaid · {formatCurrency(s.total_price || 0)}
+          </Badge>
+        )}
+        {(s.status === 'pending' || s.status === 'confirmed') && (
+          <Button
+            size="sm"
+            onClick={onMarkCompleted}
+            className="bg-green-600 text-white font-oswald tracking-wider uppercase text-xs hover:bg-green-700"
+          >
+            <CheckCircle2 className="w-3 h-3 mr-1" /> Done
+          </Button>
+        )}
+        {cashUnpaid && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onMarkPaid}
+            className="font-oswald tracking-wider uppercase text-xs"
+          >
+            <DollarSign className="w-3 h-3 mr-1" /> Mark Paid
+          </Button>
+        )}
+        <Link to="/coach/messages">
+          <Button size="sm" variant="ghost" className="font-oswald tracking-wider uppercase text-xs">
+            <MessageSquare className="w-3 h-3 mr-1" /> Chat
+          </Button>
+        </Link>
       </div>
     </div>
   );

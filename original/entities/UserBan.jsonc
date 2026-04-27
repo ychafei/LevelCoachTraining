@@ -1,0 +1,33 @@
+{
+  "name": "UserBan",
+  "type": "object",
+  "properties": {
+    "banned_email": {
+      "type": "string"
+    },
+    "banned_by_email": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "is_permanent": {
+      "type": "boolean",
+      "default": true
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "unbanned_by_email": {
+      "type": "string"
+    },
+    "unbanned_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "banned_email",
+    "reason"
+  ]
+}

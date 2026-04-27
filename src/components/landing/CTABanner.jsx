@@ -30,17 +30,15 @@ export default function CTABanner() {
         <p className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
           {subtext}
         </p>
-        <div className="flex flex-wrap justify-center gap-4">
+        <div className="flex flex-col items-center gap-4">
           <Link to="/book">
             <Button className="bg-accent text-accent-foreground hover:bg-accent/90 px-10 py-6 text-base font-oswald tracking-wider uppercase">
               Book Now <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </Link>
-          <Link to="/apply">
-            <Button variant="outline" className="px-10 py-6 text-base font-oswald tracking-wider uppercase border-border hover:bg-secondary">
-              Become a Coach
-            </Button>
-          </Link>
+          <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground">
+            Coach? <Link to="/apply" className="text-accent hover:underline">Apply to join the staff →</Link>
+          </p>
         </div>
       </div>
     </section>

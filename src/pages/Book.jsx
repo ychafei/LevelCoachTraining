@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, ArrowRight, MapPin, User, Clock, Timer, CheckCircle2, Package, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, User, Timer, CheckCircle2, Package } from 'lucide-react';
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import PayPalCheckout from '@/components/PayPalCheckout';
 import StripeCheckout from '@/components/StripeCheckout';
 import OnboardingModal from '@/components/OnboardingModal';
+import BookingSummaryCard from '@/components/booking/BookingSummaryCard';
 
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
@@ -39,6 +39,7 @@ function calcPrice(pkg, dur) {
 export default function Book() {
   const urlParams = new URLSearchParams(window.location.search);
   const preCounty = urlParams.get('county');
+  const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
   const stripeSuccess = urlParams.get('stripe_success');
   const { user, refetch } = useCurrentUser();
@@ -76,13 +77,26 @@ export default function Book() {
     base44.entities.PricingPackage.filter({ is_visible: true }, 'display_order').then(setPackages);
   }, []);
 
+  // One-shot: pre-select coach from /coaches/:id "Book with this coach" link.
   useEffect(() => {
+    if (!preCoachId || coaches.length === 0) return;
+    const picked = coaches.find(c => c.id === preCoachId);
+    if (!picked) return;
+    setCoach(picked);
+    if (!county) setCounty(picked.county);
+    setStep(prev => Math.max(prev, 2));
+    // Intentionally not depending on `coach`/`county` so this only fires once per coach list load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preCoachId, coaches]);
+
+  useEffect(() => {
+    if (preCoachId) return; // pre-selected — don't override
     if (county && coaches.length > 0) {
       const headCoach = coaches.find(c => c.county === county && c.is_head_coach);
       if (headCoach) { setCoach(headCoach); if (preCounty) setStep(2); }
       else setCoach(null);
     }
-  }, [county, coaches, preCounty]);
+  }, [county, coaches, preCounty, preCoachId]);
 
   useEffect(() => {
     if (coach) {
@@ -503,9 +517,24 @@ export default function Book() {
     }
   };
 
+  const summaryProps = {
+    county,
+    coach,
+    pkg: selectedPackage,
+    duration,
+    sessionPrice,
+    packageTotal: sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null,
+    usingCredit: useExistingCredit,
+    creditRemaining: existingCredit ? existingCredit.total_credits - existingCredit.used_credits : null,
+    creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
+    creditPackageName: existingCredit?.package_name ?? null,
+  };
+
   return (
     <div className="min-h-[80vh] py-12">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
         {/* Progress */}
         <div className="mb-12">
           <div className="flex justify-between items-center mb-2">
@@ -867,9 +896,14 @@ export default function Book() {
           </div>
         )}
 
+        {/* Mobile summary — collapsible card just above nav buttons */}
+        <div className="mt-8 lg:hidden">
+          <BookingSummaryCard {...summaryProps} />
+        </div>
+
         {/* Navigation */}
         {step < 5 && (
-          <div className="flex justify-between mt-10">
+          <div className="flex justify-between mt-6 lg:mt-10">
             <Button variant="outline" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
               className="font-oswald tracking-wider uppercase">
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
@@ -887,6 +921,13 @@ export default function Book() {
             </Button>
           </div>
         )}
+          </div>
+
+          {/* Desktop summary sidebar */}
+          <div className="lg:col-span-1">
+            <BookingSummaryCard {...summaryProps} />
+          </div>
+        </div>
       </div>
     </div>
   );

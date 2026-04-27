@@ -1,0 +1,28 @@
+{
+  "name": "SiteContent",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Content key e.g. hero_headline"
+    },
+    "value": {
+      "type": "string",
+      "description": "Content value"
+    },
+    "content_type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "richtext",
+        "image",
+        "json"
+      ],
+      "default": "text"
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ]
+}
