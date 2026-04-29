@@ -37,6 +37,9 @@ import Unsubscribe from '@/pages/Unsubscribe';
 import Pay from '@/pages/Pay';
 import ParentConsent from '@/pages/ParentConsent';
 import Login from '@/pages/Login';
+import Signup from '@/pages/Signup';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
 
 // Authenticated pages
 import Dashboard from '@/pages/Dashboard';
@@ -137,7 +140,10 @@ const AuthenticatedApp = () => {
         </Route>
       </Route>
 
-      <Route path="/login" element={<Login />} />
+      <Route path="/login"           element={<Login />} />
+      <Route path="/signup"          element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password"  element={<ResetPassword />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

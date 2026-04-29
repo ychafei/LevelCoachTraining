@@ -1,4 +1,5 @@
-import { account, databases, functions, DB_ID, COL, Query } from '@/api/appwriteClient';
+import { account, databases, functions, DB_ID, COL, Query, ID } from '@/api/appwriteClient';
+import { OAuthProvider } from 'appwrite';
 
 // Hydrate the matching `profiles` document for an Appwrite account, then
 // merge into a single Base44-shaped user object. The app reads `.email`,
@@ -15,6 +16,23 @@ async function hydrateProfile(acc) {
     profile = res.documents[0] || null;
   } catch (err) {
     console.error('[auth] failed to load profile for', acc.$id, err);
+  }
+
+  // First time we see this account (signup or OAuth) — create a minimal
+  // profiles row so downstream role checks and admin queries don't trip.
+  if (!profile) {
+    try {
+      profile = await databases.createDocument(DB_ID, COL.Profile, ID.unique(), {
+        account_id: acc.$id,
+        email: acc.email,
+        role: 'user',
+        first_name: '',
+        last_name: '',
+        profile_setup_complete: false,
+      });
+    } catch (err) {
+      console.error('[auth] failed to auto-create profile for', acc.$id, err);
+    }
   }
 
   // Profile fields take precedence; account email is authoritative. Typed as
@@ -55,6 +73,39 @@ export const auth = {
   signInWithPassword: async (email, password) => {
     await account.createEmailPasswordSession(email, password);
     return auth.getCurrentUser();
+  },
+
+  // Create a brand-new Appwrite account, then immediately sign in. The
+  // hydrateProfile() call inside getCurrentUser() will insert the matching
+  // profiles row.
+  signUp: async (email, password) => {
+    await account.create(ID.unique(), email, password);
+    await account.createEmailPasswordSession(email, password);
+    return auth.getCurrentUser();
+  },
+
+  // Kick off an OAuth round-trip. Appwrite redirects the browser to the
+  // provider; on success the provider redirects back to `successUrl` with an
+  // active session cookie. `provider` is one of 'google' | 'microsoft' |
+  // 'facebook' | 'apple' (matches the OAuthProvider enum).
+  createOAuthSession: (provider, next) => {
+    const success = `${window.location.origin}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
+    const failure = `${window.location.origin}/login?oauth_error=1`;
+    const key = String(provider).toLowerCase();
+    const resolved = OAuthProvider[key.charAt(0).toUpperCase() + key.slice(1)] || key;
+    return account.createOAuth2Session(resolved, success, failure);
+  },
+
+  // Send a password-recovery email. Appwrite renders the link using its
+  // template, substituting our `url` and appending ?userId=…&secret=…
+  sendPasswordRecovery: async (email) => {
+    const url = `${window.location.origin}/reset-password`;
+    return account.createRecovery(email, url);
+  },
+
+  // Finish the recovery flow with the userId+secret captured from the URL.
+  completePasswordRecovery: async (userId, secret, newPassword) => {
+    return account.updateRecovery(userId, secret, newPassword);
   },
 
   // Send a magic-URL email; the link returns to `${location.origin}/login`
