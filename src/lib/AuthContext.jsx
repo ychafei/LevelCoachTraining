@@ -1,125 +1,69 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { auth } from '@/lib/auth';
-import { appParams } from '@/lib/app-params';
-import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
+  // Kept for API compatibility with the previous Base44 flow which loaded
+  // public app settings before auth. Appwrite has no equivalent boot step,
+  // so this stays `false` after the first render.
+  const [isLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
-  const [appPublicSettings, setAppPublicSettings] = useState(null);
+  const [appPublicSettings] = useState(null);
 
   useEffect(() => {
-    checkAppState();
+    void checkUserAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkAppState = async () => {
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-
-      const appClient = createAxiosClient({
-        baseURL: `/api/apps/public`,
-        headers: { 'X-App-Id': appParams.appId },
-        token: appParams.token,
-        interceptResponses: true,
-      });
-
-      try {
-        const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
-        setAppPublicSettings(publicSettings);
-
-        if (appParams.token) {
-          await checkUserAuth();
-        } else {
-          setIsLoadingAuth(false);
-          setIsAuthenticated(false);
-        }
-        setIsLoadingPublicSettings(false);
-      } catch (appError) {
-        console.error('App state check failed:', appError);
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-          if (reason === 'auth_required') {
-            setAuthError({ type: 'auth_required', message: 'Authentication required' });
-          } else if (reason === 'user_not_registered') {
-            setAuthError({ type: 'user_not_registered', message: 'User not registered for this app' });
-          } else {
-            setAuthError({ type: reason, message: appError.message });
-          }
-        } else {
-          setAuthError({ type: 'unknown', message: appError.message || 'Failed to load app' });
-        }
-        setIsLoadingPublicSettings(false);
-        setIsLoadingAuth(false);
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      setAuthError({ type: 'unknown', message: error.message || 'An unexpected error occurred' });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-    }
-  };
-
   const checkUserAuth = async () => {
+    setIsLoadingAuth(true);
+    setAuthError(null);
     try {
-      setIsLoadingAuth(true);
       const currentUser = await auth.getCurrentUser();
-      // Backfill first_name / last_name in-memory from legacy full_name
-      if (currentUser && (!currentUser.first_name || !currentUser.last_name) && currentUser.full_name) {
-        const parts = currentUser.full_name.trim().split(/\s+/);
-        if (!currentUser.first_name) currentUser.first_name = parts[0] || '';
-        if (!currentUser.last_name) currentUser.last_name = parts.slice(1).join(' ') || '';
-      }
       setUser(currentUser);
       setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-    } catch (error) {
-      console.error('User auth check failed:', error);
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
-      setUser(null);
-      if (error.status === 401 || error.status === 403) {
-        setAuthError({ type: 'auth_required', message: 'Authentication required' });
+    } catch (err) {
+      // 401 = no session — this is the normal "logged out" path, not an error.
+      const code = err?.code;
+      if (code !== 401 && code !== 403) {
+        console.error('User auth check failed:', err);
       }
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoadingAuth(false);
     }
   };
 
   const refetchUser = useCallback(async () => {
     try {
       const fresh = await auth.getCurrentUser();
-      if (fresh && (!fresh.first_name || !fresh.last_name) && fresh.full_name) {
-        const parts = fresh.full_name.trim().split(/\s+/);
-        if (!fresh.first_name) fresh.first_name = parts[0] || '';
-        if (!fresh.last_name) fresh.last_name = parts.slice(1).join(' ') || '';
-      }
       setUser(fresh);
       setIsAuthenticated(true);
       return fresh;
-    } catch (err) {
+    } catch {
       setUser(null);
       setIsAuthenticated(false);
       return null;
     }
   }, []);
 
-  const logout = (shouldRedirect = true) => {
+  const logout = async (shouldRedirect = true) => {
+    await auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
-    if (shouldRedirect) auth.signOut(window.location.href);
-    else auth.signOut();
+    if (shouldRedirect) window.location.assign('/');
   };
 
   const navigateToLogin = (returnUrl = window.location.href) => {
     auth.signIn(returnUrl);
   };
 
-  // Derived role flags — single source of truth
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isSuperAdmin = user?.is_super_admin === true;
   const isCoach = user?.role === 'coach' || isAdmin;
 
@@ -136,7 +80,7 @@ export const AuthProvider = ({ children }) => {
       isCoach,
       logout,
       navigateToLogin,
-      checkAppState,
+      checkAppState: checkUserAuth,
       refetchUser,
     }}>
       {children}

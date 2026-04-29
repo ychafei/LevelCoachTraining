@@ -36,6 +36,7 @@ import Privacy from '@/pages/Privacy';
 import Unsubscribe from '@/pages/Unsubscribe';
 import Pay from '@/pages/Pay';
 import ParentConsent from '@/pages/ParentConsent';
+import Login from '@/pages/Login';
 
 // Authenticated pages
 import Dashboard from '@/pages/Dashboard';
@@ -136,6 +137,7 @@ const AuthenticatedApp = () => {
         </Route>
       </Route>
 
+      <Route path="/login" element={<Login />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

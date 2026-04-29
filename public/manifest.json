@@ -1,0 +1,17 @@
+{
+  "name": "LC Training",
+  "short_name": "LC Training",
+  "description": "Elite 1-on-1 soccer coaching across Oakland, Macomb, and Wayne counties.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

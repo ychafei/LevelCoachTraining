@@ -1,8 +1,10 @@
-import { base44 } from '@/api/base44Client';
+import { makeRepo } from '@/api/repoFactory';
+import { COL } from '@/api/appwriteClient';
+
+const base = makeRepo(COL.Profile);
 
 export const profileRepo = {
-  list: (sort) => base44.entities.User.list(sort),
-  filter: (where, sort) => base44.entities.User.filter(where, sort),
-  updateById: (id, data) => base44.entities.User.update(id, data),
-  update: (id, data) => base44.entities.User.update(id, data),
+  ...base,
+  // Legacy alias kept so existing call sites don't have to change.
+  updateById: (id, data) => base.update(id, data),
 };

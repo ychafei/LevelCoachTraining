@@ -286,7 +286,7 @@ export default function AdminPanel() {
           <div className="bg-card border border-border rounded-lg divide-y divide-border">
             {!auditLogAvailable && !loading && (
               <div className="p-4 text-sm text-muted-foreground">
-                Audit log entity isn't available yet. Push the new <code className="font-mono text-foreground bg-secondary px-1 py-0.5 rounded text-xs">AuditLog</code> entity from <code className="font-mono text-foreground bg-secondary px-1 py-0.5 rounded text-xs">base44/entities/AuditLog.jsonc</code> to enable this view.
+                Audit log collection isn't reachable. Check that the <code className="font-mono text-foreground bg-secondary px-1 py-0.5 rounded text-xs">audit_logs</code> collection exists in Appwrite and that the current user has read access.
               </div>
             )}
             {auditLogAvailable && !loading && auditLog.length === 0 && (

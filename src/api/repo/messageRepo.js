@@ -1,8 +1,20 @@
-import { base44 } from '@/api/base44Client';
+import { makeRepo } from '@/api/repoFactory';
+import { client, COL, DB_ID, mapDoc } from '@/api/appwriteClient';
+
+const base = makeRepo(COL.Message);
 
 export const messageRepo = {
-  filter: (where, sort) => base44.entities.Message.filter(where, sort),
-  create: (data) => base44.entities.Message.create(data),
-  update: (id, data) => base44.entities.Message.update(id, data),
-  subscribe: (cb) => base44.entities.Message.subscribe(cb),
+  ...base,
+  // Realtime feed for the messages collection. `cb` receives a Base44-shaped
+  // event: { event, payload } where payload is mapDoc()'d. Returns the
+  // unsubscribe function.
+  subscribe: (cb) => {
+    const channel = `databases.${DB_ID}.collections.${COL.Message}.documents`;
+    return client.subscribe(channel, (raw) => {
+      cb({
+        event: raw.events?.[0],
+        payload: mapDoc(raw.payload),
+      });
+    });
+  },
 };
