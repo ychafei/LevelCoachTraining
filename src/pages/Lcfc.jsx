@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Calendar, Quote, ArrowRight, Users, CalendarDays, Newspaper, ShieldCheck,
 } from 'lucide-react';
@@ -89,9 +88,9 @@ function OutlineButton({ as: As = 'a', className = '', children, ...props }) {
   );
 }
 
-function Card({ className = '', children }) {
+function Card({ id, className = '', children }) {
   return (
-    <div className={`relative bg-white rounded-2xl border border-zinc-200/80 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.15)] ${className}`}>
+    <div id={id} className={`relative scroll-mt-24 bg-white rounded-2xl border border-zinc-200/80 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.15)] ${className}`}>
       <span className="absolute left-7 top-0 h-[3px] w-12 bg-accent rounded-full" />
       {children}
     </div>
@@ -216,7 +215,7 @@ function AboutRow({ s }) {
 
 function OverviewCard({ s }) {
   return (
-    <Card className="p-8 overflow-hidden flex flex-col">
+    <Card id="overview" className="p-8 overflow-hidden flex flex-col">
       <div
         className="absolute right-0 bottom-0 w-2/3 h-2/3 pointer-events-none"
         style={{
@@ -238,7 +237,7 @@ function OverviewCard({ s }) {
             </li>
           ))}
         </ul>
-        <OutlineButton href={s.overview_button_link || '#about'} className="self-start">
+        <OutlineButton href={s.overview_button_link || '#overview'} className="self-start">
           {s.overview_button_text}
         </OutlineButton>
       </div>
@@ -273,7 +272,7 @@ function PlayerThumb({ p }) {
 function RosterCard({ players }) {
   const shown = players.slice(0, 6);
   return (
-    <Card className="p-8 flex flex-col">
+    <Card id="roster" className="p-8 flex flex-col">
       <CardTitle sub="Meet the Squad">Roster</CardTitle>
       {shown.length === 0 ? (
         <EmptyState icon={Users}>Roster coming soon.</EmptyState>
@@ -282,7 +281,7 @@ function RosterCard({ players }) {
           {shown.map((p) => <PlayerThumb key={p.id} p={p} />)}
         </div>
       )}
-      <OutlineButton as={Link} to="/team/roster" className="w-full mt-6">View Full Roster</OutlineButton>
+      <OutlineButton href="#roster" className="w-full mt-6">View Full Roster</OutlineButton>
     </Card>
   );
 }
@@ -290,7 +289,7 @@ function RosterCard({ players }) {
 function ScheduleCard({ matches }) {
   const shown = matches.slice(0, 6);
   return (
-    <Card className="p-8 flex flex-col">
+    <Card id="schedule" className="p-8 flex flex-col">
       <CardTitle>Schedule / Results</CardTitle>
       {shown.length === 0 ? (
         <EmptyState icon={CalendarDays}>Schedule coming soon.</EmptyState>
@@ -317,7 +316,7 @@ function ScheduleCard({ matches }) {
           ))}
         </div>
       )}
-      <OutlineButton as={Link} to="/team/schedule" className="w-full mt-6">View Full Schedule</OutlineButton>
+      <OutlineButton href="#schedule" className="w-full mt-6">View Full Schedule</OutlineButton>
     </Card>
   );
 }
@@ -379,7 +378,7 @@ function TryoutsCard({ s }) {
 function StaffCard({ staff }) {
   const shown = staff.slice(0, 3);
   return (
-    <Card className="p-8 flex flex-col h-full">
+    <Card id="staff" className="p-8 flex flex-col h-full">
       <CardTitle>Staff</CardTitle>
       {shown.length === 0 ? (
         <EmptyState icon={ShieldCheck}>Staff coming soon.</EmptyState>
@@ -400,7 +399,7 @@ function StaffCard({ staff }) {
           ))}
         </div>
       )}
-      <OutlineButton as={Link} to="/team/coaches" className="w-full mt-6">Meet the Staff</OutlineButton>
+      <OutlineButton href="#staff" className="w-full mt-6">Meet the Staff</OutlineButton>
     </Card>
   );
 }

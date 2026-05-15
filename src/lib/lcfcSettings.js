@@ -47,7 +47,7 @@ export const LCFC_DEFAULTS = {
   ].join('\n'),
   overview_image_url: '',
   overview_button_text: 'Learn More',
-  overview_button_link: '#about',
+  overview_button_link: '#overview',
   overview_enabled: true,
 
   tryouts_status: 'coming_soon', // coming_soon | open | closed

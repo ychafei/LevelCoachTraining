@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield, Briefcase, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,14 +11,11 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { getBrandLabel } from '@/lib/brand';
 
-const TEAM_ITEMS = [
-  { label: 'LCFC Overview', path: '/team' },
-  { label: 'UPSL Team', path: '/team/upsl' },
-  { label: 'Roster', path: '/team/roster' },
-  { label: 'Schedule', path: '/team/schedule' },
-  { label: 'Tryouts', path: '/team/tryouts' },
-  { label: 'Coaches', path: '/team/coaches' },
-  { label: 'Gallery', path: '/team/gallery' },
+const LCFC_ITEMS = [
+  { label: 'Learn More', path: '/lcfc#overview' },
+  { label: 'View Full Roster', path: '/lcfc#roster' },
+  { label: 'View Full Schedule', path: '/lcfc#schedule' },
+  { label: 'Meet The Staff', path: '/lcfc#staff' },
 ];
 
 const APPLY_ITEMS = [
@@ -27,6 +24,63 @@ const APPLY_ITEMS = [
   { label: 'Apply as Private Training Coach', path: '/apply/private-training-coach' },
   { label: 'General Application', path: '/apply' },
 ];
+
+// LCFC nav item: the label links to /lcfc, and the dropdown opens on hover,
+// keyboard focus, or click. Same styling as the other navbar dropdowns.
+function HoverLinkDropdown({ link, isActive }) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef(null);
+
+  const enter = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const leave = () => {
+    timer.current = setTimeout(() => setOpen(false), 120);
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+      onFocus={enter}
+      onBlur={leave}
+    >
+      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Link
+            to={link.path}
+            className={`px-4 py-2 text-sm font-oswald tracking-wide uppercase transition-colors border-b-2 flex items-center gap-1.5 outline-none focus:outline-none ${
+              isActive(link.path)
+                ? 'text-accent border-accent'
+                : 'text-muted-foreground border-transparent hover:text-foreground'
+            }`}
+          >
+            {link.label}
+            <ChevronDown className="w-3 h-3 opacity-70" />
+          </Link>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          sideOffset={8}
+          className="bg-card border border-border min-w-[220px] p-1"
+        >
+          {link.items.map((item) => (
+            <DropdownMenuItem key={item.path} asChild>
+              <Link
+                to={item.path}
+                className="px-3 py-2 text-sm font-oswald tracking-wide uppercase rounded-sm cursor-pointer w-full text-foreground hover:text-accent focus:text-accent"
+              >
+                {item.label}
+              </Link>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -40,8 +94,7 @@ export default function Navbar() {
       return [
         { label: 'Home', path: '/' },
         { label: 'Book', path: '/book' },
-        { label: 'Team', path: '/team', items: TEAM_ITEMS },
-        { label: 'LCFC', path: '/lcfc' },
+        { label: 'LCFC', path: '/lcfc', items: LCFC_ITEMS, linkTrigger: true },
         { label: 'Apply', path: '/apply', items: APPLY_ITEMS },
         { label: 'Blog', path: '/blog' },
         { label: 'About', path: '/about' },
@@ -61,8 +114,7 @@ export default function Navbar() {
       links.push({ label: 'Coach Portal', path: '/coach', icon: Briefcase });
     }
 
-    links.push({ label: 'Team', path: '/team', items: TEAM_ITEMS });
-    links.push({ label: 'LCFC', path: '/lcfc' });
+    links.push({ label: 'LCFC', path: '/lcfc', items: LCFC_ITEMS, linkTrigger: true });
     links.push({ label: 'Blog', path: '/blog' });
 
     if (isAdmin) {
@@ -106,7 +158,9 @@ export default function Navbar() {
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-1">
             {navLinks.map((link) =>
-              link.items ? (
+              link.items && link.linkTrigger ? (
+                <HoverLinkDropdown key={link.path} link={link} isActive={isActive} />
+              ) : link.items ? (
                 <DropdownMenu key={link.path}>
                   <DropdownMenuTrigger
                     className={`px-4 py-2 text-sm font-oswald tracking-wide uppercase transition-colors outline-none focus:outline-none flex items-center gap-1.5 ${
