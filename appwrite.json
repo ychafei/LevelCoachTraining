@@ -194,6 +194,22 @@
       "path": "functions/sendCoachEmailVerification"
     },
     {
+      "$id": "sendCoachLinkEmail",
+      "name": "sendCoachLinkEmail",
+      "execute": ["users"],
+      "runtime": "node-22",
+      "specification": "s-0.5vcpu-512mb",
+      "events": [],
+      "schedule": "",
+      "timeout": 30,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "scopes": [],
+      "path": "functions/sendCoachLinkEmail"
+    },
+    {
       "$id": "send-email",
       "name": "send-email",
       "execute": ["users"],

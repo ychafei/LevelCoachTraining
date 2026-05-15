@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { coachRepo, profileRepo } from '@/api/repo';
+import { coachRepo, profileRepo, coachLinkRequestRepo } from '@/api/repo';
+import { rpc } from '@/lib/rpc';
 import { storage } from '@/lib/storage';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ export default function AdminCoaches() {
   const [linkShowAll, setLinkShowAll] = useState(false);
   const [linkEmail, setLinkEmail] = useState('');
   const [linkingEmail, setLinkingEmail] = useState(false);
+  const [sendingVerify, setSendingVerify] = useState(false);
   const [specInput, setSpecInput] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -106,6 +108,39 @@ export default function AdminCoaches() {
       setLinkEmail('');
     } finally {
       setLinkingEmail(false);
+    }
+  };
+
+  // Gated path: create a pending link request + email the person a verify
+  // link. The link only activates when they click it while signed in as
+  // that email (see /verify-coach-link).
+  const sendVerifyLink = async () => {
+    const raw = linkEmail.trim();
+    if (!raw || !linkDialog) return;
+    setSendingVerify(true);
+    try {
+      const token = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      await coachLinkRequestRepo.create({
+        coach_id: linkDialog.id,
+        email: raw,
+        token,
+        status: 'pending',
+        created_by: user?.email || '',
+        expires_at,
+      });
+      const coachName = `${linkDialog.first_name || ''} ${linkDialog.last_name || ''}`.trim();
+      await rpc.invoke('sendCoachLinkEmail', {
+        to: raw,
+        link: `${window.location.origin}/verify-coach-link?token=${token}`,
+        coachName,
+      });
+      toast.success(`Verification email sent to ${raw}`);
+      setLinkEmail('');
+    } catch (err) {
+      toast.error(err?.data?.error || err?.message || 'Could not send verification email. Check that the coach_link_requests collection exists and sendCoachLinkEmail is deployed.');
+    } finally {
+      setSendingVerify(false);
     }
   };
 
@@ -536,15 +571,24 @@ export default function AdminCoaches() {
               />
               <Button
                 onClick={linkByEmail}
-                disabled={linkingEmail || !linkEmail.trim()}
+                disabled={linkingEmail || sendingVerify || !linkEmail.trim()}
+                variant="outline"
+                className="font-oswald tracking-wider uppercase text-xs shrink-0 border-border"
+              >
+                {linkingEmail ? 'Linking…' : 'Link now'}
+              </Button>
+              <Button
+                onClick={sendVerifyLink}
+                disabled={sendingVerify || linkingEmail || !linkEmail.trim()}
                 className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs shrink-0"
               >
-                {linkingEmail ? 'Linking…' : 'Link'}
+                {sendingVerify ? 'Sending…' : 'Send verify email'}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
-              The email must belong to an existing account. It's matched against the
-              account's profile email.
+              <strong>Link now</strong>: instant, for an existing account.{' '}
+              <strong>Send verify email</strong>: emails the person a link they must
+              click while signed in as that email to activate the coach access.
             </p>
           </div>
         </DialogContent>

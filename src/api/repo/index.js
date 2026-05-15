@@ -20,3 +20,4 @@ export { lcfcSettingsRepo } from './lcfcSettingsRepo';
 export { lcfcStaffRepo } from './lcfcStaffRepo';
 export { lcfcNewsRepo } from './lcfcNewsRepo';
 export { lcfcSponsorRepo } from './lcfcSponsorRepo';
+export { coachLinkRequestRepo } from './coachLinkRequestRepo';
