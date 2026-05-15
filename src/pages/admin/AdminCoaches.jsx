@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, MapPin, Upload } from 'lucide-react';
+import { Plus, Pencil, MapPin, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { describeFee } from '@/lib/earnings';
 import { logAdminAction } from '@/lib/audit';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
@@ -26,6 +27,7 @@ export default function AdminCoaches() {
   const [linkDialog, setLinkDialog] = useState(null);
   const [specInput, setSpecInput] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
@@ -119,6 +121,56 @@ export default function AdminCoaches() {
     toast.success('Coach saved');
     setOpen(false);
     loadCoaches();
+  };
+
+  const remove = async (coach) => {
+    const fullName = `${coach.first_name || ''} ${coach.last_name || ''}`.trim();
+    const linkedUser = users.find(u => u.coach_id === coach.id);
+    const consequences = [
+      'The coach profile will be permanently removed.',
+      linkedUser ? `The linked user (${linkedUser.email}) will be unlinked from this coach.` : null,
+      'Existing sessions referencing this coach will keep their historical data.',
+    ].filter(Boolean);
+    const ok = await confirm({
+      title: 'Delete coach?',
+      description: `This will permanently delete ${fullName || 'this coach'}.`,
+      consequences,
+      confirmLabel: 'Delete coach',
+      variant: 'destructive',
+      requireTyped: fullName || 'DELETE',
+    });
+    if (!ok) return;
+
+    try {
+      if (linkedUser) {
+        await profileRepo.updateById(linkedUser.id, { coach_id: null });
+        setUsers(prev => prev.map(u => u.id === linkedUser.id ? { ...u, coach_id: null } : u));
+      }
+      await coachRepo.delete(coach.id);
+      await logAdminAction({
+        actor: user,
+        action: 'coach.delete',
+        entityType: 'Coach',
+        entityId: coach.id,
+        before: {
+          first_name: coach.first_name,
+          last_name: coach.last_name,
+          email: coach.email,
+          county: coach.county,
+          is_active: coach.is_active,
+          is_head_coach: coach.is_head_coach,
+        },
+        metadata: {
+          coach_name: fullName,
+          unlinked_user_id: linkedUser?.id,
+          unlinked_user_email: linkedUser?.email,
+        },
+      });
+      toast.success('Coach deleted');
+      loadCoaches();
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete coach');
+    }
   };
 
   const addSpec = () => {
@@ -305,6 +357,15 @@ export default function AdminCoaches() {
                 <Button size="sm" variant="ghost" onClick={() => { setEditing({...coach}); setOpen(true); }}>
                   <Pencil className="w-4 h-4" />
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => remove(coach)}
+                  className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                  aria-label="Delete coach"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           ))}
@@ -329,6 +390,7 @@ export default function AdminCoaches() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }
