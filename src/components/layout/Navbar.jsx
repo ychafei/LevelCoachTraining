@@ -80,14 +80,14 @@ export default function Navbar() {
     // Admins: coach portal + admin only.
     if (isAdmin) {
       return [
-        { label: 'Coach Portal', path: '/coach', icon: Briefcase },
+        { label: 'Coaching Portal', path: '/coach', icon: Briefcase },
         { label: 'Admin', path: '/admin', icon: Shield },
       ];
     }
 
     // Coaches (non-admin): coach portal only.
     if (isCoach) {
-      return [{ label: 'Coach Portal', path: '/coach', icon: Briefcase }];
+      return [{ label: 'Coaching Portal', path: '/coach', icon: Briefcase }];
     }
 
     // Clients: account nav.
