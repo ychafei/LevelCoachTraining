@@ -32,7 +32,7 @@ export default function Team() {
           </div>
 
           <h1 className="font-oswald text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight text-foreground leading-[0.9] mb-6">
-            LC TRAINING <span className="text-accent">UPSL</span>
+            LCFC <span className="text-accent">UPSL</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl leading-relaxed font-dm-sans">
