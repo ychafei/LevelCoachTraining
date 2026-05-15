@@ -28,6 +28,13 @@ import Landing from '@/pages/Landing';
 import About from '@/pages/About';
 import Team from '@/pages/Team';
 import Lcfc from '@/pages/Lcfc';
+import LcfcRoster from '@/pages/lcfc/LcfcRoster';
+import LcfcSchedule from '@/pages/lcfc/LcfcSchedule';
+import LcfcTryouts from '@/pages/lcfc/LcfcTryouts';
+import LcfcStaff from '@/pages/lcfc/LcfcStaff';
+import LcfcSponsors from '@/pages/lcfc/LcfcSponsors';
+import LcfcNews from '@/pages/lcfc/LcfcNews';
+import LcfcLearnMore from '@/pages/lcfc/LcfcLearnMore';
 import TeamUPSL from '@/pages/team/TeamUPSL';
 import TeamRoster from '@/pages/team/TeamRoster';
 import TeamSchedule from '@/pages/team/TeamSchedule';
@@ -97,6 +104,13 @@ const AuthenticatedApp = () => {
         <Route path="/about" element={<About />} />
         <Route path="/team" element={<Team />} />
         <Route path="/lcfc" element={<Lcfc />} />
+        <Route path="/lcfc/roster" element={<LcfcRoster />} />
+        <Route path="/lcfc/schedule" element={<LcfcSchedule />} />
+        <Route path="/lcfc/tryouts" element={<LcfcTryouts />} />
+        <Route path="/lcfc/staff" element={<LcfcStaff />} />
+        <Route path="/lcfc/sponsors" element={<LcfcSponsors />} />
+        <Route path="/lcfc/news" element={<LcfcNews />} />
+        <Route path="/lcfc/learn-more" element={<LcfcLearnMore />} />
         <Route path="/team/upsl" element={<TeamUPSL />} />
         <Route path="/team/roster" element={<TeamRoster />} />
         <Route path="/team/schedule" element={<TeamSchedule />} />

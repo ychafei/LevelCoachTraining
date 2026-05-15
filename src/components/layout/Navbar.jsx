@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield, Briefcase, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { getBrandLabel } from '@/lib/brand';
 
 const LCFC_ITEMS = [
-  { label: 'Learn More', path: '/lcfc#overview' },
-  { label: 'View Full Roster', path: '/lcfc#roster' },
-  { label: 'View Full Schedule', path: '/lcfc#schedule' },
-  { label: 'Meet The Staff', path: '/lcfc#staff' },
+  { label: 'Roster', path: '/lcfc/roster' },
+  { label: 'Schedule', path: '/lcfc/schedule' },
+  { label: 'Tryouts', path: '/lcfc/tryouts' },
+  { label: 'Coaches/Staff', path: '/lcfc/staff' },
+  { label: 'Sponsors', path: '/lcfc/sponsors' },
+  { label: 'News/Matchday', path: '/lcfc/news' },
+  { label: 'Learn More', path: '/lcfc/learn-more' },
 ];
 
 const APPLY_ITEMS = [
@@ -25,59 +28,39 @@ const APPLY_ITEMS = [
   { label: 'General Application', path: '/apply' },
 ];
 
-// LCFC nav item: the label links to /lcfc, and the dropdown opens on hover,
-// keyboard focus, or click. Same styling as the other navbar dropdowns.
+// LCFC nav item: the label links to /lcfc; the dropdown opens on hover and
+// keyboard focus, and disappears the moment the pointer leaves the item and
+// menu. Pure CSS (group-hover / focus-within) so it can never get stuck open.
+// Styled with the LCFC palette: #080808 panel, muted-gold accents.
 function HoverLinkDropdown({ link, isActive }) {
-  const [open, setOpen] = useState(false);
-  const timer = useRef(null);
-
-  const enter = () => {
-    if (timer.current) clearTimeout(timer.current);
-    setOpen(true);
-  };
-  const leave = () => {
-    timer.current = setTimeout(() => setOpen(false), 120);
-  };
-
+  const active = isActive(link.path);
   return (
-    <div
-      className="relative"
-      onMouseEnter={enter}
-      onMouseLeave={leave}
-      onFocus={enter}
-      onBlur={leave}
-    >
-      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Link
-            to={link.path}
-            className={`px-4 py-2 text-sm font-oswald tracking-wide uppercase transition-colors border-b-2 flex items-center gap-1.5 outline-none focus:outline-none ${
-              isActive(link.path)
-                ? 'text-accent border-accent'
-                : 'text-muted-foreground border-transparent hover:text-foreground'
-            }`}
-          >
-            {link.label}
-            <ChevronDown className="w-3 h-3 opacity-70" />
-          </Link>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          sideOffset={8}
-          className="bg-card border border-border min-w-[220px] p-1"
-        >
+    <div className="relative group">
+      <Link
+        to={link.path}
+        className={`px-4 py-2 text-sm font-oswald tracking-wide uppercase transition-colors border-b-2 flex items-center gap-1.5 outline-none ${
+          active
+            ? 'text-[#C9A646] border-[#C9A646]'
+            : 'text-[#E8E8E8] border-transparent hover:text-white'
+        }`}
+      >
+        {link.label}
+        <ChevronDown className="w-3 h-3 opacity-70 transition-transform duration-150 group-hover:rotate-180" />
+      </Link>
+      {/* pt-2 keeps a hover bridge so the menu doesn't flicker closed */}
+      <div className="absolute left-0 top-full pt-2 min-w-[230px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0">
+        <div className="rounded-md border border-[#C9A646]/35 bg-[#080808] shadow-xl shadow-black/50 p-1">
           {link.items.map((item) => (
-            <DropdownMenuItem key={item.path} asChild>
-              <Link
-                to={item.path}
-                className="px-3 py-2 text-sm font-oswald tracking-wide uppercase rounded-sm cursor-pointer w-full text-foreground hover:text-accent focus:text-accent"
-              >
-                {item.label}
-              </Link>
-            </DropdownMenuItem>
+            <Link
+              key={item.path}
+              to={item.path}
+              className="block px-3 py-2 text-sm font-oswald tracking-wide uppercase rounded-sm text-[#F7F7F5] outline-none hover:bg-[#C9A646]/[0.12] hover:text-[#C9A646] focus:bg-[#C9A646]/[0.12] focus:text-[#C9A646]"
+            >
+              {item.label}
+            </Link>
           ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </div>
+      </div>
     </div>
   );
 }
