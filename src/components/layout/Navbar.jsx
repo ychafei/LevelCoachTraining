@@ -15,6 +15,7 @@ export default function Navbar() {
       return [
         { label: 'Home', path: '/' },
         { label: 'About', path: '/about' },
+        { label: 'Team', path: '/team' },
         { label: 'Book', path: '/book' },
         { label: 'Apply', path: '/apply' },
         { label: 'Blog', path: '/blog' },
@@ -38,6 +39,7 @@ export default function Navbar() {
       links.push({ label: 'Coach Portal', path: '/coach', icon: Briefcase });
     }
 
+    links.push({ label: 'Team', path: '/team' });
     links.push({ label: 'Blog', path: '/blog' });
 
     if (isAdmin) {
@@ -58,13 +60,12 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-md border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center">
             <img
-              src="/logo.png"
-              alt="Les Chevrès Training"
-              className="h-10 w-10 object-contain rounded-full"
+              src="/logo-wordmark.png"
+              alt="LC Training"
+              className="h-10 w-auto object-contain"
             />
-            <span className="font-oswald text-xl font-bold tracking-wider text-accent">LC TRAINING</span>
           </Link>
 
           {/* Desktop Nav */}

@@ -26,6 +26,7 @@ import PublicLayout from '@/components/layout/PublicLayout';
 // Public pages
 import Landing from '@/pages/Landing';
 import About from '@/pages/About';
+import Team from '@/pages/Team';
 import Book from '@/pages/Book';
 import CoachDetail from '@/pages/CoachDetail';
 import Blog from '@/pages/Blog';
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
         {/* Public routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/about" element={<About />} />
+        <Route path="/team" element={<Team />} />
         <Route path="/book" element={<Book />} />
         <Route path="/coaches/:coachId" element={<CoachDetail />} />
         <Route path="/blog" element={<Blog />} />

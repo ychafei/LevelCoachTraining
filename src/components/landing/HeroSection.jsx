@@ -29,6 +29,14 @@ export default function HeroSection() {
       {/* Diagonal accent line */}
       <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-accent/5 to-transparent skew-x-[-15deg] translate-x-20" />
 
+      {/* Logo watermark — right side */}
+      <img
+        src="/logo.png"
+        alt=""
+        aria-hidden="true"
+        className="hidden md:block absolute right-[-4%] top-1/2 -translate-y-1/2 w-[55%] max-w-[720px] opacity-[0.08] pointer-events-none select-none"
+      />
+
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="max-w-4xl">
           {/* Badge */}
