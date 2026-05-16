@@ -144,6 +144,41 @@ export default function AdminCoaches() {
     }
   };
 
+  // Unlink: clear the profile's coach_id and drop the coach role back to
+  // 'user' (admins keep their role). The coach profile itself is untouched.
+  const unlinkUser = async (coach) => {
+    const linked = users.find(u => u.coach_id === coach.id);
+    if (!linked) return;
+    const name = [linked.first_name, linked.last_name].filter(Boolean).join(' ').trim() || linked.email;
+    const ok = await confirm({
+      title: 'Unlink account?',
+      description: `${name} will be unlinked from ${coach.first_name || ''} ${coach.last_name || ''}`.trim()
+        + ' and lose coach access. The coach profile is kept.',
+      confirmLabel: 'Unlink',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    const keepAdmin = linked.role === 'admin' || linked.role === 'super_admin';
+    const updateData = { coach_id: null, ...(keepAdmin ? {} : { role: 'user' }) };
+    const before = { coach_id: linked.coach_id || null, role: linked.role || 'user' };
+    await profileRepo.updateById(linked.id, updateData);
+    setUsers(prev => prev.map(u => u.id === linked.id ? { ...u, ...updateData } : u));
+    await logAdminAction({
+      actor: user,
+      action: 'coach.unlink_user',
+      entityType: 'User',
+      entityId: linked.id,
+      before,
+      after: updateData,
+      metadata: {
+        coach_id: coach.id,
+        coach_name: `${coach.first_name || ''} ${coach.last_name || ''}`.trim(),
+        target_email: linked.email,
+      },
+    });
+    toast.success('Account unlinked');
+  };
+
   const save = async () => {
     const isUpdate = !!editing.id;
     const previous = isUpdate ? coaches.find(c => c.id === editing.id) : null;
@@ -471,8 +506,21 @@ export default function AdminCoaches() {
               <div className="flex items-center gap-2">
                 {(() => {
                   const linked = users.find(u => u.coach_id === coach.id);
+                  const linkedName = linked
+                    ? ([linked.first_name, linked.last_name].filter(Boolean).join(' ').trim() || linked.email)
+                    : '';
                   return linked ? (
-                    <span className="text-xs text-accent font-oswald tracking-wide">Linked: {linked.full_name || linked.email}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-accent font-oswald tracking-wide">Linked: {linkedName}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs font-oswald tracking-wider uppercase h-7 hover:text-red-500 hover:border-red-500/50"
+                        onClick={() => unlinkUser(coach)}
+                      >
+                        Unlink
+                      </Button>
+                    </div>
                   ) : (
                     <Button size="sm" variant="outline" className="text-xs font-oswald tracking-wider uppercase h-7" onClick={() => setLinkDialog(coach)}>
                       Link User
