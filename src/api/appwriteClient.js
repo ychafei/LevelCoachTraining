@@ -66,12 +66,15 @@ export function parseSort(sort) {
 }
 
 // Turn a {field: value} where-object into Appwrite Query.equal clauses. Arrays
-// become Query.equal(field, [a,b,c]) which Appwrite treats as IN.
+// become Query.equal(field, [a,b,c]) which Appwrite treats as IN. Base44-style
+// keys (`id`, `created_date`, `updated_date`) are aliased to Appwrite's system
+// attributes ($id/$createdAt/$updatedAt) — without this, `.filter({ id })`
+// silently matches nothing because there is no plain `id` attribute.
 export function whereToQueries(where) {
   if (!where || typeof where !== 'object') return [];
   return Object.entries(where)
     .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => Query.equal(k, v));
+    .map(([k, v]) => Query.equal(SORT_ALIAS[k] || k, v));
 }
 
 // Normalise an Appwrite document into a Base44-shaped record. Existing UI
