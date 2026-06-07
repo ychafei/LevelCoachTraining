@@ -2,6 +2,11 @@ import { isOnboardingComplete, profileRole } from '@/lib/roles';
 
 const MASTER_ADMIN_EMAIL = 'yousef.elchafei@gmail.com';
 
+function isMasterAdminBootstrapAccount(user) {
+  return user?.master_admin_locked === true
+    || (user?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL;
+}
+
 export function onboardingPath(next = '', role = '') {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
@@ -15,7 +20,7 @@ export function onboardingPath(next = '', role = '') {
 // Where a signed-in user should land by role.
 export function homePathForRole(user) {
   if (!user) return '/';
-  if (user?.master_admin_locked || (user.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL) return '/master-admin';
+  if (isMasterAdminBootstrapAccount(user)) return '/master-admin';
   if (!isOnboardingComplete(user)) return '/onboarding';
   const role = user?.role;
   if (role === 'super_admin') return '/master-admin';
@@ -30,6 +35,10 @@ export function homePathForRole(user) {
 
 export function postAuthRedirectPath(user, requestedNext = '') {
   if (!user) return requestedNext || '/';
+  if (isMasterAdminBootstrapAccount(user)) {
+    if (requestedNext && !requestedNext.startsWith('/onboarding')) return requestedNext;
+    return '/master-admin';
+  }
   if (!isOnboardingComplete(user)) {
     if (requestedNext?.startsWith('/onboarding')) return requestedNext;
     return onboardingPath(requestedNext);

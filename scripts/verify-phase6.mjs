@@ -56,10 +56,18 @@ includes('src/pages/master-admin/MasterAdminPortal.jsx', [
   'adminAssignmentRepo',
   'auditLogRepo',
   'auth.grantAdminRole',
+  'masterEmailVerified',
+  'Resend verification email',
   'Grant Access',
   'Revoke',
   'Delegation audit trail',
   'Only this locked master-admin route can grant platform admin access.',
+]);
+
+includes('src/lib/auth.js', [
+  'email_verified',
+  'emailVerification',
+  'data.detail || data.error',
 ]);
 
 includes('src/components/guards/RouteGuards.jsx', [

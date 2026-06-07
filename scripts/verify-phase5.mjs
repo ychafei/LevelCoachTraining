@@ -52,6 +52,8 @@ includes('src/lib/roles.js', [
 includes('src/lib/roleHome.js', [
   'onboardingPath',
   'postAuthRedirectPath',
+  'isMasterAdminBootstrapAccount',
+  "return '/master-admin'",
   "requestedNext?.startsWith('/onboarding')",
 ]);
 

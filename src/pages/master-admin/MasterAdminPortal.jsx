@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { adminAssignmentRepo, auditLogRepo, profileRepo } from '@/api/repo';
-import { AlertTriangle, FileText, History, Lock, Shield, ShieldCheck, Users } from 'lucide-react';
+import { AlertTriangle, FileText, History, Lock, MailCheck, Shield, ShieldCheck, Users } from 'lucide-react';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
@@ -26,6 +26,7 @@ function displayName(profile) {
 export default function MasterAdminPortal() {
   const { user, refetchUser } = useAuth();
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
   const [message, setMessage] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -35,6 +36,7 @@ export default function MasterAdminPortal() {
   const [targetProfileId, setTargetProfileId] = useState('');
   const [targetRole, setTargetRole] = useState('admin');
   const [search, setSearch] = useState('');
+  const masterEmailVerified = user?.email_verified === true || user?.emailVerification === true;
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -57,6 +59,10 @@ export default function MasterAdminPortal() {
   }, []);
 
   const bootstrap = async () => {
+    if (!masterEmailVerified) {
+      setMessage('Verify this email in Appwrite before running the master admin bootstrap.');
+      return;
+    }
     setBootstrapping(true);
     setMessage('');
     try {
@@ -68,6 +74,19 @@ export default function MasterAdminPortal() {
       setMessage(err?.message || 'Could not bootstrap master admin.');
     } finally {
       setBootstrapping(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setSendingVerification(true);
+    setMessage('');
+    try {
+      await auth.resendVerification();
+      setMessage(`Verification email sent to ${user?.email}. Open that link, then sign back in and bootstrap again.`);
+    } catch (err) {
+      setMessage(err?.message || 'Could not send verification email.');
+    } finally {
+      setSendingVerification(false);
     }
   };
 
@@ -164,9 +183,37 @@ export default function MasterAdminPortal() {
             <p className="mt-2 text-sm text-muted-foreground">
               Run the server-side bootstrap after this account email is verified.
             </p>
-            <Button onClick={bootstrap} disabled={bootstrapping} className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90">
-              {bootstrapping ? 'Bootstrapping...' : 'Bootstrap master admin'}
-            </Button>
+            <div className="mt-4 rounded-lg border border-border bg-card/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Signed-in account</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{user?.email || 'Unknown email'}</p>
+                </div>
+                <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+                  masterEmailVerified
+                    ? 'bg-emerald-500/10 text-emerald-600'
+                    : 'bg-yellow-500/10 text-yellow-700'
+                }`}>
+                  <MailCheck className="h-3.5 w-3.5" />
+                  {masterEmailVerified ? 'Email verified' : 'Email not verified'}
+                </span>
+              </div>
+              {!masterEmailVerified && (
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  Appwrite blocks the master bootstrap until this exact account email is verified. If you signed in with password, use the verification email first; Google OAuth usually arrives verified.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button onClick={bootstrap} disabled={bootstrapping || !masterEmailVerified} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                {bootstrapping ? 'Bootstrapping...' : 'Bootstrap master admin'}
+              </Button>
+              {!masterEmailVerified && (
+                <Button variant="outline" onClick={resendVerification} disabled={sendingVerification}>
+                  {sendingVerification ? 'Sending...' : 'Resend verification email'}
+                </Button>
+              )}
+            </div>
             {message && <p className="mt-3 text-sm text-muted-foreground">{message}</p>}
           </div>
         )}

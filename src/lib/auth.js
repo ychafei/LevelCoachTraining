@@ -125,6 +125,8 @@ async function hydrateProfile(acc) {
     id: profile ? profile.$id : acc.$id,
     account_id: acc.$id,
     email: acc.email,
+    email_verified: acc.emailVerification === true,
+    emailVerification: acc.emailVerification === true,
     name: profile
       ? [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || acc.name
       : acc.name,
@@ -268,7 +270,7 @@ export const auth = {
     const exec = await functions.createExecution('bootstrapMasterAdmin', JSON.stringify({}), false);
     const data = JSON.parse(exec.responseBody || '{}');
     if (exec.responseStatusCode >= 400 || data.error) {
-      throw new Error(data.error || `bootstrapMasterAdmin failed: ${exec.responseStatusCode}`);
+      throw new Error(data.detail || data.error || `bootstrapMasterAdmin failed: ${exec.responseStatusCode}`);
     }
     return data;
   },
