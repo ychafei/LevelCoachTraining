@@ -58,15 +58,14 @@ export default function Terms() {
 
           <h2 className="text-foreground">6. Payment Terms</h2>
           <p>
-            LevelCoach Training accepts payment via PayPal (electronic payment) and cash at session. All prices are listed in US Dollars.
+            LevelCoach Training accepts payment through Stripe Checkout. All prices are listed in US Dollars.
           </p>
           <ul className="list-disc pl-6 space-y-1">
-            <li><strong className="text-foreground">Electronic payment:</strong> Processed securely through PayPal. Payment is confirmed immediately and credits are activated upon successful processing.</li>
-            <li><strong className="text-foreground">Cash payment:</strong> Cash is collected by the coach at the time of the session. The coach will confirm receipt of payment, at which point the session will be marked as paid.</li>
+            <li><strong className="text-foreground">Stripe Checkout:</strong> Payments are processed securely by Stripe. Credits are activated only after LevelCoach receives Stripe's verified webhook confirmation.</li>
             <li><strong className="text-foreground">Credits:</strong> Previously purchased credits may be applied to new sessions. Credits are deducted at the time of booking.</li>
           </ul>
           <p>
-            Refunds for electronic payments are handled on a case-by-case basis. Please contact <a href="mailto:support@levelcoach.com" className="text-accent underline">support@levelcoach.com</a> for refund requests.
+            Refunds are handled on a case-by-case basis. Please contact <a href="mailto:support@levelcoach.com" className="text-accent underline">support@levelcoach.com</a> for refund requests.
           </p>
 
           <h2 className="text-foreground">7. Assumption of Risk</h2>

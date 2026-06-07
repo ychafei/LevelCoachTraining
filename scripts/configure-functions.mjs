@@ -10,7 +10,6 @@
 // Required env (in .env.local):
 //   VITE_APPWRITE_ENDPOINT, VITE_APPWRITE_PROJECT_ID, APPWRITE_API_KEY
 //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-//   PAYPAL_CLIENT_ID, PAYPAL_SECRET_KEY, PAYPAL_WEBHOOK_ID
 //   RESEND_API_KEY, APP_BASE_URL
 
 import { Client, Functions } from 'node-appwrite';
@@ -54,13 +53,19 @@ const VAR_MATRIX = {
   getCoachClients:      ['APPWRITE_API_KEY'],
   getMatchingPlayers:   ['APPWRITE_API_KEY'],
   createStripeCheckout: ['APPWRITE_API_KEY', 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
-  stripeWebhook:        ['APPWRITE_API_KEY', 'STRIPE_WEBHOOK_SECRET'],
-  createPaypalOrder:    ['APPWRITE_API_KEY', 'PAYPAL_CLIENT_ID', 'PAYPAL_SECRET_KEY'],
-  capturePaypalOrder:   ['PAYPAL_CLIENT_ID', 'PAYPAL_SECRET_KEY'],
-  paypalWebhook:        ['APPWRITE_API_KEY', 'PAYPAL_CLIENT_ID', 'PAYPAL_SECRET_KEY', 'PAYPAL_WEBHOOK_ID'],
+  stripeWebhook:        ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+  createStripeConnectAccount: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
+  createStripeConnectOnboarding: ['APPWRITE_API_KEY', 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
+  refreshStripeConnectAccount: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
+  refundStripePayment: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
+  bootstrapMasterAdmin: ['APPWRITE_API_KEY'],
+  grantAdminRole:       ['APPWRITE_API_KEY'],
+  signLegalAgreement:   ['APPWRITE_API_KEY', 'APP_BASE_URL'],
+  generateLegalAgreementPdf: ['APPWRITE_API_KEY', 'APP_BASE_URL'],
   'send-email':              ['RESEND_API_KEY'],
   sendBookingEmails:         ['RESEND_API_KEY'],
   sendCoachEmailVerification:['RESEND_API_KEY'],
+  sendCoachLinkEmail:        ['RESEND_API_KEY'],
 };
 
 const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT).setKey(API_KEY);

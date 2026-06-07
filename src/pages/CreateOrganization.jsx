@@ -22,8 +22,11 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
+import { organizationMemberRepo, organizationRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
+import { storage } from '@/lib/storage';
+import { onboardingPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/.+\..+/i;
@@ -50,7 +53,7 @@ const COACH_COUNTS = ['1-2 coaches', '3-5 coaches', '6-10 coaches', '11-25 coach
 
 export default function CreateOrganization() {
   const navigate = useNavigate();
-  const { refetchUser } = useAuth();
+  const { isAuthenticated, isLoadingAuth, user, refetchUser } = useAuth();
 
   const [form, setForm] = useState({
     organizationName: '',
@@ -94,6 +97,18 @@ export default function CreateOrganization() {
   const descriptionCount = form.description.length;
   const initials = getOrganizationInitials(form.organizationName);
   const safePrimaryColor = isValidHexColor(form.primaryColor) ? form.primaryColor : '#2563eb';
+  const usingExistingAccount = isAuthenticated && !!user;
+
+  useEffect(() => {
+    if (!user) return;
+    setForm((current) => ({
+      ...current,
+      adminFirstName: current.adminFirstName || user.first_name || splitFirstName(user.name),
+      adminLastName: current.adminLastName || user.last_name || splitLastName(user.name),
+      adminEmail: user.email || current.adminEmail,
+      adminPhone: current.adminPhone || user.phone || '',
+    }));
+  }, [user]);
 
   useEffect(() => {
     if (!logoFile) {
@@ -170,10 +185,12 @@ export default function CreateOrganization() {
     if (!form.adminEmail.trim()) next.adminEmail = 'Admin email is required.';
     else if (!EMAIL_RE.test(form.adminEmail.trim())) next.adminEmail = 'Enter a valid admin email.';
     if (!form.adminPhone.trim()) next.adminPhone = 'Admin phone is required.';
-    if (!form.password) next.password = 'Password is required.';
-    else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
-    if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
-    else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    if (!usingExistingAccount) {
+      if (!form.password) next.password = 'Password is required.';
+      else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
+      if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
+      else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    }
     if (!form.termsAccepted) next.termsAccepted = 'You must agree to the terms and code of conduct.';
 
     setErrors(next);
@@ -187,16 +204,59 @@ export default function CreateOrganization() {
 
     try {
       setSubmitting(true);
-      await auth.signOut();
-      await auth.signUp(form.adminEmail.trim(), form.password);
+      let currentUser = user;
+      if (!usingExistingAccount) {
+        await auth.signOut();
+        currentUser = await auth.signUp(form.adminEmail.trim(), form.password);
+      } else {
+        currentUser = await refetchUser();
+      }
+      if (!currentUser?.id) {
+        throw new Error('Could not load the organization owner profile.');
+      }
+
+      const logoUpload = logoFile ? await storage.uploadFile('org-logos', logoFile) : null;
+      const organization = await organizationRepo.create({
+        name: form.organizationName.trim(),
+        slug: form.slug.trim(),
+        type: form.organizationType,
+        status: 'draft',
+        service_area_label: form.serviceArea.trim(),
+        radius_miles: 15,
+        logo_file_id: logoUpload?.id || '',
+        brand_color: safePrimaryColor,
+        payout_model: 'organization',
+        created_by_profile_id: currentUser.id,
+        contact_email: form.organizationEmail.trim(),
+        contact_phone: form.organizationPhone.trim(),
+        website_url: form.website.trim(),
+        instagram_handle: normalizeInstagram(form.instagram),
+        primary_sports: form.primarySports.trim(),
+        coach_count_label: form.coachCount,
+        description: form.description.trim(),
+        updates_opt_in: form.updatesOptIn,
+      });
+
+      await organizationMemberRepo.create({
+        organization_id: organization.id,
+        profile_id: currentUser.id,
+        role: 'org_owner',
+        status: 'active',
+        invited_by: currentUser.id,
+        accepted_at: new Date().toISOString(),
+      });
+
       await auth.updateCurrentUser({
-        role: 'coach',
+        role: 'user',
+        onboarding_role: 'organization',
+        onboarding_status: 'complete',
         first_name: form.adminFirstName.trim(),
         last_name: form.adminLastName.trim(),
         phone: form.adminPhone.trim(),
         terms_accepted: true,
-        profile_setup_complete: false,
-        bio: buildOrganizationBio(form, logoFile),
+        profile_setup_complete: true,
+        primary_organization_id: organization.id,
+        bio: buildOrganizationBio(form, logoFile, logoUpload?.id),
       });
       await refetchUser();
       setSubmitted(true);
@@ -216,8 +276,12 @@ export default function CreateOrganization() {
   const handleGoogle = async () => {
     setFormError(null);
     try {
+      if (usingExistingAccount) {
+        navigate(onboardingPath('/create-organization', 'organization'));
+        return;
+      }
       await auth.signOut();
-      auth.createOAuthSession('google', '/create-organization');
+      auth.createOAuthSession('google', onboardingPath('/create-organization', 'organization'));
     } catch (err) {
       setFormError(err?.message || 'Could not start Google sign-up.');
     }
@@ -239,12 +303,13 @@ export default function CreateOrganization() {
               Your organization setup is saved as a draft. You can continue shaping the portal before publishing it publicly.
             </p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link
-                to="/for-coaches#platform-demo"
+              <button
+                type="button"
+                onClick={() => navigate('/organization')}
                 className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
               >
-                View platform demo
-              </Link>
+                Open organization portal
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/')}
@@ -498,7 +563,7 @@ export default function CreateOrganization() {
                         value={form.adminEmail}
                         onChange={(event) => updateForm('adminEmail', event.target.value)}
                         error={errors.adminEmail}
-                        disabled={submitting}
+                        disabled={submitting || usingExistingAccount}
                       />
                       <AuthField
                         id="admin-phone"
@@ -513,78 +578,86 @@ export default function CreateOrganization() {
                       />
                     </div>
 
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <AuthField
-                        id="organization-password"
-                        label="Password"
-                        type={showPassword ? 'text' : 'password'}
-                        icon={Lock}
-                        placeholder="Create a password"
-                        value={form.password}
-                        onChange={(event) => updateForm('password', event.target.value)}
-                        error={errors.password}
-                        disabled={submitting}
-                        trailing={
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword((value) => !value)}
-                            className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
-                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                          >
-                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        }
-                      />
-                      <AuthField
-                        id="organization-confirm-password"
-                        label="Confirm password"
-                        type={showConfirm ? 'text' : 'password'}
-                        icon={Lock}
-                        placeholder="Confirm your password"
-                        value={form.confirmPassword}
-                        onChange={(event) => updateForm('confirmPassword', event.target.value)}
-                        error={errors.confirmPassword}
-                        disabled={submitting}
-                        trailing={
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirm((value) => !value)}
-                            className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
-                            aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                          >
-                            {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        }
-                      />
-                    </div>
+                    {usingExistingAccount ? (
+                      <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
+                        You are signed in as {user.email}. This organization will be attached to your current account.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <AuthField
+                            id="organization-password"
+                            label="Password"
+                            type={showPassword ? 'text' : 'password'}
+                            icon={Lock}
+                            placeholder="Create a password"
+                            value={form.password}
+                            onChange={(event) => updateForm('password', event.target.value)}
+                            error={errors.password}
+                            disabled={submitting}
+                            trailing={
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword((value) => !value)}
+                                className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            }
+                          />
+                          <AuthField
+                            id="organization-confirm-password"
+                            label="Confirm password"
+                            type={showConfirm ? 'text' : 'password'}
+                            icon={Lock}
+                            placeholder="Confirm your password"
+                            value={form.confirmPassword}
+                            onChange={(event) => updateForm('confirmPassword', event.target.value)}
+                            error={errors.confirmPassword}
+                            disabled={submitting}
+                            trailing={
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirm((value) => !value)}
+                                className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                                aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                              >
+                                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            }
+                          />
+                        </div>
 
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {passwordChecks.map((check) => (
-                        <span
-                          key={check.id}
-                          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                            check.ok
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : 'border-slate-200 bg-slate-50 text-slate-500'
-                          }`}
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          {check.label}
-                        </span>
-                      ))}
-                      {form.confirmPassword && (
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                            passwordsMatch
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : 'border-red-200 bg-red-50 text-red-700'
-                          }`}
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
-                        </span>
-                      )}
-                    </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {passwordChecks.map((check) => (
+                            <span
+                              key={check.id}
+                              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
+                                check.ok
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : 'border-slate-200 bg-slate-50 text-slate-500'
+                              }`}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {check.label}
+                            </span>
+                          ))}
+                          {form.confirmPassword && (
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
+                                passwordsMatch
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : 'border-red-200 bg-red-50 text-red-700'
+                              }`}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </FormSection>
 
                   <div className="space-y-2">
@@ -625,32 +698,40 @@ export default function CreateOrganization() {
                     disabled={submitting}
                     className="flex h-10 w-full items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Creating organization account...' : 'Create Organization Account'}
+                    {submitting
+                      ? 'Creating organization...'
+                      : usingExistingAccount
+                        ? 'Create Organization'
+                        : 'Create Organization Account'}
                   </button>
                 </form>
 
-                <div className="my-3 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-xs font-medium text-slate-500">or sign up with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
+                {!usingExistingAccount && (
+                  <>
+                    <div className="my-3 flex items-center gap-4">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <span className="text-xs font-medium text-slate-500">or sign up with</span>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-4 w-4" />
-                  Continue with Google
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleGoogle}
+                      disabled={submitting || isLoadingAuth}
+                      className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <GoogleIcon className="h-4 w-4" />
+                      Continue with Google
+                    </button>
 
-                <p className="mt-4 text-center text-sm text-slate-600">
-                  Already have an account?{' '}
-                  <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
-                    Sign in
-                  </Link>
-                </p>
+                    <p className="mt-4 text-center text-sm text-slate-600">
+                      Already have an account?{' '}
+                      <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
+                        Sign in
+                      </Link>
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -922,7 +1003,21 @@ function getOrganizationInitials(name) {
   return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 }
 
-function buildOrganizationBio(form, logoFile) {
+function splitFirstName(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+}
+
+function splitLastName(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean).slice(1).join(' ');
+}
+
+function normalizeInstagram(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
+}
+
+function buildOrganizationBio(form, logoFile, logoFileId = '') {
   return [
     form.description.trim(),
     '',
@@ -939,6 +1034,7 @@ function buildOrganizationBio(form, logoFile) {
     form.instagram.trim() ? `Instagram: ${form.instagram.trim()}` : '',
     `Primary brand color: ${form.primaryColor}`,
     logoFile ? `Logo selected: ${logoFile.name}` : 'Logo selected: no',
+    logoFileId ? `Logo file id: ${logoFileId}` : '',
     `Product updates: ${form.updatesOptIn ? 'yes' : 'no'}`,
   ].filter(Boolean).join('\n');
 }

@@ -7,34 +7,55 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
-  Target,
   Trophy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PublicCoachCard from '@/components/public/PublicCoachCard';
 import { matchesCoachSearch, normalizePublicCoach } from '@/lib/publicCoach';
+import {
+  coachDistanceMiles,
+  findPlaceSuggestions,
+  placeFromParams,
+  resolvePlace,
+} from '@/lib/metroDetroitPlaces';
 import { rpc } from '@/lib/rpc';
 import { pricingPackageRepo } from '@/api/repo';
 import { DEMO_COACH_PROFILES } from '@/lib/demoCoachProfiles';
 import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const SPORTS = ['All sports', 'Soccer', 'Basketball', 'Football', 'Baseball', 'Volleyball', 'Strength', 'Speed'];
-const GOALS = ['Any goal', 'Speed & Agility', 'Shooting', 'Ball Control', 'College Prep', 'Strength Training', 'Game IQ'];
 const AVAILABILITY = ['Any time', 'This week', 'Evenings', 'Weekends'];
+const RADII = ['10', '15', '25', '50'];
 
 function valueFromParams(params, key, fallback) {
   return params.get(key) || fallback;
+}
+
+function radiusFromParams(params) {
+  const raw = Number(params.get('radius') || params.get('location_radius') || 15);
+  return Number.isFinite(raw) && raw > 0 ? String(raw) : '15';
+}
+
+function bookingParams(place, radius) {
+  if (!place) return {};
+  return {
+    location_label: place.label,
+    location_lat: String(place.lat),
+    location_lng: String(place.lng),
+    location_radius: String(radius || 15),
+  };
 }
 
 export default function CoachSearch() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState({
     sport: valueFromParams(searchParams, 'sport', 'All sports'),
-    location: valueFromParams(searchParams, 'location', ''),
-    goal: valueFromParams(searchParams, 'goal', 'Any goal'),
+    location: valueFromParams(searchParams, 'location', valueFromParams(searchParams, 'location_label', '')),
+    radius: radiusFromParams(searchParams),
     availability: valueFromParams(searchParams, 'availability', 'Any time'),
   });
+  const [selectedPlace, setSelectedPlace] = useState(() => placeFromParams(searchParams));
   const [coaches, setCoaches] = useState([]);
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,27 +93,53 @@ export default function CoachSearch() {
   }, []);
 
   useEffect(() => {
+    const nextPlace = placeFromParams(searchParams);
+    setSelectedPlace(nextPlace);
     setFilters({
       sport: valueFromParams(searchParams, 'sport', 'All sports'),
-      location: valueFromParams(searchParams, 'location', ''),
-      goal: valueFromParams(searchParams, 'goal', 'Any goal'),
+      location: valueFromParams(searchParams, 'location', valueFromParams(searchParams, 'location_label', '')),
+      radius: radiusFromParams(searchParams),
       availability: valueFromParams(searchParams, 'availability', 'Any time'),
     });
   }, [searchParams]);
 
+  const activePlace = useMemo(
+    () => selectedPlace || resolvePlace(filters.location),
+    [selectedPlace, filters.location],
+  );
+
+  const locationSuggestions = useMemo(
+    () => findPlaceSuggestions(filters.location),
+    [filters.location],
+  );
+
   const filteredCoaches = useMemo(
-    () => coaches.filter((coach) => matchesCoachSearch(coach, filters)),
-    [coaches, filters],
+    () => coaches.filter((coach) => matchesCoachSearch(coach, { ...filters, place: activePlace })),
+    [coaches, filters, activePlace],
+  );
+
+  const coachBookingParams = useMemo(
+    () => bookingParams(activePlace, filters.radius),
+    [activePlace, filters.radius],
   );
 
   const applyFilters = (event) => {
     event?.preventDefault?.();
+    const appliedPlace = selectedPlace || resolvePlace(filters.location);
     const next = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value && value !== 'All sports' && value !== 'Any goal' && value !== 'Any time') {
-        next.set(key, value);
-      }
-    });
+    if (filters.sport && filters.sport !== 'All sports') next.set('sport', filters.sport);
+    if (appliedPlace) {
+      next.set('location', appliedPlace.label);
+      next.set('lat', String(appliedPlace.lat));
+      next.set('lng', String(appliedPlace.lng));
+      next.set('radius', String(filters.radius || 15));
+      setSelectedPlace(appliedPlace);
+      setFilters((prev) => ({ ...prev, location: appliedPlace.label }));
+    } else if (filters.location) {
+      next.set('location', filters.location);
+      next.set('radius', String(filters.radius || 15));
+    }
+    if (filters.availability && filters.availability !== 'Any time') next.set('availability', filters.availability);
     setSearchParams(next);
   };
 
@@ -107,10 +154,10 @@ export default function CoachSearch() {
                 <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Verified coaching marketplace</span>
               </div>
               <h1 className="mt-5 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-                Find coaches that fit your schedule, goals, and budget.
+                Find coaches near your athlete's training location.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Compare real LevelCoach profiles, open availability, training specialties, and intro-booking options.
+                Compare verified profiles, open availability, distance, training specialties, and intro-booking options.
               </p>
             </div>
 
@@ -124,7 +171,7 @@ export default function CoachSearch() {
           </div>
 
           <form onSubmit={applyFilters} className="mt-7 rounded-lg border border-slate-200 bg-white p-3 shadow-xl shadow-blue-600/10">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.15fr_1.1fr_1fr_auto]">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.35fr_0.75fr_1fr_auto]">
               <FilterSelect
                 label="Sport"
                 icon={Trophy}
@@ -136,14 +183,23 @@ export default function CoachSearch() {
                 label="Location"
                 icon={MapPin}
                 value={filters.location}
-                onChange={(value) => setFilters((prev) => ({ ...prev, location: value }))}
+                suggestions={locationSuggestions}
+                selectedPlaceLabel={selectedPlace?.label || ''}
+                onChange={(value) => {
+                  setFilters((prev) => ({ ...prev, location: value }));
+                  if (selectedPlace && value !== selectedPlace.label) setSelectedPlace(null);
+                }}
+                onSelect={(place) => {
+                  setSelectedPlace(place);
+                  setFilters((prev) => ({ ...prev, location: place.label }));
+                }}
               />
               <FilterSelect
-                label="Training goal"
-                icon={Target}
-                value={filters.goal}
-                options={GOALS}
-                onChange={(value) => setFilters((prev) => ({ ...prev, goal: value }))}
+                label="Radius"
+                icon={MapPin}
+                value={filters.radius}
+                options={RADII}
+                onChange={(value) => setFilters((prev) => ({ ...prev, radius: value }))}
               />
               <FilterSelect
                 label="Availability"
@@ -170,8 +226,10 @@ export default function CoachSearch() {
             </div>
             <div className="mt-4 space-y-3">
               <FilterPill label={filters.sport} active={filters.sport !== 'All sports'} />
-              <FilterPill label={filters.location || 'Any location'} active={!!filters.location} />
-              <FilterPill label={filters.goal} active={filters.goal !== 'Any goal'} />
+              <FilterPill
+                label={activePlace ? `${activePlace.label} within ${filters.radius} mi` : (filters.location || 'Any location')}
+                active={!!filters.location}
+              />
               <FilterPill label={filters.availability} active={filters.availability !== 'Any time'} />
             </div>
             <p className="mt-5 text-xs leading-5 text-slate-500">
@@ -185,7 +243,11 @@ export default function CoachSearch() {
             <div>
               <p className="font-display text-xl font-bold tracking-normal text-slate-950">Best matches</p>
               <p className="text-sm text-slate-600">
-                {loading ? 'Loading verified coach profiles...' : `${filteredCoaches.length} result${filteredCoaches.length === 1 ? '' : 's'} for your search`}
+                {loading
+                  ? 'Loading verified coach profiles...'
+                  : activePlace
+                    ? `${filteredCoaches.length} result${filteredCoaches.length === 1 ? '' : 's'} within ${filters.radius} miles of ${activePlace.label}`
+                    : `${filteredCoaches.length} result${filteredCoaches.length === 1 ? '' : 's'} for your search`}
               </p>
             </div>
             <Link to="/apply/private-training-coach" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
@@ -211,7 +273,13 @@ export default function CoachSearch() {
           {!loading && !error && filteredCoaches.length > 0 && (
             <div className="space-y-3">
               {filteredCoaches.map((coach) => (
-                <PublicCoachCard key={coach.id} coach={coach} packages={packages} />
+                <PublicCoachCard
+                  key={coach.id}
+                  coach={coach}
+                  packages={packages}
+                  distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}
+                  bookingParams={coachBookingParams}
+                />
               ))}
             </div>
           )}
@@ -223,12 +291,13 @@ export default function CoachSearch() {
               </div>
               <h2 className="mt-4 font-display text-2xl font-bold text-slate-950">No coaches match those filters yet</h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                Try broadening the sport, location, or training goal. New coaches appear here as their profiles go live.
+                Try broadening the sport, location radius, or availability window. New coaches appear here as their profiles go live.
               </p>
               <Button
                 className="mt-5 rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700"
                 onClick={() => {
-                  setFilters({ sport: 'All sports', location: '', goal: 'Any goal', availability: 'Any time' });
+                  setSelectedPlace(null);
+                  setFilters({ sport: 'All sports', location: '', radius: '15', availability: 'Any time' });
                   setSearchParams(new URLSearchParams());
                 }}
               >
@@ -264,9 +333,11 @@ function FilterSelect({ label, icon: Icon, value, options, onChange }) {
   );
 }
 
-function FilterInput({ label, icon: Icon, value, onChange }) {
+function FilterInput({ label, icon: Icon, value, onChange, suggestions = [], selectedPlaceLabel = '', onSelect }) {
+  const showSuggestions = value && suggestions.length > 0 && value !== selectedPlaceLabel;
+
   return (
-    <label className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+    <div className="relative flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
         <Icon className="h-4 w-4" />
       </span>
@@ -279,7 +350,23 @@ function FilterInput({ label, icon: Icon, value, onChange }) {
           placeholder="City, county, or ZIP"
         />
       </span>
-    </label>
+      {showSuggestions && (
+        <span className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-xl shadow-slate-900/10">
+          {suggestions.map((place) => (
+            <button
+              key={place.label}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSelect?.(place)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
+            >
+              <span>{place.label}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{place.type}</span>
+            </button>
+          ))}
+        </span>
+      )}
+    </div>
   );
 }
 

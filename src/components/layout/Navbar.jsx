@@ -55,7 +55,7 @@ export default function Navbar() {
     // Clients: account nav.
     return [
       { label: 'Dashboard', path: '/dashboard' },
-      { label: 'Book', path: '/book' },
+      { label: 'Book', path: '/coaches' },
       { label: 'Matching', path: '/matching' },
       { label: 'Messages', path: '/messages' },
     ];

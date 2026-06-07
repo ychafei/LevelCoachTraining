@@ -207,11 +207,17 @@ async function provisionProfiles() {
   await attrEmail('profiles', 'parent_consent_email');
   await attrBool('profiles', 'terms_accepted', false, false);
   await attrBool('profiles', 'media_release_accepted', false, false);
+  await attrString('profiles', 'onboarding_role', 60);
+  await attrEnum('profiles', 'onboarding_status', ['incomplete', 'complete', 'blocked'], false, 'incomplete');
+  await attrString('profiles', 'primary_organization_id', 64);
+  await attrBool('profiles', 'master_admin_locked', false, false);
+  await attrDatetime('profiles', 'master_admin_bootstrapped_at');
 
   await waitAttributesReady('profiles');
   await ensureIndex('profiles', 'idx_email',          'unique', ['email']);
   await ensureIndex('profiles', 'idx_account_id',     'key',    ['account_id']);
   await ensureIndex('profiles', 'idx_coach_id',       'key',    ['coach_id']);
+  await ensureIndex('profiles', 'idx_primary_org',    'key',    ['primary_organization_id']);
   await ensureIndex('profiles', 'idx_matching',       'key',    ['matching_opted_in']);
   await ensureIndex('profiles', 'idx_parent_consent', 'key',    ['parent_consent_token']);
 }
@@ -226,15 +232,12 @@ async function provisionCoaches() {
   await attrString('coaches', 'phone', 30);
   await attrEnum('coaches',   'county', ['Oakland', 'Macomb', 'Wayne'], true);
   await attrString('coaches', 'training_area', 255);
+  await attrFloat('coaches',  'location_lat');
+  await attrFloat('coaches',  'location_lng');
   await attrString('coaches', 'bio', 20000); // TEXT
   await attrString('coaches', 'quote', 1000);
   await attrString('coaches', 'photo_url', 1000);
   await attrString('coaches', 'specializations', 100, false, null, true); // string[]
-  await attrString('coaches', 'venmo', 100);
-  await attrString('coaches', 'zelle', 100);
-  await attrString('coaches', 'cashapp', 100);
-  await attrString('coaches', 'paypal', 200);
-  await attrBool('coaches',   'cash_accepted', false, false);
   await attrString('coaches', 'availability', 20000);                    // JSON-serialized; TEXT
   await attrBool('coaches',   'is_active', false, true);
   await attrBool('coaches',   'is_head_coach', false, false);
@@ -242,6 +245,7 @@ async function provisionCoaches() {
   await attrEnum('coaches',   'platform_fee_type', ['none', 'percent', 'fixed'], false, 'none');
   await attrFloat('coaches',  'platform_fee_value', false, null, null, 0);
   await attrString('coaches', 'user_id', 64);                            // link to profiles.account_id
+  await attrString('coaches', 'stripe_account_id', 128);
 
   await waitAttributesReady('coaches');
   await ensureIndex('coaches', 'idx_is_active',     'key', ['is_active']);
@@ -263,7 +267,7 @@ async function provisionSessions() {
   await attrEnum('sessions',   'status', ['pending', 'confirmed', 'cancelled', 'completed'], false, 'pending');
   await attrFloat('sessions',  'total_price');
   await attrEnum('sessions',   'payment_status', ['unpaid', 'paid'], false, 'unpaid');
-  await attrEnum('sessions',   'payment_method', ['electronic', 'cash', 'credits']);
+  await attrEnum('sessions',   'payment_method', ['electronic', 'credits']);
   await attrEnum('sessions',   'county', ['Oakland', 'Macomb', 'Wayne']);
   await attrString('sessions', 'notes', 20000);                          // TEXT
   await attrString('sessions', 'session_goals', 1000);
@@ -292,7 +296,7 @@ async function provisionSessionCredits() {
   await attrInt('session_credits',    'session_duration_minutes');
   await attrFloat('session_credits',  'per_session_base_price');
   await attrEnum('session_credits',   'payment_processor',
-    ['paypal', 'stripe', 'admin_grant', 'cash_pending']);
+    ['stripe', 'admin_grant']);
 
   await waitAttributesReady('session_credits');
   await ensureIndex('session_credits', 'idx_client_email', 'key', ['client_email']);
@@ -484,6 +488,407 @@ async function provisionUserBans() {
   await ensureIndex('user_bans', 'idx_is_active',    'key', ['is_active']);
 }
 
+// --- Production foundation collections -------------------------------------
+
+const PRODUCTION_COLLECTIONS = [
+  {
+    id: 'organizations',
+    name: 'Organizations',
+    perms: PUBLIC_READ_AUTH_WRITE,
+    attrs: [
+      { type: 'string', key: 'name', size: 200, required: true },
+      { type: 'string', key: 'slug', size: 160, required: true },
+      { type: 'string', key: 'type', size: 120 },
+      { type: 'enum', key: 'status', elements: ['draft', 'pending_review', 'active', 'suspended', 'archived'], def: 'draft' },
+      { type: 'string', key: 'service_area_label', size: 500 },
+      { type: 'float', key: 'lat' },
+      { type: 'float', key: 'lng' },
+      { type: 'string', key: 'geohash', size: 32 },
+      { type: 'float', key: 'radius_miles', def: 15 },
+      { type: 'string', key: 'logo_file_id', size: 128 },
+      { type: 'string', key: 'brand_color', size: 20 },
+      { type: 'string', key: 'stripe_account_id', size: 128 },
+      { type: 'enum', key: 'payout_model', elements: ['organization', 'coach', 'split_future'], def: 'organization' },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+      { type: 'email', key: 'contact_email' },
+      { type: 'string', key: 'contact_phone', size: 30 },
+      { type: 'string', key: 'website_url', size: 1000 },
+      { type: 'string', key: 'instagram_handle', size: 80 },
+      { type: 'string', key: 'primary_sports', size: 1000 },
+      { type: 'string', key: 'coach_count_label', size: 80 },
+      { type: 'string', key: 'description', size: 20000 },
+      { type: 'bool', key: 'updates_opt_in', def: false },
+    ],
+    indexes: [
+      { key: 'idx_slug', type: 'unique', attrs: ['slug'] },
+      { key: 'idx_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_created_by', type: 'key', attrs: ['created_by_profile_id'] },
+      { key: 'idx_org_geo', type: 'key', attrs: ['geohash'] },
+    ],
+  },
+  {
+    id: 'organization_members',
+    name: 'Organization Members',
+    attrs: [
+      { type: 'string', key: 'organization_id', size: 64, required: true },
+      { type: 'string', key: 'profile_id', size: 64, required: true },
+      { type: 'enum', key: 'role', elements: ['org_owner', 'org_admin', 'org_billing', 'org_coach_manager', 'org_viewer'], required: true },
+      { type: 'enum', key: 'status', elements: ['invited', 'active', 'suspended', 'removed'], def: 'invited' },
+      { type: 'string', key: 'invited_by', size: 64 },
+      { type: 'datetime', key: 'accepted_at' },
+    ],
+    indexes: [
+      { key: 'idx_org_member_org', type: 'key', attrs: ['organization_id'] },
+      { key: 'idx_org_member_profile', type: 'key', attrs: ['profile_id'] },
+      { key: 'idx_org_member_status', type: 'key', attrs: ['status'] },
+    ],
+  },
+  {
+    id: 'organization_coaches',
+    name: 'Organization Coaches',
+    attrs: [
+      { type: 'string', key: 'organization_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'enum', key: 'status', elements: ['invited', 'active', 'suspended', 'removed'], def: 'invited' },
+      { type: 'string', key: 'public_title', size: 160 },
+      { type: 'string', key: 'sports', size: 120, array: true },
+      { type: 'string', key: 'org_rate_overrides', size: 20000 },
+      { type: 'enum', key: 'payout_recipient', elements: ['coach', 'org'], def: 'org' },
+      { type: 'string', key: 'approved_by', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_org_coach_org', type: 'key', attrs: ['organization_id'] },
+      { key: 'idx_org_coach_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_org_coach_status', type: 'key', attrs: ['status'] },
+    ],
+  },
+  {
+    id: 'athlete_profiles',
+    name: 'Athlete Profiles',
+    attrs: [
+      { type: 'string', key: 'profile_id', size: 64 },
+      { type: 'string', key: 'parent_profile_id', size: 64 },
+      { type: 'string', key: 'first_name', size: 100, required: true },
+      { type: 'string', key: 'last_name', size: 100, required: true },
+      { type: 'datetime', key: 'dob' },
+      { type: 'string', key: 'gender_optional', size: 80 },
+      { type: 'string', key: 'sports', size: 120, array: true },
+      { type: 'string', key: 'skill_level', size: 100 },
+      { type: 'string', key: 'emergency_contact', size: 20000 },
+      { type: 'string', key: 'health_notes', size: 20000 },
+      { type: 'float', key: 'location_lat' },
+      { type: 'float', key: 'location_lng' },
+      { type: 'string', key: 'location_label', size: 500 },
+    ],
+    indexes: [
+      { key: 'idx_ath_profile', type: 'key', attrs: ['profile_id'] },
+      { key: 'idx_ath_parent', type: 'key', attrs: ['parent_profile_id'] },
+    ],
+  },
+  {
+    id: 'guardian_athletes',
+    name: 'Guardian Athletes',
+    attrs: [
+      { type: 'string', key: 'guardian_profile_id', size: 64, required: true },
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'relationship', size: 100 },
+      { type: 'datetime', key: 'authority_attested_at' },
+      { type: 'bool', key: 'can_book', def: true },
+      { type: 'bool', key: 'can_pay', def: true },
+      { type: 'bool', key: 'can_message', def: true },
+    ],
+    indexes: [
+      { key: 'idx_guardian', type: 'key', attrs: ['guardian_profile_id'] },
+      { key: 'idx_guardian_athlete', type: 'key', attrs: ['athlete_id'] },
+    ],
+  },
+  {
+    id: 'sports',
+    name: 'Sports',
+    perms: PUBLIC_READ_AUTH_WRITE,
+    attrs: [
+      { type: 'string', key: 'sport_key', size: 100, required: true },
+      { type: 'string', key: 'display_name', size: 160, required: true },
+      { type: 'string', key: 'category', size: 100 },
+      { type: 'string', key: 'icon', size: 100 },
+      { type: 'bool', key: 'active', def: true },
+      { type: 'string', key: 'recommended_specialties', size: 120, array: true },
+      { type: 'string', key: 'profile_schema', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_sport_key', type: 'unique', attrs: ['sport_key'] },
+      { key: 'idx_sport_active', type: 'key', attrs: ['active'] },
+    ],
+  },
+  {
+    id: 'coach_sport_profiles',
+    name: 'Coach Sport Profiles',
+    attrs: [
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'sport_key', size: 100, required: true },
+      { type: 'string', key: 'specialties', size: 120, array: true },
+      { type: 'string', key: 'levels', size: 120, array: true },
+      { type: 'string', key: 'positions', size: 120, array: true },
+      { type: 'string', key: 'credentials', size: 20000 },
+      { type: 'string', key: 'session_types', size: 120, array: true },
+      { type: 'string', key: 'pricing_rules', size: 20000 },
+      { type: 'string', key: 'profile_sections', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_csp_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_csp_sport', type: 'key', attrs: ['sport_key'] },
+    ],
+  },
+  {
+    id: 'availability_blocks',
+    name: 'Availability Blocks',
+    attrs: [
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'enum', key: 'block_type', elements: ['recurring', 'date', 'blackout'], def: 'recurring' },
+      { type: 'string', key: 'day', size: 20 },
+      { type: 'string', key: 'date', size: 10 },
+      { type: 'string', key: 'start_time', size: 5 },
+      { type: 'string', key: 'end_time', size: 5 },
+      { type: 'string', key: 'location', size: 1000 },
+      { type: 'int', key: 'capacity', def: 1 },
+      { type: 'string', key: 'session_type', size: 120 },
+      { type: 'bool', key: 'active', def: true },
+    ],
+    indexes: [
+      { key: 'idx_avail_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_avail_org', type: 'key', attrs: ['organization_id'] },
+      { key: 'idx_avail_active', type: 'key', attrs: ['active'] },
+    ],
+  },
+  {
+    id: 'athlete_availability_preferences',
+    name: 'Athlete Availability Preferences',
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'bool', key: 'flexible', def: false },
+      { type: 'string', key: 'date_window', size: 20000 },
+      { type: 'string', key: 'preferred_days', size: 20, array: true },
+      { type: 'string', key: 'time_of_day', size: 40, array: true },
+      { type: 'string', key: 'earliest_start', size: 5 },
+      { type: 'string', key: 'latest_start', size: 5 },
+      { type: 'float', key: 'location_radius', def: 15 },
+    ],
+    indexes: [
+      { key: 'idx_pref_athlete', type: 'key', attrs: ['athlete_id'] },
+    ],
+  },
+  {
+    id: 'legal_templates',
+    name: 'Legal Templates',
+    attrs: [
+      { type: 'string', key: 'template_key', size: 160, required: true },
+      { type: 'enum', key: 'role', elements: ['athlete', 'guardian', 'coach', 'organization', 'admin', 'platform'], required: true },
+      { type: 'string', key: 'version', size: 60, required: true },
+      { type: 'string', key: 'title', size: 300, required: true },
+      { type: 'string', key: 'body', size: 100000, required: true },
+      { type: 'bool', key: 'required', def: true },
+      { type: 'datetime', key: 'effective_at' },
+      { type: 'datetime', key: 'retired_at' },
+      { type: 'string', key: 'jurisdiction', size: 120 },
+      { type: 'string', key: 'checksum', size: 128 },
+    ],
+    indexes: [
+      { key: 'idx_legal_template_key', type: 'key', attrs: ['template_key'] },
+      { key: 'idx_legal_role', type: 'key', attrs: ['role'] },
+      { key: 'idx_legal_required', type: 'key', attrs: ['required'] },
+    ],
+  },
+  {
+    id: 'legal_agreements',
+    name: 'Legal Agreements',
+    attrs: [
+      { type: 'string', key: 'template_id', size: 64, required: true },
+      { type: 'string', key: 'template_key', size: 160 },
+      { type: 'string', key: 'template_version', size: 60 },
+      { type: 'string', key: 'template_checksum', size: 128 },
+      { type: 'string', key: 'signer_profile_id', size: 64, required: true },
+      { type: 'string', key: 'signer_account_id', size: 64 },
+      { type: 'email', key: 'signer_email' },
+      { type: 'enum', key: 'signer_role', elements: ['athlete', 'guardian', 'coach', 'organization_admin', 'admin'], required: true },
+      { type: 'string', key: 'signer_relationship', size: 120 },
+      { type: 'string', key: 'typed_legal_name', size: 200 },
+      { type: 'string', key: 'athlete_id', size: 64 },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'enum', key: 'status', elements: ['signed', 'superseded', 'voided'], def: 'signed' },
+      { type: 'datetime', key: 'signed_at' },
+      { type: 'string', key: 'ip_address', size: 80 },
+      { type: 'string', key: 'user_agent', size: 1000 },
+      { type: 'string', key: 'pdf_file_id', size: 128 },
+      { type: 'string', key: 'signature_hash', size: 128 },
+      { type: 'string', key: 'affirmations_json', size: 20000 },
+      { type: 'enum', key: 'signature_method', elements: ['typed', 'drawn', 'typed_and_drawn'], def: 'typed' },
+      { type: 'string', key: 'drawn_signature_hash', size: 128 },
+    ],
+    indexes: [
+      { key: 'idx_agreement_signer', type: 'key', attrs: ['signer_profile_id'] },
+      { key: 'idx_agreement_account', type: 'key', attrs: ['signer_account_id'] },
+      { key: 'idx_agreement_signer_role', type: 'key', attrs: ['signer_role'] },
+      { key: 'idx_agreement_template', type: 'key', attrs: ['template_id'] },
+      { key: 'idx_agreement_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_agreement_org', type: 'key', attrs: ['organization_id'] },
+      { key: 'idx_agreement_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_agreement_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_agreement_hash', type: 'key', attrs: ['signature_hash'] },
+    ],
+  },
+  {
+    id: 'legal_admin_notes',
+    name: 'Legal Admin Notes',
+    attrs: [
+      { type: 'string', key: 'agreement_id', size: 64, required: true },
+      { type: 'string', key: 'admin_profile_id', size: 64, required: true },
+      { type: 'string', key: 'note', size: 20000, required: true },
+      { type: 'enum', key: 'visibility', elements: ['admin_only', 'master_admin'], def: 'admin_only' },
+    ],
+    indexes: [
+      { key: 'idx_legal_note_agreement', type: 'key', attrs: ['agreement_id'] },
+    ],
+  },
+  {
+    id: 'stripe_connected_accounts',
+    name: 'Stripe Connected Accounts',
+    attrs: [
+      { type: 'enum', key: 'owner_type', elements: ['coach', 'org'], required: true },
+      { type: 'string', key: 'owner_id', size: 64, required: true },
+      { type: 'string', key: 'stripe_account_id', size: 128, required: true },
+      { type: 'string', key: 'account_mode', size: 80 },
+      { type: 'bool', key: 'charges_enabled', def: false },
+      { type: 'bool', key: 'payouts_enabled', def: false },
+      { type: 'bool', key: 'details_submitted', def: false },
+      { type: 'string', key: 'requirements_due', size: 20000 },
+      { type: 'string', key: 'disabled_reason', size: 500 },
+      { type: 'datetime', key: 'last_synced_at' },
+    ],
+    indexes: [
+      { key: 'idx_sca_owner', type: 'key', attrs: ['owner_type', 'owner_id'] },
+      { key: 'idx_sca_account', type: 'unique', attrs: ['stripe_account_id'] },
+    ],
+  },
+  {
+    id: 'stripe_payment_records',
+    name: 'Stripe Payment Records',
+    attrs: [
+      { type: 'string', key: 'booking_id', size: 64 },
+      { type: 'string', key: 'credit_id', size: 64 },
+      { type: 'string', key: 'checkout_session_id', size: 160 },
+      { type: 'string', key: 'payment_intent_id', size: 160 },
+      { type: 'string', key: 'charge_id', size: 160 },
+      { type: 'string', key: 'currency', size: 12 },
+      { type: 'int', key: 'amount' },
+      { type: 'int', key: 'application_fee' },
+      { type: 'string', key: 'transfer_destination', size: 128 },
+      { type: 'enum', key: 'status', elements: ['created', 'paid', 'failed', 'refunded', 'cancelled'], def: 'created' },
+      { type: 'string', key: 'refund_id', size: 160 },
+      { type: 'int', key: 'refunded_amount' },
+      { type: 'string', key: 'failure_reason', size: 1000 },
+      { type: 'datetime', key: 'webhook_processed_at' },
+      { type: 'string', key: 'metadata', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_pay_checkout', type: 'key', attrs: ['checkout_session_id'] },
+      { key: 'idx_pay_intent', type: 'key', attrs: ['payment_intent_id'] },
+      { key: 'idx_pay_charge', type: 'key', attrs: ['charge_id'] },
+      { key: 'idx_pay_booking', type: 'key', attrs: ['booking_id'] },
+      { key: 'idx_pay_status', type: 'key', attrs: ['status'] },
+    ],
+  },
+  {
+    id: 'stripe_transfer_records',
+    name: 'Stripe Transfer Records',
+    attrs: [
+      { type: 'string', key: 'payment_record_id', size: 64, required: true },
+      { type: 'string', key: 'destination_account_id', size: 128 },
+      { type: 'int', key: 'amount' },
+      { type: 'enum', key: 'status', elements: ['pending', 'paid', 'failed', 'reversed'], def: 'pending' },
+      { type: 'string', key: 'transfer_id', size: 160 },
+      { type: 'string', key: 'reversal_id', size: 160 },
+    ],
+    indexes: [
+      { key: 'idx_transfer_payment', type: 'key', attrs: ['payment_record_id'] },
+      { key: 'idx_transfer_dest', type: 'key', attrs: ['destination_account_id'] },
+    ],
+  },
+  {
+    id: 'stripe_webhook_events',
+    name: 'Stripe Webhook Events',
+    attrs: [
+      { type: 'string', key: 'stripe_event_id', size: 160, required: true },
+      { type: 'string', key: 'type', size: 160 },
+      { type: 'enum', key: 'status', elements: ['processing', 'processed', 'ignored', 'failed'], def: 'processing' },
+      { type: 'datetime', key: 'processed_at' },
+      { type: 'string', key: 'error', size: 2000 },
+      { type: 'string', key: 'payload', size: 100000 },
+    ],
+    indexes: [
+      { key: 'idx_webhook_event', type: 'unique', attrs: ['stripe_event_id'] },
+      { key: 'idx_webhook_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_webhook_type', type: 'key', attrs: ['type'] },
+    ],
+  },
+  {
+    id: 'admin_assignments',
+    name: 'Admin Assignments',
+    attrs: [
+      { type: 'string', key: 'profile_id', size: 64, required: true },
+      { type: 'enum', key: 'scope', elements: ['platform', 'org'], required: true },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'enum', key: 'role', elements: ['admin', 'super_admin', 'org_owner', 'org_admin', 'org_billing', 'org_coach_manager', 'org_viewer'], required: true },
+      { type: 'string', key: 'granted_by_master_admin_id', size: 64 },
+      { type: 'datetime', key: 'granted_at' },
+      { type: 'datetime', key: 'revoked_at' },
+    ],
+    indexes: [
+      { key: 'idx_admin_profile', type: 'key', attrs: ['profile_id'] },
+      { key: 'idx_admin_scope', type: 'key', attrs: ['scope'] },
+      { key: 'idx_admin_org', type: 'key', attrs: ['organization_id'] },
+    ],
+  },
+];
+
+async function attrFromDef(coll, defn) {
+  const required = defn.required ?? false;
+  const array = defn.array ?? false;
+  switch (defn.type) {
+    case 'string':
+      return attrString(coll, defn.key, defn.size, required, defn.def ?? null, array);
+    case 'int':
+      return attrInt(coll, defn.key, required, defn.min ?? null, defn.max ?? null, defn.def ?? null, array);
+    case 'float':
+      return attrFloat(coll, defn.key, required, defn.min ?? null, defn.max ?? null, defn.def ?? null, array);
+    case 'bool':
+      return attrBool(coll, defn.key, required, defn.def ?? false, array);
+    case 'datetime':
+      return attrDatetime(coll, defn.key, required, defn.def ?? null, array);
+    case 'enum':
+      return attrEnum(coll, defn.key, defn.elements, required, defn.def ?? null, array);
+    case 'email':
+      return attrEmail(coll, defn.key, required, defn.def ?? null, array);
+    default:
+      throw new Error(`Unknown attribute type "${defn.type}" for ${coll}.${defn.key}`);
+  }
+}
+
+async function provisionProductionCollections() {
+  for (const coll of PRODUCTION_COLLECTIONS) {
+    console.log(`\n[Collection] ${coll.id}`);
+    await ensureCollection(coll.id, coll.name, coll.perms || AUTH_ONLY);
+    for (const attr of coll.attrs) {
+      await attrFromDef(coll.id, attr);
+    }
+    await waitAttributesReady(coll.id);
+    for (const index of coll.indexes || []) {
+      await ensureIndex(coll.id, index.key, index.type, index.attrs, index.orders || []);
+    }
+  }
+}
+
 // --- Storage buckets --------------------------------------------------------
 
 async function provisionBuckets() {
@@ -522,6 +927,25 @@ async function provisionBuckets() {
   await ensureBucket('message-attachments', 'Message Attachments', AUTH_ONLY, {
     maximumFileSize: 25 * 1024 * 1024,
   });
+  await ensureBucket('legal-documents', 'Legal Documents', AUTH_ONLY, {
+    fileSecurity: true,
+    maximumFileSize: 30 * 1024 * 1024,
+    allowedFileExtensions: ['pdf'],
+  });
+  await ensureBucket('coach-documents', 'Coach Documents', AUTH_ONLY, {
+    fileSecurity: true,
+    maximumFileSize: 30 * 1024 * 1024,
+    allowedFileExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+  });
+  await ensureBucket('org-logos', 'Organization Logos', publicPerms, {
+    maximumFileSize: 10 * 1024 * 1024,
+    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'svg'],
+  });
+  await ensureBucket('generated-receipts', 'Generated Receipts', AUTH_ONLY, {
+    fileSecurity: true,
+    maximumFileSize: 10 * 1024 * 1024,
+    allowedFileExtensions: ['pdf'],
+  });
 }
 
 // --- Main -------------------------------------------------------------------
@@ -548,10 +972,11 @@ async function main() {
   await provisionSiteContent();
   await provisionUnsubscribeRecords();
   await provisionUserBans();
+  await provisionProductionCollections();
 
   await provisionBuckets();
 
-  console.log('\nDone. 15 collections + 6 buckets ensured in Appwrite.');
+  console.log(`\nDone. ${15 + PRODUCTION_COLLECTIONS.length} collections + 10 buckets ensured in Appwrite.`);
 }
 
 main().catch((err) => {

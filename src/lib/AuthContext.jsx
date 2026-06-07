@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { auth } from '@/lib/auth';
+import { isAthlete, isOnboardingComplete, isOrganizationUser, isParentOrGuardian } from '@/lib/roles';
 
 const AuthContext = createContext(null);
 
@@ -66,6 +67,10 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isSuperAdmin = user?.is_super_admin === true;
   const isCoach = user?.role === 'coach' || isAdmin;
+  const onboardingComplete = !user || isOnboardingComplete(user);
+  const isOrganizationAdmin = isOrganizationUser(user);
+  const isGuardian = isParentOrGuardian(user);
+  const isAthleteUser = isAthlete(user);
 
   return (
     <AuthContext.Provider value={{
@@ -78,6 +83,10 @@ export const AuthProvider = ({ children }) => {
       isAdmin,
       isSuperAdmin,
       isCoach,
+      isOrganizationAdmin,
+      isGuardian,
+      isAthlete: isAthleteUser,
+      onboardingComplete,
       logout,
       navigateToLogin,
       checkAppState: checkUserAuth,

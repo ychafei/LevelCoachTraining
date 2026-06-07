@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, MapPin, User, Package, Timer, Zap, DollarSign } from 'lucide-react';
+import { CalendarDays, ChevronDown, DollarSign, MapPin, Package, Timer, User, Zap } from 'lucide-react';
 
 // Persistent summary used inside the booking flow. Same content in two layouts:
 //   - sidebar:     sticky panel for desktop (lg:)
@@ -34,14 +34,22 @@ function Body({
   creditRemaining,
   creditDurationMinutes,
   creditPackageName,
+  bookingLocation,
+  availabilityMode,
 }) {
   const coachLabel = coach ? `${coach.first_name} ${coach.last_name}${coach.is_head_coach ? ' · Head' : ''}` : '';
   const pkgLabel = pkg ? pkg.name : '';
   const durationLabel = duration?.label || (creditDurationMinutes ? `${creditDurationMinutes / 60} hr${creditDurationMinutes > 60 ? 's' : ''}` : '');
+  const bookingLocationLabel = bookingLocation?.label
+    ? `${bookingLocation.label} · ${bookingLocation.radius || 15} mi`
+    : '';
+  const availabilityLabel = availabilityMode === 'flexible' ? 'Flexible window' : 'Exact scheduling';
 
   return (
     <div className="divide-y divide-border">
       <Row label="County" value={county} icon={MapPin} />
+      <Row label="Location" value={bookingLocationLabel} icon={MapPin} />
+      <Row label="Availability" value={availabilityLabel} icon={CalendarDays} />
       <Row label="Coach" value={coachLabel} icon={User} />
       {usingCredit ? (
         <>

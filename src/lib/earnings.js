@@ -87,11 +87,8 @@ export function summarizeSessions(sessions, coach, opts = {}) {
   let paidThisMonthCount = 0;
   let lifetimeNet = 0;
   let lifetimeGross = 0;
-  let pendingCashAmount = 0;
-  let pendingCashCount = 0;
 
   for (const s of list) {
-    const cancelled = s.status === 'cancelled';
     const completed = s.status === 'completed';
     const price = Number(s.total_price) || 0;
     const inMonth = typeof s.date === 'string' && s.date.startsWith(month);
@@ -107,11 +104,6 @@ export function summarizeSessions(sessions, coach, opts = {}) {
         mtdNet += net;
         if (s.payment_status === 'paid') paidThisMonthCount += 1;
       }
-    }
-
-    if (!cancelled && s.payment_method === 'cash' && s.payment_status === 'unpaid') {
-      pendingCashAmount += price;
-      pendingCashCount += 1;
     }
   }
 
@@ -144,8 +136,6 @@ export function summarizeSessions(sessions, coach, opts = {}) {
     paidThisMonth: paidThisMonthCount,
     lifetimeGross,
     lifetimeNet,
-    pendingCashAmount,
-    pendingCashCount,
     weeklyTrend: buckets,
     hasFee: !!coach && coach.platform_fee_type && coach.platform_fee_type !== 'none' && Number(coach.platform_fee_value) > 0,
   };

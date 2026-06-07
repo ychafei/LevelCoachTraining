@@ -8,9 +8,15 @@ import { homePathForRole } from '@/lib/roleHome';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import {
   RequireAuth,
+  RequireOnboardingComplete,
   RequireCoach,
   RequireLinkedCoach,
   RequireAdmin,
+  RequireMasterAdmin,
+  RequireOrganizationAdmin,
+  RequireGuardianOfAthlete,
+  RequireAthlete,
+  RequireSignedLegalPacket,
   RequireClient,
 } from '@/components/guards/RouteGuards';
 import CoachLayout from '@/components/coach-portal/CoachLayout';
@@ -47,17 +53,21 @@ import ParentConsent from '@/pages/ParentConsent';
 import Login from '@/pages/Login';
 import Signup from '@/pages/Signup';
 import SignIn from '@/pages/SignIn';
-import CreateAccount, { AthleteSignup } from '@/pages/CreateAccount';
+import CreateAccount, { AthleteSignup, ParentSignup } from '@/pages/CreateAccount';
 import CreateOrganization from '@/pages/CreateOrganization';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
+import OnboardingCompletion from '@/pages/onboarding/OnboardingCompletion';
 
 // Authenticated pages
-import Dashboard from '@/pages/Dashboard';
 import Messages from '@/pages/Messages';
 import Settings from '@/pages/Settings';
 import Matching from '@/pages/Matching';
 import CoachSchedule from '@/pages/CoachSchedule';
+import AthletePortal from '@/pages/athlete/AthletePortal';
+import ParentPortal from '@/pages/parent/ParentPortal';
+import OrganizationPortal from '@/pages/organization/OrganizationPortal';
+import MasterAdminPortal from '@/pages/master-admin/MasterAdminPortal';
 
 // Admin pages
 import AdminPanel from '@/pages/admin/AdminPanel';
@@ -71,6 +81,8 @@ import AdminUsers from '@/pages/admin/AdminUsers';
 import AdminMessages from '@/pages/admin/AdminMessages';
 import AdminUnsubscribes from '@/pages/admin/AdminUnsubscribes';
 import AdminCredits from '@/pages/admin/AdminCredits';
+import AdminLegalDocuments from '@/pages/admin/AdminLegalDocuments';
+import AdminPayments from '@/pages/admin/AdminPayments';
 
 // Public root: guests see the marketing landing page; signed-in users are
 // sent to their role home (admin → /admin, coach → /coach, client →
@@ -81,6 +93,11 @@ const RootRoute = () => {
     return <Navigate to={homePathForRole(user)} replace />;
   }
   return <Landing />;
+};
+
+const RoleHomeRoute = () => {
+  const { user } = useAuth();
+  return <Navigate to={homePathForRole(user)} replace />;
 };
 
 const AuthenticatedApp = () => {
@@ -121,58 +138,83 @@ const AuthenticatedApp = () => {
         <Route path="/pay" element={<Pay />} />
         <Route path="/parent-consent" element={<ParentConsent />} />
 
-        {/* Authenticated — any signed-in user */}
-        <Route element={<RequireAuth />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+        {/* Authenticated — any signed-in user with completed onboarding */}
+        <Route element={<RequireOnboardingComplete />}>
+          <Route path="/dashboard" element={<RoleHomeRoute />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
 
-        {/* Client-only */}
-        <Route element={<RequireClient />}>
-          <Route path="/matching" element={<Matching />} />
-        </Route>
-
-        {/* Coach portal — shell + nested pages. RequireCoach (admins also pass).
-            Individual pages handle the "no coach_id" state gracefully. */}
-        <Route element={<RequireCoach />}>
-          <Route element={<CoachLayout />}>
-            <Route path="/coach" element={<CoachOverview />} />
-            <Route path="/coach/sessions" element={<CoachSessions />} />
-            <Route path="/coach/schedule" element={<CoachSchedule />} />
-            <Route path="/coach/messages" element={<Messages />} />
-            <Route path="/coach/clients" element={<CoachClients />} />
-            <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
-            <Route path="/coach/earnings" element={<CoachEarnings />} />
-            <Route path="/coach/profile" element={<CoachProfile />} />
+        {/* Athlete / parent / organization portals */}
+        <Route element={<RequireOnboardingComplete />}>
+          <Route element={<RequireAthlete />}>
+            <Route path="/athlete" element={<AthletePortal />} />
+          </Route>
+          <Route element={<RequireGuardianOfAthlete />}>
+            <Route path="/parent" element={<ParentPortal />} />
+          </Route>
+          <Route element={<RequireOrganizationAdmin />}>
+            <Route path="/organization" element={<OrganizationPortal />} />
           </Route>
         </Route>
 
-        {/* Legacy route redirects → coach portal */}
-        <Route path="/coach-schedule" element={<Navigate to="/coach/schedule" replace />} />
-        <Route path="/coach-setup" element={<Navigate to="/coach" replace />} />
+        <Route element={<RequireOnboardingComplete />}>
+          {/* Client-only */}
+          <Route element={<RequireClient />}>
+            <Route element={<RequireSignedLegalPacket />}>
+              <Route path="/matching" element={<Matching />} />
+            </Route>
+          </Route>
 
-        {/* Admin-only */}
-        <Route element={<RequireAdmin />}>
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/admin/coaches" element={<AdminCoaches />} />
-          <Route path="/admin/bookings" element={<AdminBookings />} />
-          <Route path="/admin/credits" element={<AdminCredits />} />
-          <Route path="/admin/content" element={<AdminContent />} />
-          <Route path="/admin/pricing" element={<AdminPricing />} />
-          <Route path="/admin/applications" element={<AdminApplications />} />
-          <Route path="/admin/blog" element={<AdminBlog />} />
-          <Route path="/admin/users" element={<AdminUsers />} />
-          <Route path="/admin/messages" element={<AdminMessages />} />
-          <Route path="/admin/unsubscribes" element={<AdminUnsubscribes />} />
+          {/* Coach portal — shell + nested pages. RequireCoach (admins also pass).
+              Individual pages handle the "no coach_id" state gracefully. */}
+          <Route element={<RequireCoach />}>
+            <Route element={<CoachLayout />}>
+              <Route path="/coach" element={<CoachOverview />} />
+              <Route path="/coach/sessions" element={<CoachSessions />} />
+              <Route path="/coach/schedule" element={<CoachSchedule />} />
+              <Route path="/coach/messages" element={<Messages />} />
+              <Route path="/coach/clients" element={<CoachClients />} />
+              <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
+              <Route path="/coach/earnings" element={<CoachEarnings />} />
+              <Route path="/coach/profile" element={<CoachProfile />} />
+            </Route>
+          </Route>
+
+          {/* Legacy route redirects → coach portal */}
+          <Route path="/coach-schedule" element={<Navigate to="/coach/schedule" replace />} />
+          <Route path="/coach-setup" element={<Navigate to="/coach" replace />} />
+
+          {/* Admin-only */}
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin/coaches" element={<AdminCoaches />} />
+            <Route path="/admin/bookings" element={<AdminBookings />} />
+            <Route path="/admin/credits" element={<AdminCredits />} />
+            <Route path="/admin/payments" element={<AdminPayments />} />
+            <Route path="/admin/content" element={<AdminContent />} />
+            <Route path="/admin/pricing" element={<AdminPricing />} />
+            <Route path="/admin/applications" element={<AdminApplications />} />
+            <Route path="/admin/legal-documents" element={<AdminLegalDocuments />} />
+            <Route path="/admin/blog" element={<AdminBlog />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/messages" element={<AdminMessages />} />
+            <Route path="/admin/unsubscribes" element={<AdminUnsubscribes />} />
+          </Route>
+        </Route>
+
+        <Route element={<RequireMasterAdmin />}>
+          <Route path="/master-admin" element={<MasterAdminPortal />} />
         </Route>
       </Route>
 
+      <Route path="/onboarding" element={<OnboardingCompletion />} />
       <Route path="/login"           element={<Login />} />
       <Route path="/signup"          element={<Signup />} />
       <Route path="/sign-in"         element={<SignIn />} />
       <Route path="/create-account"  element={<CreateAccount />} />
       <Route path="/create-account/athlete" element={<AthleteSignup />} />
+      <Route path="/create-account/parent" element={<ParentSignup />} />
       <Route path="/create-organization" element={<CreateOrganization />} />
       <Route path="/apply/private-training-coach" element={<ApplyPrivateTrainingCoach />} />
       <Route path="/apply/training-organization" element={<CreateOrganization />} />

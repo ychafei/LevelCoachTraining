@@ -36,6 +36,23 @@ export const COL = {
   UnsubscribeRecord: 'unsubscribe_records',
   UserBan:           'user_bans',
   CoachLinkRequest:  'coach_link_requests',
+  Organization:      'organizations',
+  OrganizationMember:'organization_members',
+  OrganizationCoach: 'organization_coaches',
+  AthleteProfile:    'athlete_profiles',
+  GuardianAthlete:   'guardian_athletes',
+  Sport:             'sports',
+  CoachSportProfile: 'coach_sport_profiles',
+  AvailabilityBlock: 'availability_blocks',
+  AthleteAvailabilityPreference: 'athlete_availability_preferences',
+  LegalTemplate:     'legal_templates',
+  LegalAgreement:    'legal_agreements',
+  LegalAdminNote:    'legal_admin_notes',
+  StripeConnectedAccount: 'stripe_connected_accounts',
+  StripePaymentRecord:    'stripe_payment_records',
+  StripeTransferRecord:   'stripe_transfer_records',
+  StripeWebhookEvent:     'stripe_webhook_events',
+  AdminAssignment:   'admin_assignments',
 };
 
 // Field-name aliases between legacy and Appwrite system fields.

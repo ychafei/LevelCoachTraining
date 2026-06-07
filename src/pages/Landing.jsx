@@ -30,11 +30,11 @@ import { LevelCoachWordmarkPlate } from '@/components/public/LevelCoachLogo';
 const searchFields = [
   { label: 'Sport', value: 'Soccer', icon: Trophy },
   { label: 'Location', value: 'Detroit, MI', icon: MapPin },
-  { label: 'Training goal', value: 'Speed & Agility', icon: Target },
+  { label: 'Radius', value: '15 miles', icon: SlidersHorizontal },
   { label: 'Availability', value: 'This week', icon: CalendarDays },
 ];
 
-const defaultCoachSearchHref = '/coaches?sport=Soccer&location=Detroit%2C+MI&goal=Speed+%26+Agility&availability=This+week';
+const defaultCoachSearchHref = '/coaches?sport=Soccer&location=Detroit%2C+MI&lat=42.3314&lng=-83.0458&radius=15&availability=This+week';
 
 const coaches = [
   {
@@ -105,7 +105,7 @@ const howItWorks = [
   {
     title: 'Search',
     subtitle: 'by sport and location',
-    body: 'Filter by goal, availability, training style, and budget.',
+    body: 'Filter by radius, availability, training style, and budget.',
     icon: Search,
   },
   {
@@ -397,7 +397,7 @@ function MiniDashboard() {
     ['3', "Today's Sessions"],
     ['24', 'Active Clients'],
     ['18', 'Completed'],
-    ['$350', 'Pending Cash'],
+    ['$350', 'Stripe Payouts'],
   ];
   const schedule = [
     ['9:00', 'Marcus Johnson', 'Confirmed'],

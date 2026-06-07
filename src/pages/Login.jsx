@@ -11,7 +11,7 @@ import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
-import { homePathForRole } from '@/lib/roleHome';
+import { postAuthRedirectPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -34,7 +34,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoadingAuth && isAuthenticated && user) {
-      navigate(safeNext || homePathForRole(user), { replace: true });
+      navigate(postAuthRedirectPath(user, safeNext), { replace: true });
     }
   }, [isLoadingAuth, isAuthenticated, user, safeNext, navigate]);
 
@@ -54,7 +54,7 @@ export default function Login() {
           setSubmitting(true);
           await auth.completeMagicLink(userId, secret);
           const fresh = await refetchUser();
-          navigate(safeNext || homePathForRole(fresh), { replace: true });
+          navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
         } catch (err) {
           setFormError(err?.message || 'Sign-in link is invalid or expired.');
           setSubmitting(false);
@@ -84,7 +84,7 @@ export default function Login() {
       await auth.signOut();
       await auth.signInWithPassword(email.trim(), password);
       const fresh = await refetchUser();
-      navigate(safeNext || homePathForRole(fresh), { replace: true });
+      navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
     } catch (err) {
       setFormError(err?.message || 'Invalid email or password.');
     } finally {

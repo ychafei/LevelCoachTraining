@@ -5,14 +5,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calendar, CalendarClock, ClipboardList, Users, DollarSign, MessageSquare, User as UserIcon,
+  Calendar, CalendarClock, ClipboardList, Users, MessageSquare, User as UserIcon,
   Clock, CheckCircle2, AlertTriangle, MapPin, StickyNote,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatTimeET, formatLongDateET } from '@/lib/formatInET';
 import { isSessionPast } from '@/lib/scheduleET';
-import { summarizeSessions, formatCurrency } from '@/lib/earnings';
 import OnboardingChecklist, { computeChecklist } from '@/components/coach-portal/OnboardingChecklist';
+import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 
 // Helpers --------------------------------------------------------------------
 
@@ -42,6 +42,7 @@ export default function CoachOverview() {
   const [sessions, setSessions] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [legalStatus, setLegalStatus] = useState(null);
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
@@ -115,8 +116,6 @@ export default function CoachOverview() {
       if (ms >= cutoff) recentClientEmails.add(s.client_email);
     });
 
-    const earnings = summarizeSessions(sessions, coach);
-
     const recent = sessions
       .filter(s => s.status === 'completed')
       .slice(0, 5);
@@ -125,12 +124,10 @@ export default function CoachOverview() {
       todaySessions: todaySsns,
       upcoming7: nextWeek,
       recentCompleted: recent,
-      unpaidCash: { count: earnings.pendingCashCount, amount: earnings.pendingCashAmount },
       stats: {
         thisWeek: weekSessions.length,
         activeClients: recentClientEmails.size,
         completedThisMonth: completedThisMonth.length,
-        pendingCash: earnings.pendingCashAmount,
       },
     };
   }, [sessions, coach]);
@@ -161,12 +158,13 @@ export default function CoachOverview() {
       cta: { label: 'Set availability', href: '/coach/schedule' },
     });
   }
-  if (unpaidCash.count > 0) {
+  if (user?.coach_id && legalStatus && !legalStatus.loading && !legalStatus.complete) {
     alerts.push({
-      tone: 'info',
-      icon: DollarSign,
-      text: `${formatCurrency(unpaidCash.amount)} in ${unpaidCash.count} unpaid cash session${unpaidCash.count === 1 ? '' : 's'}.`,
-      cta: { label: 'Open earnings', href: '/coach/earnings' },
+      tone: 'warn',
+      icon: AlertTriangle,
+      text: legalStatus.hasTemplates
+        ? 'Your coach legal packet is incomplete. Admins cannot activate your profile until all current documents are signed.'
+        : 'Coach legal templates are not published yet. Admins cannot activate profiles until templates are seeded.',
     });
   }
   if (unreadCount > 0) {
@@ -274,7 +272,7 @@ export default function CoachOverview() {
           { label: 'This Week',          value: stats.thisWeek,         icon: CalendarClock },
           { label: 'Active Clients 30d', value: stats.activeClients,    icon: Users },
           { label: 'Completed / Month',  value: stats.completedThisMonth, icon: CheckCircle2 },
-          { label: 'Pending Cash',       value: formatCurrency(stats.pendingCash), icon: DollarSign },
+          { label: 'Payout Setup',       value: coach?.stripe_account_id ? 'Connected' : 'Needed', icon: ClipboardList },
         ].map(s => (
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -314,16 +312,6 @@ export default function CoachOverview() {
                       } catch (err) {
                         console.error(err);
                         toast.error('Could not mark as completed');
-                      }
-                    }}
-                    onMarkPaid={async () => {
-                      try {
-                        await sessionRepo.update(s.id, { payment_status: 'paid' });
-                        setSessions(prev => prev.map(x => x.id === s.id ? { ...x, payment_status: 'paid' } : x));
-                        toast.success('Marked as paid');
-                      } catch (err) {
-                        console.error(err);
-                        toast.error('Could not mark as paid');
                       }
                     }}
                   />
@@ -377,6 +365,16 @@ export default function CoachOverview() {
 
         {/* Right column: checklist + recent -------------------------- */}
         <div className="space-y-6">
+          {user?.coach_id && (
+            <LegalSignaturePanel
+              signerRole="coach"
+              coachId={user.coach_id}
+              title="Coach Legal Packet"
+              description="Sign independent contractor, safeguarding, credential, payout, and platform documents before activation."
+              compact
+              onStatusChange={setLegalStatus}
+            />
+          )}
           <OnboardingChecklist user={user} coach={coach} />
 
           <div>
@@ -445,9 +443,8 @@ export default function CoachOverview() {
   );
 }
 
-// Today card — links to client detail and supports inline mark-completed / mark-paid.
-function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
-  const cashUnpaid = s.payment_method === 'cash' && s.payment_status === 'unpaid';
+// Today card — links to client detail and supports inline mark-completed.
+function TodaySessionCard({ session: s, onMarkCompleted }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex items-start justify-between gap-3 flex-wrap">
       <Link
@@ -472,11 +469,6 @@ function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
         </div>
       </Link>
       <div className="flex items-center gap-2 flex-wrap">
-        {cashUnpaid && (
-          <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px]">
-            Unpaid · {formatCurrency(s.total_price || 0)}
-          </Badge>
-        )}
         {(s.status === 'pending' || s.status === 'confirmed') && (
           <Button
             size="sm"
@@ -484,16 +476,6 @@ function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
             className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
           >
             <CheckCircle2 className="w-3 h-3 mr-1" /> Done
-          </Button>
-        )}
-        {cashUnpaid && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onMarkPaid}
-            className="font-display tracking-wider uppercase text-xs"
-          >
-            <DollarSign className="w-3 h-3 mr-1" /> Mark Paid
           </Button>
         )}
         <Link to="/coach/messages">

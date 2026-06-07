@@ -6,10 +6,9 @@ import { email as emailLib } from '@/lib/email';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, MessageSquare, Settings, Shield, Clock, CheckCircle2, XCircle, Zap, CalendarClock, AlertTriangle, TrendingUp, Target, User as UserIcon, Repeat, Receipt, LifeBuoy, Sparkles, BookOpen } from 'lucide-react';
+import { Calendar as CalendarIcon, MessageSquare, Settings, Shield, Clock, CheckCircle2, XCircle, Zap, CalendarClock, TrendingUp, Target, User as UserIcon, Repeat, Receipt, LifeBuoy, Sparkles, BookOpen } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format, startOfDay, parseISO, isBefore, isWithinInterval } from 'date-fns';
-import PaymentHandles from '@/components/shared/PaymentHandles';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -438,6 +437,7 @@ export default function Dashboard() {
     () => credits.filter(c => (c.total_credits - c.used_credits) > 0),
     [credits]
   );
+  const firstActiveCredit = activeCredits[0] || null;
   const inactiveCredits = useMemo(
     () => credits.filter(c => (c.total_credits - c.used_credits) <= 0),
     [credits]
@@ -597,11 +597,11 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground">{formatTimeET(progress.nextSession.date, progress.nextSession.start_time)}</p>
                   </div>
                 ) : progress.remainingCredits > 0 ? (
-                  <Link to="/book" className="text-sm font-display tracking-wider text-accent hover:underline">
+                  <Link to={firstActiveCredit ? `/book?credit_id=${firstActiveCredit.id}` : '/coaches'} className="text-sm font-display tracking-wider text-accent hover:underline">
                     {progress.remainingCredits} credit{progress.remainingCredits === 1 ? '' : 's'} → schedule →
                   </Link>
                 ) : (
-                  <Link to="/book" className="text-sm font-display tracking-wider text-accent hover:underline">
+                  <Link to="/coaches" className="text-sm font-display tracking-wider text-accent hover:underline">
                     Book a session →
                   </Link>
                 )}
@@ -619,7 +619,7 @@ export default function Dashboard() {
             <h3 className="font-display text-lg font-bold tracking-wider text-foreground mb-1">WELCOME TO LC TRAINING!</h3>
             <p className="text-sm text-muted-foreground mb-4">You're all set. Here's what you can do to get started:</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Link to="/book">
+              <Link to="/coaches">
                 <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
                   <p className="font-display tracking-wider text-sm text-foreground">Book a Session</p>
                   <p className="text-xs text-muted-foreground mt-1">Choose a package and pick your coach.</p>
@@ -663,13 +663,13 @@ export default function Dashboard() {
                   {!isCoach && (
                     <div className="mt-4 flex flex-wrap gap-2 justify-center">
                       {progress.remainingCredits > 0 ? (
-                        <Link to="/book">
+                        <Link to={firstActiveCredit ? `/book?credit_id=${firstActiveCredit.id}` : '/coaches'}>
                           <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                             <CalendarClock className="w-3 h-3 mr-1.5" /> Schedule {progress.remainingCredits} Credit{progress.remainingCredits === 1 ? '' : 's'}
                           </Button>
                         </Link>
                       ) : (
-                        <Link to="/book">
+                        <Link to="/coaches">
                           <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                             Book a Session
                           </Button>
@@ -730,21 +730,11 @@ export default function Dashboard() {
                             ) : null}
                             {!isCoach && session.payment_method && (
                               <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-display tracking-wide uppercase ${
-                                session.payment_method === 'cash' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
                                 session.payment_method === 'credits' ? 'bg-primary/10 text-primary border border-primary/20' :
                                 'bg-green-500/10 text-green-400 border border-green-500/20'
                               }`}>
-                                {session.payment_method === 'cash' ? '💵 Cash' : session.payment_method === 'credits' ? '⚡ Credits' : '💳 Electronic'}
+                                {session.payment_method === 'credits' ? 'Credits' : 'Stripe'}
                               </span>
-                            )}
-                            {session.payment_method === 'cash' && session.payment_status === 'unpaid' && (
-                              <div className="mt-2 flex items-start gap-2 text-xs text-yellow-400/90 bg-yellow-500/10 border border-yellow-500/20 rounded px-2 py-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                                <span>
-                                  Cash is paid directly to your coach at the session.
-                                  {session.total_price ? <> Bring <strong>${session.total_price}</strong>.</> : null}
-                                </span>
-                              </div>
                             )}
                             </div>
                           </div>
@@ -752,9 +742,6 @@ export default function Dashboard() {
                             <Badge className={`${sc?.color} border`}>
                               <Icon className="w-3 h-3 mr-1" />{sc?.label}
                             </Badge>
-                            {session.payment_status === 'unpaid' && session.payment_method === 'cash' && (
-                              <Badge className="bg-accent/10 text-accent border-accent/20 border">Unpaid</Badge>
-                            )}
                           </div>
                         </div>
 
@@ -791,18 +778,6 @@ export default function Dashboard() {
                               >
                                 Cancel
                               </Button>
-                              {session.payment_method === 'cash' && session.payment_status === 'unpaid' && (
-                                <Button
-                                  size="sm"
-                                  onClick={async () => {
-                                    await sessionRepo.update(session.id, { payment_status: 'paid' });
-                                    setSessions(prev => prev.map(s => s.id === session.id ? { ...s, payment_status: 'paid' } : s));
-                                  }}
-                                  className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
-                                >
-                                  Confirm Cash
-                                </Button>
-                              )}
                             </div>
                           )}
                           {!isCoach && (() => {
@@ -909,11 +884,6 @@ export default function Dashboard() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Coach payment handles (for coaches) */}
-            {isCoach && user?.coach_id && coaches[user.coach_id] && (
-              <PaymentHandles coach={coaches[user.coach_id]} />
-            )}
-
             {/* Packages / receipts (clients only) */}
             {!isCoach && credits.length > 0 && (
               <div className="bg-card border border-border rounded-lg p-4">
@@ -928,10 +898,7 @@ export default function Dashboard() {
                     const durLabel = c.session_duration_minutes
                       ? `${c.session_duration_minutes >= 60 ? `${c.session_duration_minutes / 60} hr${c.session_duration_minutes > 60 ? 's' : ''}` : `${c.session_duration_minutes} min`}`
                       : null;
-                    const methodLabel = c.payment_processor === 'cash_pending'
-                      ? 'Cash · pay coach at session'
-                      : c.payment_processor === 'paypal' ? 'Paid · PayPal'
-                      : c.payment_processor === 'stripe' ? 'Paid · Card'
+                    const methodLabel = c.payment_processor === 'stripe' ? 'Paid · Stripe'
                       : c.payment_processor ? `Paid · ${c.payment_processor}`
                       : null;
                     return (
@@ -966,7 +933,7 @@ export default function Dashboard() {
               <h3 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground mb-4">Quick Actions</h3>
               <div className="space-y-2">
                 {!isCoach && (
-                  <Link to="/book" className="block">
+                  <Link to="/coaches" className="block">
                     <Button variant="ghost" className="w-full justify-start text-sm">
                       <CalendarIcon className="w-4 h-4 mr-2" /> Book a Session
                     </Button>

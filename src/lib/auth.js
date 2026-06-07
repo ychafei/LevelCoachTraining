@@ -1,6 +1,17 @@
 import { account, databases, functions, DB_ID, COL, Query, ID } from '@/api/appwriteClient';
 import { OAuthProvider } from 'appwrite';
 
+function toProfilePatch(data) {
+  const out = {};
+  for (const [key, value] of Object.entries(data || {})) {
+    if (value === undefined) continue;
+    if (key.startsWith('$')) continue;
+    if (key === 'id' || key === 'created_date' || key === 'updated_date') continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 // Hydrate the matching `profiles` document for an Appwrite account, then
 // merge into a single app-shaped user object. The app reads `.email`,
 // `.role`, `.is_super_admin`, `.first_name`, `.last_name`, `.id` etc., so
@@ -29,6 +40,8 @@ async function hydrateProfile(acc) {
         first_name: '',
         last_name: '',
         profile_setup_complete: false,
+        onboarding_role: '',
+        onboarding_status: 'incomplete',
       });
     } catch (err) {
       console.error('[auth] failed to auto-create profile for', acc.$id, err);
@@ -88,6 +101,25 @@ async function hydrateProfile(acc) {
   // Profile fields take precedence; account email is authoritative. Typed as
   // `any` because the profile schema is dynamic — TS can't see the columns
   // that come back from Appwrite.
+  let organizationMemberships = [];
+  if (profile) {
+    try {
+      const memberships = await databases.listDocuments(DB_ID, COL.OrganizationMember, [
+        Query.equal('profile_id', profile.$id),
+        Query.equal('status', 'active'),
+        Query.limit(25),
+      ]);
+      organizationMemberships = memberships.documents.map((doc) => ({
+        ...doc,
+        id: doc.$id,
+      }));
+    } catch (err) {
+      // Older/staging databases may not have the Phase 0 collections until
+      // provisioned. Auth should still work so users can reach setup screens.
+      console.warn('[auth] organization memberships unavailable', err?.message || err);
+    }
+  }
+
   /** @type {any} */
   const merged = Object.assign({}, profile || {}, {
     id: profile ? profile.$id : acc.$id,
@@ -97,6 +129,9 @@ async function hydrateProfile(acc) {
       ? [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || acc.name
       : acc.name,
     is_super_admin: profile?.role === 'super_admin',
+    organization_memberships: organizationMemberships,
+    organization_ids: organizationMemberships.map((m) => m.organization_id).filter(Boolean),
+    primary_organization_id: profile?.primary_organization_id || organizationMemberships[0]?.organization_id || '',
     created_date: profile?.$createdAt || acc.$createdAt,
     updated_date: profile?.$updatedAt || acc.$updatedAt,
   });
@@ -213,7 +248,7 @@ export const auth = {
     if (!existing) {
       throw new Error('No profile found for current account');
     }
-    await databases.updateDocument(DB_ID, COL.Profile, existing.$id, data);
+    await databases.updateDocument(DB_ID, COL.Profile, existing.$id, toProfilePatch(data));
     return auth.getCurrentUser();
   },
 
@@ -227,5 +262,27 @@ export const auth = {
       false,
     );
     return JSON.parse(exec.responseBody || '{}');
+  },
+
+  bootstrapMasterAdmin: async () => {
+    const exec = await functions.createExecution('bootstrapMasterAdmin', JSON.stringify({}), false);
+    const data = JSON.parse(exec.responseBody || '{}');
+    if (exec.responseStatusCode >= 400 || data.error) {
+      throw new Error(data.error || `bootstrapMasterAdmin failed: ${exec.responseStatusCode}`);
+    }
+    return data;
+  },
+
+  grantAdminRole: async ({ profileId, role, allowSuperAdmin = false }) => {
+    const exec = await functions.createExecution(
+      'grantAdminRole',
+      JSON.stringify({ profile_id: profileId, role, allow_super_admin: allowSuperAdmin }),
+      false,
+    );
+    const data = JSON.parse(exec.responseBody || '{}');
+    if (exec.responseStatusCode >= 400 || data.error) {
+      throw new Error(data.error || `grantAdminRole failed: ${exec.responseStatusCode}`);
+    }
+    return data;
   },
 };

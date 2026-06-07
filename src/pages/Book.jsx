@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { sessionRepo, sessionCreditRepo, pricingPackageRepo } from '@/api/repo';
+import {
+  athleteAvailabilityPreferenceRepo,
+  pricingPackageRepo,
+  sessionCreditRepo,
+  sessionRepo,
+} from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { rpc } from '@/lib/rpc';
 import {
@@ -10,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,12 +32,15 @@ import {
 } from 'lucide-react';
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
-import PayPalCheckout from '@/components/PayPalCheckout';
 import StripeCheckout from '@/components/StripeCheckout';
 import OnboardingModal from '@/components/OnboardingModal';
 import BookingSummaryCard from '@/components/booking/BookingSummaryCard';
 import { DEMO_COACH_PROFILES } from '@/lib/demoCoachProfiles';
 import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
+import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
+import { legalSignerRoleForUser } from '@/lib/legal';
+import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
+import { placeFromParams } from '@/lib/metroDetroitPlaces';
 
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
@@ -42,16 +50,37 @@ const DURATIONS = [
   { label: '3 Hours',   minutes: 180, hours: 3,   discount: 0.20 },
 ];
 
-const GOAL_TAGS = ['Ball Control', 'Shooting', 'Passing', 'Speed & Agility', 'Positioning', 'Game IQ', 'Fitness', 'Defending'];
-
 const TIME_SLOTS = [];
 for (let h = 8; h <= 20; h++) {
   TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`);
   if (h < 20) TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`);
 }
 
-// Steps: 0=County, 1=Coach, 2=Package, 3=Duration, 4=Goals, 5=Checkout
-const STEPS = ['County', 'Coach', 'Package', 'Duration', 'Goals', 'Checkout'];
+const DATE_WINDOWS = [
+  { value: 'next_7_days', label: 'Next 7 days' },
+  { value: 'next_14_days', label: 'Next 14 days' },
+  { value: 'next_30_days', label: 'Next 30 days' },
+  { value: 'this_month', label: 'This month' },
+];
+
+const PREFERRED_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const TIME_OF_DAY_OPTIONS = [
+  { value: 'morning', label: 'Morning' },
+  { value: 'afternoon', label: 'Afternoon' },
+  { value: 'evening', label: 'Evening' },
+];
+
+const DEFAULT_AVAILABILITY_PREFERENCE = {
+  dateWindow: 'next_14_days',
+  preferredDays: [],
+  timeOfDay: [],
+  earliestStart: '09:00',
+  latestStart: '19:00',
+};
+
+// Steps: 0=County, 1=Coach, 2=Package, 3=Duration, 4=Availability, 5=Checkout
+const STEPS = ['County', 'Coach', 'Package', 'Duration', 'Availability', 'Checkout'];
 
 function calcPrice(pkg, dur) {
   if (!pkg || !dur) return null;
@@ -65,10 +94,23 @@ export default function Book() {
   const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
   const stripeSuccess = urlParams.get('stripe_success');
+  const queryPlace = placeFromParams(urlParams);
   const { user, refetch } = useCurrentUser();
   const [showProfileGate, setShowProfileGate] = useState(false);
+  const signerRole = user ? legalSignerRoleForUser(user) : '';
+  const legalStatus = useLegalPacketStatus({
+    user,
+    signerRole,
+    coachId: signerRole === 'coach' ? user?.coach_id || '' : '',
+    organizationId: signerRole === 'organization_admin' ? user?.primary_organization_id || '' : '',
+  });
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
+  const hasSelectedBookingContext = !!preCoachId
+    || !!preCreditId
+    || stripeSuccess === '1'
+    || urlParams.get('stripe_cancel') === '1'
+    || !!saved?.coach?.id;
 
   const [step, setStep]                       = useState(saved?.step ?? (preCounty ? 1 : 0));
   const [county, setCounty]                   = useState(saved?.county || preCounty || '');
@@ -81,13 +123,34 @@ export default function Book() {
   const [useExistingCredit, setUseExistingCredit] = useState(false);
   const [duration, setDuration]               = useState(saved?.duration || null);
   const [goals, setGoals]                     = useState(saved?.goals || '');
-  const [selectedTags, setSelectedTags]       = useState(saved?.selectedTags || []);
+  const [availabilityMode, setAvailabilityMode] = useState(saved?.availabilityMode || 'exact');
+  const [availabilityPreference, setAvailabilityPreference] = useState(() => {
+    const merged = {
+      ...DEFAULT_AVAILABILITY_PREFERENCE,
+      ...(saved?.availabilityPreference || {}),
+    };
+    return {
+      ...merged,
+      preferredDays: Array.isArray(merged.preferredDays) ? merged.preferredDays : [],
+      timeOfDay: Array.isArray(merged.timeOfDay) ? merged.timeOfDay : [],
+    };
+  });
+  const [bookingLocation] = useState(() => {
+    if (saved?.bookingLocation) return saved.bookingLocation;
+    const radius = Number(urlParams.get('location_radius') || urlParams.get('radius') || 15);
+    return {
+      label: queryPlace?.label || urlParams.get('location_label') || '',
+      lat: queryPlace?.lat ?? (urlParams.get('location_lat') ? Number(urlParams.get('location_lat')) : null),
+      lng: queryPlace?.lng ?? (urlParams.get('location_lng') ? Number(urlParams.get('location_lng')) : null),
+      radius: Number.isFinite(radius) && radius > 0 ? radius : 15,
+    };
+  });
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [skipToSchedule, setSkipToSchedule] = useState(false);
   const [creditRecord, setCreditRecord]       = useState(null);
+  const [stripeCheckoutMessage, setStripeCheckoutMessage] = useState('');
 
   // Schedule later state
-  const [paymentMethod, setPaymentMethod]      = useState(null); // 'paypal' | 'cash'
   const [scheduling, setScheduling]           = useState(false); // true = user chose "Schedule Now"
   const [blocks, setBlocks]                   = useState([]);
   const [existingSessions, setExistingSessions] = useState([]);
@@ -194,27 +257,38 @@ export default function Book() {
   // Detect Stripe Checkout success redirect
   useEffect(() => {
     if (stripeSuccess === '1' && user) {
-      // Stripe webhook already created the SessionCredit on the server.
-      // Advance the UI to the "Payment Confirmed" screen.
-      // Clean the URL so refreshing doesn't re-trigger
+      let cancelled = false;
       const url = new URL(window.location.href);
       url.searchParams.delete('stripe_success');
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.pathname);
+      setStep(5);
+      setStripeCheckoutMessage('Payment received. Waiting for Stripe to finish issuing your training credits.');
 
-      // Reload credits to pick up the webhook-created record, then advance
-      sessionCreditRepo.filter({ client_email: user.email }).then(credits => {
-        const active = credits.find(c => (c.total_credits - c.used_credits) > 0);
+      (async () => {
+        let active = null;
+        for (let i = 0; i < 8; i += 1) {
+          const credits = await sessionCreditRepo.filter({ client_email: user.email });
+          active = credits.find(c => (c.total_credits - c.used_credits) > 0 && c.payment_processor === 'stripe');
+          if (active || cancelled) break;
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        if (cancelled) return;
         if (active) {
           setExistingCredit(active);
+          setUseExistingCredit(true);
           setCreditRecord(active);
           if (active.session_duration_minutes) {
             const creditDur = DURATIONS.find(d => d.minutes === active.session_duration_minutes);
             if (creditDur) setDuration(creditDur);
           }
+          setStripeCheckoutMessage('');
+          setPaymentConfirmed(true);
+        } else {
+          setStripeCheckoutMessage('Stripe confirmed the checkout, but the credit package is still processing. Refresh this page in a moment or check your dashboard.');
         }
-        setPaymentConfirmed(true);
-      });
+      })();
+      return () => { cancelled = true; };
     }
   }, [stripeSuccess, user]);
 
@@ -252,11 +326,28 @@ export default function Book() {
   };
 
   const sessionPrice = calcPrice(selectedPackage, duration);
+  const legalReadyForBooking = !user || legalStatus.complete;
+  const flexibleAvailabilityValid = availabilityMode !== 'flexible'
+    || (
+      availabilityPreference.preferredDays.length > 0
+      && availabilityPreference.timeOfDay.length > 0
+      && availabilityPreference.earliestStart
+      && availabilityPreference.latestStart
+      && availabilityPreference.earliestStart < availabilityPreference.latestStart
+    );
+  const checkoutExtraPayload = {
+    booking_location_label: bookingLocation.label || '',
+    booking_location_lat: bookingLocation.lat ?? '',
+    booking_location_lng: bookingLocation.lng ?? '',
+    booking_location_radius: bookingLocation.radius || 15,
+    availability_mode: availabilityMode,
+    availability_preference: availabilityPreference,
+    client_notes: goals.trim(),
+  };
 
-  const paypalHandle = coach?.paypal?.replace(/^(https?:\/\/)?(www\.)?paypal\.me\//, '');
-  const paypalUrl = paypalHandle
-    ? `https://paypal.me/${paypalHandle}${sessionPrice ? '/' + sessionPrice : ''}`
-    : null;
+  if (!hasSelectedBookingContext) {
+    return <Navigate to="/coaches" replace />;
+  }
 
   const saveBookingIntent = (extra = {}) => {
     sessionStorage.setItem('lc_booking', JSON.stringify({
@@ -266,78 +357,94 @@ export default function Book() {
       selectedPackage,
       duration,
       goals,
-      selectedTags,
+      bookingLocation,
+      availabilityMode,
+      availabilityPreference,
       selectedDate: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null,
       selectedTime,
       ...extra,
     }));
   };
 
-  // Called after user confirms payment
-  const handlePaymentConfirmed = async (method) => {
+  const persistAvailabilityPreference = async () => {
+    if (!user || availabilityMode !== 'flexible') return null;
+    if (!flexibleAvailabilityValid) {
+      throw new Error('Select preferred days, time of day, and a valid start window before checkout.');
+    }
+    return athleteAvailabilityPreferenceRepo.create({
+      athlete_id: user.id,
+      flexible: true,
+      date_window: JSON.stringify({ preset: availabilityPreference.dateWindow }),
+      preferred_days: availabilityPreference.preferredDays,
+      time_of_day: availabilityPreference.timeOfDay,
+      earliest_start: availabilityPreference.earliestStart,
+      latest_start: availabilityPreference.latestStart,
+      location_radius: Number(bookingLocation.radius || 15),
+    });
+  };
+
+  const toggleAvailabilityArray = (key, value) => {
+    setAvailabilityPreference((prev) => {
+      const current = Array.isArray(prev[key]) ? prev[key] : [];
+      return {
+        ...prev,
+        [key]: current.includes(value)
+          ? current.filter((item) => item !== value)
+          : [...current, value],
+      };
+    });
+  };
+
+  const handleUseExistingCredits = async () => {
     if (!user) {
       saveBookingIntent();
       auth.signIn(window.location.href);
       return;
     }
-    sessionStorage.removeItem('lc_booking');
-    setSubmitting(true);
-
-    const clientFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
-
-    if (useExistingCredit && existingCredit) {
-      // Using existing credits — don't deduct here, deduct when session is actually booked
-      setCreditRecord(existingCredit);
-    } else if (method === 'electronic') {
-      // Electronic payments (PayPal/Stripe): webhook creates the credit.
-      // Poll briefly to pick it up, but don't create a duplicate.
-      let found = null;
-      for (let i = 0; i < 5; i++) {
-        await new Promise(r => setTimeout(r, 1500));
-        const credits = await sessionCreditRepo.filter({ client_email: user.email });
-        found = credits.find(c => (c.total_credits - c.used_credits) > 0 && !creditRecord?.id?.includes?.(c.id));
-        if (found) break;
-      }
-      if (found) {
-        setCreditRecord(found);
-        setExistingCredit(found);
-      }
-      // If webhook hasn't fired yet, user can still proceed — credit will appear on Dashboard
-    } else if (method === 'cash') {
-      // Cash: create credit record on frontend (no webhook for cash).
-      // Credits are usable immediately — client pays coach directly at the session.
-      // Processor = 'cash_pending' so admin/coach views can distinguish from fully-paid ones.
-      const credit = await sessionCreditRepo.create({
-        client_email: user.email,
-        client_name: clientFullName,
-        package_id: selectedPackage.id,
-        package_name: selectedPackage.name,
-        total_credits: selectedPackage.sessions || 1,
-        used_credits: 0,
-        session_duration_minutes: duration?.minutes ?? 60,
-        per_session_base_price: Math.round(selectedPackage.price / (selectedPackage.sessions || 1)),
-        payment_processor: 'cash_pending',
-      });
-      setCreditRecord(credit);
-      setExistingCredit(credit);
+    if (!legalStatus.complete) {
+      setStep(5);
+      alert('Please complete the required legal packet before payment or scheduling.');
+      return;
     }
-
-    setPaymentMethod(method);
+    setSubmitting(true);
+    try {
+      await persistAvailabilityPreference();
+    } catch (err) {
+      setSubmitting(false);
+      alert(err?.message || 'Please finish your availability preferences before continuing.');
+      return;
+    }
+    sessionStorage.removeItem('lc_booking');
+    if (useExistingCredit && existingCredit) {
+      setCreditRecord(existingCredit);
+      setPaymentConfirmed(true);
+    } else {
+      alert('No active credit package is available yet.');
+    }
     setSubmitting(false);
-    setPaymentConfirmed(true);
   };
 
   // Book a specific session after credits are awarded
   const handleBookSession = async () => {
     if (!selectedDate || !selectedTime || !coach) return;
+    if (!legalStatus.complete) {
+      setStep(5);
+      alert('Please complete the required legal packet before confirming a session.');
+      return;
+    }
     setSubmitting(true);
-    const sessionGoals = [...selectedTags, goals].filter(Boolean).join(', ');
-    const pmMethod = useExistingCredit ? 'credits' : paymentMethod === 'cash' ? 'cash' : 'electronic';
+    const sessionGoals = goals.trim();
+    const pmMethod = useExistingCredit ? 'credits' : 'electronic';
     const durationMinutes = duration?.minutes ?? 60;
     const clientAge = user.dob ? Math.floor((Date.now() - new Date(user.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
-    // Deduct 1 credit from the active credit record (all paths — existing credits, new purchase, cash)
+    // Deduct 1 credit from the active credit record.
     const activeCredit = creditRecord || existingCredit;
+    if (!activeCredit) {
+      setSubmitting(false);
+      alert('No active credit package is available yet. Please wait for Stripe to finish processing your payment.');
+      return;
+    }
     if (activeCredit) {
       const remaining = activeCredit.total_credits - activeCredit.used_credits;
       if (remaining < 1) {
@@ -364,7 +471,7 @@ export default function Book() {
       start_time: selectedTime,
       duration_minutes: durationMinutes,
       status: 'confirmed',
-      payment_status: pmMethod === 'cash' ? 'unpaid' : 'paid',
+      payment_status: 'paid',
       payment_method: pmMethod,
       county,
       session_goals: sessionGoals,
@@ -613,8 +720,6 @@ export default function Book() {
         setSelectedDate={setSelectedDate}
         selectedTime={selectedTime}
         setSelectedTime={setSelectedTime}
-        selectedTags={selectedTags}
-        setSelectedTags={setSelectedTags}
         goals={goals}
         setGoals={setGoals}
         isDateBlocked={isDateBlocked}
@@ -631,7 +736,7 @@ export default function Book() {
       case 1: return !!coach;
       case 2: return !!selectedPackage;
       case 3: return !!duration;
-      case 4: return !user || user.profile_setup_complete;
+      case 4: return (!user || user.profile_setup_complete) && flexibleAvailabilityValid;
       case 5: return true;
       default: return false;
     }
@@ -648,6 +753,8 @@ export default function Book() {
     creditRemaining: existingCredit ? existingCredit.total_credits - existingCredit.used_credits : null,
     creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
     creditPackageName: existingCredit?.package_name ?? null,
+    bookingLocation,
+    availabilityMode,
   };
 
   return (
@@ -830,22 +937,135 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 4: Goals */}
+        {/* Step 4: Availability */}
         {step === 4 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SESSION GOALS</h2>
-            <div className="flex flex-wrap gap-2 mb-6">
-              {GOAL_TAGS.map((tag) => (
-                <button key={tag}
-                  onClick={() => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                  className={`px-4 py-2 rounded-full border text-sm font-display tracking-wide uppercase transition-all ${selectedTags.includes(tag) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
-                  {tag}
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">AVAILABILITY & NOTES</h2>
+            <p className="text-muted-foreground text-sm mb-8">
+              Choose a specific scheduling path or share a flexible window the coach can work with.
+            </p>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {[
+                ['exact', 'Choose exact times', 'Pick session times after checkout using the coach calendar.'],
+                ['flexible', 'I am flexible', 'Share date windows, preferred days, and start-time preferences.'],
+              ].map(([value, title, body]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAvailabilityMode(value)}
+                  className={`rounded-lg border p-5 text-left transition-all ${
+                    availabilityMode === value
+                      ? 'border-accent bg-accent/10 text-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:border-accent/30'
+                  }`}
+                >
+                  <p className="font-display text-lg font-bold tracking-wider uppercase">{title}</p>
+                  <p className="mt-2 text-sm leading-6">{body}</p>
                 </button>
               ))}
             </div>
-            <Textarea placeholder="Any additional goals or notes for your sessions..."
-              value={goals} onChange={(e) => setGoals(e.target.value)}
-              className="bg-card border-border" rows={4} />
+
+            {availabilityMode === 'flexible' && (
+              <div className="mt-6 rounded-lg border border-border bg-card p-5">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Date Window</span>
+                    <select
+                      value={availabilityPreference.dateWindow}
+                      onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, dateWindow: event.target.value }))}
+                      className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
+                    >
+                      {DATE_WINDOWS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div>
+                    <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Start Window</span>
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      <input
+                        type="time"
+                        value={availabilityPreference.earliestStart}
+                        onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, earliestStart: event.target.value }))}
+                        className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
+                        aria-label="Earliest start"
+                      />
+                      <input
+                        type="time"
+                        value={availabilityPreference.latestStart}
+                        onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, latestStart: event.target.value }))}
+                        className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
+                        aria-label="Latest start"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">Preferred Days</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {PREFERRED_DAYS.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleAvailabilityArray('preferredDays', day)}
+                        className={`rounded-full border px-3 py-2 text-xs font-bold transition-all ${
+                          availabilityPreference.preferredDays.includes(day)
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border text-muted-foreground hover:border-accent/30'
+                        }`}
+                      >
+                        {day.slice(0, 3)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">Time of Day</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {TIME_OF_DAY_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => toggleAvailabilityArray('timeOfDay', option.value)}
+                        className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-all ${
+                          availabilityPreference.timeOfDay.includes(option.value)
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border text-muted-foreground hover:border-accent/30'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-lg bg-secondary/50 p-4 text-sm text-muted-foreground">
+                  Location radius: <span className="font-bold text-foreground">{bookingLocation.radius || 15} miles</span>
+                  {bookingLocation.label ? ` from ${bookingLocation.label}` : ' from your selected training area'}
+                </div>
+
+                {!flexibleAvailabilityValid && (
+                  <p className="mt-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600">
+                    Select at least one preferred day, one time of day, and a valid start window.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-6">
+              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-2">Optional Notes</p>
+              <Textarea
+                placeholder="Anything the coach should know before the first session?"
+                value={goals}
+                onChange={(e) => setGoals(e.target.value)}
+                className="bg-card border-border"
+                rows={4}
+              />
+            </div>
 
             {user && !user.profile_setup_complete && (
               <div className="mt-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
@@ -889,6 +1109,8 @@ export default function Book() {
                   ['Session Duration', duration?.label],
                   ['Coach', `${coach?.first_name} ${coach?.last_name}`],
                   ['County', county],
+                  ['Location', bookingLocation.label ? `${bookingLocation.label} (${bookingLocation.radius || 15} mi)` : 'Coach training area'],
+                  ['Availability', availabilityMode === 'flexible' ? 'Flexible window' : 'Exact scheduling'],
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between py-2 border-b border-border last:border-0">
                     <span className="text-muted-foreground text-sm">{label}</span>
@@ -910,12 +1132,25 @@ export default function Book() {
               )}
             </div>
 
+            {user && (
+              <div className="mb-6">
+                <LegalSignaturePanel
+                  signerRole={signerRole}
+                  coachId={signerRole === 'coach' ? user?.coach_id || '' : ''}
+                  organizationId={signerRole === 'organization_admin' ? user?.primary_organization_id || '' : ''}
+                  title="Legal Packet Required"
+                  description="Complete the current required documents before paying for or scheduling training."
+                  compact={legalStatus.complete}
+                />
+              </div>
+            )}
+
             {/* Payment Options */}
             {!useExistingCredit && (
               <div className="bg-card border border-border rounded-lg p-6 mb-6">
                 <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Pay <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> securely.
+                  Pay <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> securely through Stripe Checkout.
                 </p>
                 {!user ? (
                   <div className="text-center py-4">
@@ -932,86 +1167,42 @@ export default function Book() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div>
-                      <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Choose Payment Method</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { id: 'paypal', label: 'PayPal', icon: '🅿️' },
-                          { id: 'card', label: 'Card', icon: '💳' },
-                          { id: 'cash', label: 'Cash', icon: '💵' },
-                        ].map(opt => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setPaymentMethod(opt.id)}
-                            className={`p-3 rounded-lg border text-center transition-all ${paymentMethod === opt.id ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                          >
-                            <div className="text-xl mb-1">{opt.icon}</div>
-                            <div className="text-xs font-display tracking-wider uppercase">{opt.label}</div>
-                          </button>
-                        ))}
-                      </div>
+                    {!legalReadyForBooking && (
+                      <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-500">
+                        Stripe Checkout unlocks after the required legal packet is complete.
+                      </p>
+                    )}
+                    {stripeCheckoutMessage && (
+                      <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent">
+                        {stripeCheckoutMessage}
+                      </p>
+                    )}
+                    <div className="border-t border-border pt-4">
+                      <StripeCheckout
+                        packageId={selectedPackage?.id}
+                        coachId={coach?.id}
+                        sessionDurationMinutes={duration?.minutes}
+                        extraPayload={checkoutExtraPayload}
+                        onBeforeCheckout={persistAvailabilityPreference}
+                        disabled={!legalReadyForBooking || !selectedPackage?.id || !coach?.id}
+                      />
                     </div>
-
-                    {paymentMethod === 'paypal' && (
-                      <div className="border-t border-border pt-4">
-                        <PayPalCheckout
-                          amount={sessionPrice * (selectedPackage?.sessions || 1)}
-                          packageId={selectedPackage?.id}
-                          packageName={selectedPackage?.name}
-                          packageSessions={selectedPackage?.sessions || 1}
-                          sessionDurationMinutes={duration?.minutes}
-                          onSuccess={() => handlePaymentConfirmed('electronic')}
-                        />
-                      </div>
-                    )}
-
-                    {paymentMethod === 'card' && (
-                      <div className="border-t border-border pt-4">
-                        <StripeCheckout
-                          amount={sessionPrice * (selectedPackage?.sessions || 1)}
-                          packageId={selectedPackage?.id}
-                          packageName={selectedPackage?.name}
-                          packageSessions={selectedPackage?.sessions || 1}
-                          sessionDurationMinutes={duration?.minutes}
-                          onSuccess={() => handlePaymentConfirmed('electronic')}
-                        />
-                      </div>
-                    )}
-
-                    {paymentMethod === 'cash' && (
-                      <div className="border-t border-border pt-4">
-                        <div className="bg-secondary/50 border border-border rounded-lg p-3 mb-3">
-                          <p className="text-xs text-muted-foreground">
-                            Bring <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> in exact cash to your session. Your coach collects payment directly — LevelCoach Training is not involved in the cash transaction.
-                          </p>
-                        </div>
-                        <Button
-                          onClick={() => handlePaymentConfirmed('cash')}
-                          className="w-full bg-secondary border border-border text-foreground font-display tracking-wider uppercase hover:bg-secondary/80 h-12"
-                        >
-                          I Understand — Reserve My Sessions
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Confirm button (existing credits only) */}
-            <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
-              <p className="text-xs text-accent font-display tracking-wide uppercase mb-1">After completing payment</p>
-              <p className="text-xs text-muted-foreground">
-                Click below once you've sent the payment. Your credits will be activated and you can schedule sessions whenever you're ready.
-              </p>
-            </div>
-
             {useExistingCredit && (
-              <Button onClick={() => handlePaymentConfirmed('credits')} disabled={submitting}
-                className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
-                {submitting ? 'Activating Credits...' : 'Use My Credits & Continue'}
-              </Button>
+              <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
+                <p className="text-xs text-accent font-display tracking-wide uppercase mb-1">Credit package available</p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Use your active training credits to schedule this session.
+                </p>
+                <Button onClick={handleUseExistingCredits} disabled={submitting || !legalReadyForBooking}
+                  className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
+                  {submitting ? 'Preparing Credits...' : 'Use My Credits & Continue'}
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -1063,8 +1254,6 @@ function LoggedOutBookIntro({
   setSelectedDate,
   selectedTime,
   setSelectedTime,
-  selectedTags,
-  setSelectedTags,
   goals,
   setGoals,
   isDateBlocked,
@@ -1114,7 +1303,7 @@ function LoggedOutBookIntro({
                 Book an intro with {model.firstName}
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Pick a time, share a goal, then create a free athlete account to confirm the booking safely.
+                Pick a time, add optional notes, then create a free athlete account to confirm the booking safely.
               </p>
 
               <div className="mt-6 flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
@@ -1224,24 +1413,8 @@ function LoggedOutBookIntro({
 
       <section className="mx-auto grid max-w-[1480px] grid-cols-1 gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Training goals</p>
-          <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">What should the intro focus on?</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {GOAL_TAGS.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]))}
-                className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
-                  selectedTags.includes(tag)
-                    ? 'border-blue-600 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Intro notes</p>
+          <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Anything the coach should know?</h2>
           <Textarea
             value={goals}
             onChange={(event) => setGoals(event.target.value)}

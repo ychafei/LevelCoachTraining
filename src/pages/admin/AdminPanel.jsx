@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { sessionRepo, coachRepo, profileRepo, coachApplicationRepo, sessionCreditRepo, auditLogRepo } from '@/api/repo';
+import { sessionRepo, coachRepo, profileRepo, coachApplicationRepo, sessionCreditRepo, auditLogRepo, stripePaymentRecordRepo } from '@/api/repo';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import {
   Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare,
@@ -13,9 +13,11 @@ const adminLinks = [
   { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage coaches and verification' },
   { label: 'Bookings', path: '/admin/bookings', icon: Calendar, desc: 'View all sessions' },
   { label: 'Credits', path: '/admin/credits', icon: Zap, desc: 'Add, refund, or remove credits' },
+  { label: 'Payments', path: '/admin/payments', icon: DollarSign, desc: 'Stripe reconciliation and refunds' },
   { label: 'Content', path: '/admin/content', icon: FileText, desc: 'Edit site content' },
   { label: 'Pricing', path: '/admin/pricing', icon: DollarSign, desc: 'Manage packages' },
   { label: 'Applications', path: '/admin/applications', icon: Briefcase, desc: 'Review applications' },
+  { label: 'Legal Vault', path: '/admin/legal-documents', icon: FileText, desc: 'Templates, signatures, PDFs, and notes' },
   { label: 'Blog', path: '/admin/blog', icon: PenTool, desc: 'Create & edit posts' },
   { label: 'Users', path: '/admin/users', icon: Shield, desc: 'Manage users & roles' },
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare, desc: 'View conversations' },
@@ -38,6 +40,10 @@ function currentMonthPrefixET() {
 
 function formatUSD(n) {
   return `$${(Math.round((n || 0) * 100) / 100).toLocaleString()}`;
+}
+
+function formatCents(n) {
+  return formatUSD((Number(n) || 0) / 100);
 }
 
 function describeAuditEntry(entry) {
@@ -104,6 +110,7 @@ export default function AdminPanel() {
     users: [],
     pendingApps: [],
     credits: [],
+    payments: [],
   });
   const [auditLog, setAuditLog] = useState([]);
   const [auditLogAvailable, setAuditLogAvailable] = useState(true);
@@ -113,15 +120,16 @@ export default function AdminPanel() {
     let cancelled = false;
     const load = async () => {
       try {
-        const [sessions, coaches, users, pendingApps, credits] = await Promise.all([
+        const [sessions, coaches, users, pendingApps, credits, payments] = await Promise.all([
           sessionRepo.list('-date').catch((err) => { console.error('sessions load', err); return []; }),
           coachRepo.list().catch((err) => { console.error('coaches load', err); return []; }),
           profileRepo.list().catch((err) => { console.error('users load', err); return []; }),
           coachApplicationRepo.filter({ status: 'pending' }).catch(() => []),
           sessionCreditRepo.list().catch(() => []),
+          stripePaymentRecordRepo.list('-created_date').catch(() => []),
         ]);
         if (cancelled) return;
-        setData({ sessions, coaches, users, pendingApps, credits });
+        setData({ sessions, coaches, users, pendingApps, credits, payments });
         try {
           const audit = await auditLogRepo.list('-created_date');
           if (!cancelled) {
@@ -153,11 +161,9 @@ export default function AdminPanel() {
     const completedThisMonth = data.sessions.filter(
       (s) => s.status === 'completed' && (s.date || '').startsWith(monthPrefix),
     );
-    const pendingCash = data.sessions.reduce((sum, s) => {
-      if (s.status === 'cancelled') return sum;
-      if (s.payment_method !== 'cash') return sum;
-      if (s.payment_status === 'paid') return sum;
-      return sum + (Number(s.total_price) || 0);
+    const stripePaid = data.payments.reduce((sum, p) => {
+      if (p.status !== 'paid') return sum;
+      return sum + (Number(p.amount) || 0);
     }, 0);
 
     const activeClientEmails = new Set();
@@ -177,7 +183,7 @@ export default function AdminPanel() {
     return {
       upcomingSessions: upcomingSessions.length,
       completedThisMonth: completedThisMonth.length,
-      pendingCash,
+      stripePaid,
       activeCoaches,
       totalCoaches,
       activeClients: activeClientEmails.size,
@@ -233,11 +239,11 @@ export default function AdminPanel() {
                 to="/admin/bookings"
               />
               <StatTile
-                label="Pending Cash"
-                value={formatUSD(stats.pendingCash)}
+                label="Stripe Paid"
+                value={formatCents(stats.stripePaid)}
                 icon={DollarSign}
-                hint="cash sessions awaiting payment"
-                to="/admin/bookings"
+                hint="verified checkout payments"
+                to="/admin/payments"
               />
               <StatTile
                 label="Active Coaches"

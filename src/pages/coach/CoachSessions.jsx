@@ -17,16 +17,15 @@ import { useConfirm } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import {
   Calendar as CalendarIcon, CalendarClock, Clock, CheckCircle2, XCircle,
-  MessageSquare, MapPin, DollarSign, Search, AlertTriangle, UserCheck, ExternalLink,
+  MessageSquare, MapPin, Search, AlertTriangle, UserCheck, ExternalLink,
   Filter,
 } from 'lucide-react';
 import { formatTimeET, formatLongDateET, formatSessionRangeET } from '@/lib/formatInET';
 import { isSessionPast, isWithinHoursFromNow } from '@/lib/scheduleET';
-import { formatCurrency } from '@/lib/earnings';
 
 // Sessions page — coach-side operational view of every booking. Mirrors the
-// Dashboard reschedule flow but adds completion / no-show / mark-paid / cancel
-// actions in one place.
+// Dashboard reschedule flow but adds completion / no-show / cancel actions in
+// one place.
 
 const STATUS_TABS = [
   { key: 'today',     label: 'Today' },
@@ -65,14 +64,11 @@ function paymentMeta(s) {
   if (s.payment_status === 'paid') {
     return { tone: 'green', label: 'Paid' };
   }
-  if (s.payment_method === 'cash') {
-    return { tone: 'yellow', label: `Cash · ${formatCurrency(s.total_price || 0)}` };
-  }
   if (s.payment_method === 'credits') {
     return { tone: 'accent', label: 'Credits' };
   }
   if (s.payment_method === 'electronic') {
-    return { tone: 'muted', label: 'Electronic · unpaid' };
+    return { tone: 'muted', label: 'Stripe review' };
   }
   return { tone: 'muted', label: s.payment_status || 'unknown' };
 }
@@ -103,7 +99,7 @@ export default function CoachSessions() {
   // Filters --------------------------------------------------------------
   const [tab, setTab] = useState('today');
   const [search, setSearch] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('all');     // all | paid | unpaid_cash | unpaid_other
+  const [paymentFilter, setPaymentFilter] = useState('all');     // all | paid | review
   const [countyFilter, setCountyFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');                  // YYYY-MM-DD
   const [toDate, setToDate] = useState('');                      // YYYY-MM-DD
@@ -173,8 +169,7 @@ export default function CoachSessions() {
 
       // Payment
       if (paymentFilter === 'paid' && s.payment_status !== 'paid') return false;
-      if (paymentFilter === 'unpaid_cash' && !(s.payment_method === 'cash' && s.payment_status !== 'paid')) return false;
-      if (paymentFilter === 'unpaid_other' && !(s.payment_method !== 'cash' && s.payment_status !== 'paid')) return false;
+      if (paymentFilter === 'review' && s.payment_status === 'paid') return false;
 
       // Search by client name/email
       if (q) {
@@ -240,17 +235,6 @@ export default function CoachSessions() {
     } catch (err) {
       console.error(err);
       toast.error('Could not update session');
-    }
-  };
-
-  const markPaid = async (s) => {
-    try {
-      await sessionRepo.update(s.id, { payment_status: 'paid' });
-      patchSession(s.id, { payment_status: 'paid' });
-      toast.success('Marked as paid');
-    } catch (err) {
-      console.error(err);
-      toast.error('Could not mark as paid');
     }
   };
 
@@ -469,12 +453,11 @@ export default function CoachSessions() {
             <SelectTrigger className="w-44 bg-secondary border-border h-9">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All payments</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="unpaid_cash">Unpaid · cash</SelectItem>
-              <SelectItem value="unpaid_other">Unpaid · electronic</SelectItem>
-            </SelectContent>
+              <SelectContent>
+                <SelectItem value="all">All payments</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="review">Needs review</SelectItem>
+              </SelectContent>
           </Select>
         </div>
 
@@ -537,7 +520,6 @@ export default function CoachSessions() {
               s={s}
               onMarkCompleted={markCompleted}
               onMarkNoShow={markNoShow}
-              onMarkPaid={markPaid}
               onCancel={cancelSession}
               onReschedule={startReschedule}
               onMessage={() => navigate('/coach/messages')}
@@ -626,7 +608,7 @@ export default function CoachSessions() {
 
 // ----- Session card --------------------------------------------------------
 
-function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, onReschedule, onMessage }) {
+function SessionCard({ s, onMarkCompleted, onMarkNoShow, onCancel, onReschedule, onMessage }) {
   const sm = statusMeta(s);
   const StatusIcon = sm.icon;
   const pm = paymentMeta(s);
@@ -635,8 +617,6 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
   const canReschedule = s.status !== 'cancelled' && s.status !== 'completed';
   const canMarkComplete = (s.status === 'pending' || s.status === 'confirmed');
   const canMarkNoShow = canMarkComplete && past;
-  const canMarkPaid = s.status !== 'cancelled' && s.payment_status !== 'paid' && s.payment_method === 'cash';
-
   const paymentTone =
     pm.tone === 'green' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
     pm.tone === 'yellow' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
@@ -687,7 +667,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
 
             <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-muted-foreground">
               {s.county && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{s.county} County</span>}
-              {s.payment_method && <span className="capitalize">{s.payment_method === 'electronic' ? 'electronic pay' : s.payment_method}</span>}
+              {s.payment_method && <span>{s.payment_method === 'credits' ? 'Credits' : 'Stripe'}</span>}
             </div>
             {s.session_goals && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -721,16 +701,6 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             className="font-display tracking-wider uppercase text-xs text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-300"
           >
             <UserCheck className="w-3 h-3 mr-1" /> No-show
-          </Button>
-        )}
-        {canMarkPaid && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onMarkPaid(s)}
-            className="font-display tracking-wider uppercase text-xs"
-          >
-            <DollarSign className="w-3 h-3 mr-1" /> Mark Paid
           </Button>
         )}
         {canReschedule && (

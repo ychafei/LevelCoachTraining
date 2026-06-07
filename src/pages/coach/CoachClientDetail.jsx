@@ -519,11 +519,6 @@ export default function CoachClientDetail() {
                       <Badge className={`${sc.color} border text-[10px] font-display tracking-widest uppercase`}>
                         <Icon className="w-3 h-3 mr-1" /> {sc.label}
                       </Badge>
-                      {s.payment_method === 'cash' && s.payment_status === 'unpaid' && s.status !== 'cancelled' && (
-                        <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px] font-display tracking-widest uppercase">
-                          Unpaid · ${s.total_price || 0}
-                        </Badge>
-                      )}
                       {s.payment_status === 'paid' && (
                         <Badge className="bg-green-500/10 text-green-400 border-green-500/20 border text-[10px] font-display tracking-widest uppercase">
                           <Check className="w-3 h-3 mr-1" /> Paid

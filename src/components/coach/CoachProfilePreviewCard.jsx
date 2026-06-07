@@ -8,26 +8,10 @@ import { Badge } from '@/components/ui/badge';
 // `coach` may be a saved Coach record OR an in-progress draft (for live preview on
 // /coach/profile). Missing fields render as muted placeholders so the editor surfaces gaps.
 
-const PAYMENT_LABELS = [
-  { key: 'venmo',         label: 'Venmo' },
-  { key: 'zelle',         label: 'Zelle' },
-  { key: 'cashapp',       label: 'Cash App' },
-  { key: 'paypal',        label: 'PayPal' },
-  { key: 'cash_accepted', label: 'Cash' },
-];
-
-function acceptedPayments(coach) {
-  if (!coach) return [];
-  return PAYMENT_LABELS
-    .filter(p => p.key === 'cash_accepted' ? !!coach.cash_accepted : !!coach[p.key])
-    .map(p => p.label);
-}
-
 export default function CoachProfilePreviewCard({ coach, className = '' }) {
   const c = coach || {};
   const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Your name';
   const initials = `${(c.first_name || '?')[0] || ''}${(c.last_name || '')[0] || ''}`.toUpperCase() || '??';
-  const payments = acceptedPayments(c);
 
   return (
     <div className={`group relative bg-card border border-border rounded-lg overflow-hidden ${className}`}>
@@ -112,12 +96,6 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
           </p>
         )}
 
-        {payments.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-border">
-            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1.5">Accepts</p>
-            <p className="text-xs text-foreground">{payments.join(' · ')}</p>
-          </div>
-        )}
       </div>
     </div>
   );

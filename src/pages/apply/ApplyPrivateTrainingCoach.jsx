@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarCheck,
@@ -22,6 +22,7 @@ import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import { coachRepo } from '@/api/repo/coachRepo';
+import { onboardingPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -42,7 +43,7 @@ const PASSWORD_RULES = [
 
 export default function ApplyPrivateTrainingCoach() {
   const navigate = useNavigate();
-  const { refetchUser } = useAuth();
+  const { isAuthenticated, isLoadingAuth, user, refetchUser } = useAuth();
 
   const [form, setForm] = useState({
     firstName: '',
@@ -79,6 +80,19 @@ export default function ApplyPrivateTrainingCoach() {
   const passwordValid = passwordChecks.every((check) => check.ok);
   const passwordsMatch = form.confirmPassword.length > 0 && form.password === form.confirmPassword;
   const bioCount = form.shortBio.length;
+  const usingExistingAccount = isAuthenticated && !!user;
+
+  useEffect(() => {
+    if (!user) return;
+    setForm((current) => ({
+      ...current,
+      firstName: current.firstName || user.first_name || splitFirstName(user.name),
+      lastName: current.lastName || user.last_name || splitLastName(user.name),
+      email: user.email || current.email,
+      phone: current.phone || user.phone || '',
+      dob: current.dob || user.dob || '',
+    }));
+  }, [user]);
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -95,10 +109,12 @@ export default function ApplyPrivateTrainingCoach() {
     if (!form.dob) next.dob = 'Date of birth is required.';
     else if (age === null) next.dob = 'Enter a valid date of birth.';
     else if (age < 18) next.dob = 'Coach account owners must be 18 or older.';
-    if (!form.password) next.password = 'Password is required.';
-    else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
-    if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
-    else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    if (!usingExistingAccount) {
+      if (!form.password) next.password = 'Password is required.';
+      else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
+      if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
+      else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    }
     if (!form.displayName.trim()) next.displayName = 'Display name is required.';
     if (!form.sportsCoached.trim()) next.sportsCoached = 'Sport is required.';
     if (!form.trainingSpecialties.trim()) next.trainingSpecialties = 'Training specialty is required.';
@@ -120,10 +136,21 @@ export default function ApplyPrivateTrainingCoach() {
 
     try {
       setSubmitting(true);
-      await auth.signOut();
-      await auth.signUp(form.email.trim(), form.password);
-      const currentUser = await auth.updateCurrentUser({
+      let currentUser = user;
+      if (!usingExistingAccount) {
+        await auth.signOut();
+        currentUser = await auth.signUp(form.email.trim(), form.password);
+      } else {
+        currentUser = await refetchUser();
+      }
+      if (!currentUser?.id) {
+        throw new Error('Could not load your coach applicant profile.');
+      }
+
+      currentUser = await auth.updateCurrentUser({
         role: 'coach',
+        onboarding_role: 'coach',
+        onboarding_status: 'complete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         phone: form.phone.trim(),
@@ -153,6 +180,8 @@ export default function ApplyPrivateTrainingCoach() {
 
       await auth.updateCurrentUser({
         role: 'coach',
+        onboarding_role: 'coach',
+        onboarding_status: 'complete',
         coach_id: coach.id,
         profile_setup_complete: false,
       });
@@ -174,8 +203,12 @@ export default function ApplyPrivateTrainingCoach() {
   const handleGoogle = async () => {
     setFormError(null);
     try {
+      if (usingExistingAccount) {
+        navigate(onboardingPath('/apply/private-training-coach', 'coach_applicant'));
+        return;
+      }
       await auth.signOut();
-      auth.createOAuthSession('google', '/apply/private-training-coach');
+      auth.createOAuthSession('google', onboardingPath('/apply/private-training-coach', 'coach_applicant'));
     } catch (err) {
       setFormError(err?.message || 'Could not start Google sign-up.');
     }
@@ -272,7 +305,7 @@ export default function ApplyPrivateTrainingCoach() {
                       value={form.email}
                       onChange={(event) => updateForm('email', event.target.value)}
                       error={errors.email}
-                      disabled={submitting}
+                      disabled={submitting || usingExistingAccount}
                     />
                     <AuthField
                       id="coach-phone"
@@ -310,78 +343,86 @@ export default function ApplyPrivateTrainingCoach() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
-                      id="coach-password"
-                      label="Password"
-                      type={showPassword ? 'text' : 'password'}
-                      icon={Lock}
-                      placeholder="Create a strong password"
-                      value={form.password}
-                      onChange={(event) => updateForm('password', event.target.value)}
-                      error={errors.password}
-                      disabled={submitting}
-                      trailing={
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((value) => !value)}
-                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
-                          aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      }
-                    />
-                    <AuthField
-                      id="coach-confirm-password"
-                      label="Confirm password"
-                      type={showConfirm ? 'text' : 'password'}
-                      icon={Lock}
-                      placeholder="Confirm your password"
-                      value={form.confirmPassword}
-                      onChange={(event) => updateForm('confirmPassword', event.target.value)}
-                      error={errors.confirmPassword}
-                      disabled={submitting}
-                      trailing={
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirm((value) => !value)}
-                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
-                          aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                        >
-                          {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      }
-                    />
-                  </div>
+                  {usingExistingAccount ? (
+                    <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
+                      You are signed in as {user.email}. This coach application will be attached to your current account.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <AuthField
+                          id="coach-password"
+                          label="Password"
+                          type={showPassword ? 'text' : 'password'}
+                          icon={Lock}
+                          placeholder="Create a strong password"
+                          value={form.password}
+                          onChange={(event) => updateForm('password', event.target.value)}
+                          error={errors.password}
+                          disabled={submitting}
+                          trailing={
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword((value) => !value)}
+                              className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                              aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          }
+                        />
+                        <AuthField
+                          id="coach-confirm-password"
+                          label="Confirm password"
+                          type={showConfirm ? 'text' : 'password'}
+                          icon={Lock}
+                          placeholder="Confirm your password"
+                          value={form.confirmPassword}
+                          onChange={(event) => updateForm('confirmPassword', event.target.value)}
+                          error={errors.confirmPassword}
+                          disabled={submitting}
+                          trailing={
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirm((value) => !value)}
+                              className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                              aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                            >
+                              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          }
+                        />
+                      </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    {passwordChecks.map((check) => (
-                      <span
-                        key={check.id}
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                          check.ok
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-slate-200 bg-slate-50 text-slate-500'
-                        }`}
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        {check.label}
-                      </span>
-                    ))}
-                    {form.confirmPassword && (
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                          passwordsMatch
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-red-200 bg-red-50 text-red-700'
-                        }`}
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
-                      </span>
-                    )}
-                  </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {passwordChecks.map((check) => (
+                          <span
+                            key={check.id}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
+                              check.ok
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-500'
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {check.label}
+                          </span>
+                        ))}
+                        {form.confirmPassword && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
+                              passwordsMatch
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-red-200 bg-red-50 text-red-700'
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
@@ -552,32 +593,40 @@ export default function ApplyPrivateTrainingCoach() {
                     disabled={submitting}
                     className="flex h-10 w-full items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Creating coach account...' : 'Create Coach Account'}
+                    {submitting
+                      ? 'Creating coach profile...'
+                      : usingExistingAccount
+                        ? 'Create Coach Profile'
+                        : 'Create Coach Account'}
                   </button>
                 </form>
 
-                <div className="my-3 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-xs font-medium text-slate-500">or sign up with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
+                {!usingExistingAccount && (
+                  <>
+                    <div className="my-3 flex items-center gap-4">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <span className="text-xs font-medium text-slate-500">or sign up with</span>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-4 w-4" />
-                  Continue with Google
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleGoogle}
+                      disabled={submitting || isLoadingAuth}
+                      className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <GoogleIcon className="h-4 w-4" />
+                      Continue with Google
+                    </button>
 
-                <p className="mt-4 text-center text-sm text-slate-600">
-                  Already have an account?{' '}
-                  <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
-                    Sign in
-                  </Link>
-                </p>
+                    <p className="mt-4 text-center text-sm text-slate-600">
+                      Already have an account?{' '}
+                      <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
+                        Sign in
+                      </Link>
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -695,6 +744,14 @@ function inferCounty(serviceArea) {
   if (value.includes('macomb')) return 'Macomb';
   if (value.includes('wayne') || value.includes('detroit')) return 'Wayne';
   return 'Oakland';
+}
+
+function splitFirstName(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+}
+
+function splitLastName(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean).slice(1).join(' ');
 }
 
 function calculateAge(dob) {

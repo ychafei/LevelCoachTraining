@@ -9,7 +9,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { publicCoachDisplay } from '@/lib/publicCoach';
+import { coachBookHref, publicCoachDisplay } from '@/lib/publicCoach';
 
 export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const model = publicCoachDisplay(coach);
@@ -39,11 +39,28 @@ export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   );
 }
 
-export default function PublicCoachCard({ coach, packages = [], compact = false, className = '' }) {
+function hrefWithParams(path, params = {}) {
+  const clean = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  if (!clean.length) return path;
+  const search = new URLSearchParams(clean);
+  return `${path}?${search.toString()}`;
+}
+
+export default function PublicCoachCard({
+  coach,
+  packages = [],
+  compact = false,
+  className = '',
+  distanceMiles = null,
+  bookingParams = {},
+}) {
   const model = publicCoachDisplay(coach, { packages });
   const visibleSpecs = model.specializations.length
     ? model.specializations.slice(0, compact ? 2 : 4)
     : [model.primarySport].filter(Boolean);
+  const profileHref = hrefWithParams(model.profileHref, bookingParams);
+  const bookHref = coachBookHref(model.raw, { intro: '1', ...bookingParams });
+  const displayDistance = distanceMiles === null || distanceMiles === undefined ? null : Number(distanceMiles);
 
   return (
     <article className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4 ${className}`}>
@@ -53,7 +70,7 @@ export default function PublicCoachCard({ coach, packages = [], compact = false,
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Link
-                to={model.profileHref}
+                to={profileHref}
                 className="truncate font-display text-xl font-bold tracking-normal text-slate-950 hover:text-blue-700"
               >
                 {model.displayName}
@@ -82,6 +99,11 @@ export default function PublicCoachCard({ coach, packages = [], compact = false,
                 <MapPin className="h-3.5 w-3.5 text-blue-600" />
                 {model.locationLabel}
               </span>
+              {displayDistance !== null && Number.isFinite(displayDistance) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-100">
+                  {displayDistance < 10 ? displayDistance.toFixed(1) : Math.round(displayDistance)} mi away
+                </span>
+              )}
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 text-blue-600" />
                 {model.availability}
@@ -140,13 +162,13 @@ export default function PublicCoachCard({ coach, packages = [], compact = false,
               variant="outline"
               className="h-9 rounded-lg border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-50"
             >
-              <Link to={model.profileHref}>View Profile</Link>
+              <Link to={profileHref}>View Profile</Link>
             </Button>
             <Button
               asChild
               className="h-9 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-blue-600/20 hover:bg-blue-700"
             >
-              <Link to={model.bookIntroHref}>Book Intro</Link>
+              <Link to={bookHref}>Book Intro</Link>
             </Button>
           </div>
         </div>

@@ -17,6 +17,7 @@ import { logAdminAction } from '@/lib/audit';
 
 export default function AdminUsers() {
   const { isAdmin, isSuperAdmin, user: me } = useCurrentUser();
+  const isMasterAdmin = isSuperAdmin && me?.master_admin_locked === true;
   const [users, setUsers] = useState([]);
   const [bans, setBans] = useState([]);
   const [banDialog, setBanDialog] = useState(null);
@@ -63,14 +64,13 @@ export default function AdminUsers() {
     return () => { cancelled = true; };
   }, [isAdmin]);
 
-  // Non-super-admins cannot edit super-admins, cannot demote the last super-admin,
-  // and cannot promote someone to admin. Super-admins are the only ones who can
-  // escalate to admin. This is also enforced server-side in Appwrite permissions
-  // (see remaining-risks summary).
+  // Platform admin grants/demotions must come from the locked master admin.
+  // The Appwrite Function enforces this server-side; these checks keep the UI
+  // aligned with that contract.
   const canEditUser = (target) => {
     if (!target) return false;
     if (target.email === me?.email) return false; // cannot self-edit
-    if (target.is_super_admin && !isSuperAdmin) return false;
+    if ((target.role === 'super_admin' || target.is_super_admin) && !isMasterAdmin) return false;
     return true;
   };
 
@@ -79,29 +79,41 @@ export default function AdminUsers() {
       toast.error('You do not have permission to edit this user.');
       return;
     }
-    // Only super admins can promote to admin.
-    if (role === 'admin' && !isSuperAdmin) {
-      toast.error('Only a super admin can promote a user to admin.');
+    const targetWasPlatformAdmin = targetUser.role === 'admin' || targetUser.role === 'super_admin';
+    const targetWillBePlatformAdmin = role === 'admin' || role === 'super_admin';
+    if ((targetWasPlatformAdmin || targetWillBePlatformAdmin) && !isMasterAdmin) {
+      toast.error('Only the locked master admin can change platform admin roles.');
       return;
     }
-    // Prevent demoting an admin unless you are super admin (or they are non-super).
-    if (targetUser.role === 'admin' && role !== 'admin' && !isSuperAdmin) {
-      toast.error('Only a super admin can change an admin\'s role.');
-      return;
+
+    try {
+      const before = { role: targetUser.role || 'user' };
+      if (targetWasPlatformAdmin || targetWillBePlatformAdmin) {
+        const result = await auth.grantAdminRole({
+          profileId: targetUser.id,
+          role,
+          allowSuperAdmin: role === 'super_admin',
+        });
+        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: result.role || role } : u));
+        toast.success('Role updated');
+        return;
+      }
+
+      await profileRepo.updateById(targetUser.id, { role });
+      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role } : u));
+      await logAdminAction({
+        actor: me,
+        action: 'user.role_change',
+        entityType: 'User',
+        entityId: targetUser.id,
+        before,
+        after: { role },
+        metadata: { target_email: targetUser.email },
+      });
+      toast.success('Role updated');
+    } catch (err) {
+      toast.error(err?.message || 'Could not update role.');
     }
-    const before = { role: targetUser.role || 'user' };
-    await profileRepo.updateById(targetUser.id, { role });
-    setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role } : u));
-    await logAdminAction({
-      actor: me,
-      action: 'user.role_change',
-      entityType: 'User',
-      entityId: targetUser.id,
-      before,
-      after: { role },
-      metadata: { target_email: targetUser.email },
-    });
-    toast.success('Role updated');
   };
 
   const banUser = async () => {
@@ -149,8 +161,8 @@ export default function AdminUsers() {
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) { toast.error('Please enter an email'); return; }
-    if (inviteRole === 'admin' && !isSuperAdmin) {
-      toast.error('Only a super admin can invite a new admin.');
+    if (inviteRole === 'admin' && !isMasterAdmin) {
+      toast.error('Only the locked master admin can invite a new admin.');
       return;
     }
     setInviting(true);
@@ -247,7 +259,7 @@ export default function AdminUsers() {
           return (
             <div className="flex items-center gap-2 justify-end">
               {isSelf && <span className="text-xs font-display tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
-              {row.is_super_admin && (
+              {(row.role === 'super_admin' || row.is_super_admin) && (
                 <span className="text-xs font-display tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
                   <Lock className="w-3 h-3" /> Super admin
                 </span>
@@ -256,8 +268,8 @@ export default function AdminUsers() {
           );
         }
         // Role options are filtered based on caller's privileges.
-        const canAssignAdmin = isSuperAdmin;
-        const canEditExistingAdmin = row.role !== 'admin' || isSuperAdmin;
+        const canAssignAdmin = isMasterAdmin;
+        const canEditExistingAdmin = (row.role !== 'admin' && row.role !== 'super_admin') || isMasterAdmin;
         return (
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <Select
@@ -272,6 +284,7 @@ export default function AdminUsers() {
                 <SelectItem value="user">Client</SelectItem>
                 <SelectItem value="coach">Coach</SelectItem>
                 {canAssignAdmin && <SelectItem value="admin">Admin</SelectItem>}
+                {canAssignAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
               </SelectContent>
             </Select>
             <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(row); setCreditSessions(''); setCreditDuration('60'); setCreditPackageName('Admin Grant'); }}>
@@ -361,7 +374,7 @@ export default function AdminUsers() {
                 <SelectContent>
                   <SelectItem value="user">Client — Regular user</SelectItem>
                   <SelectItem value="coach">Coach — Will have a coach profile</SelectItem>
-                  {isSuperAdmin && <SelectItem value="admin">Admin — Full access</SelectItem>}
+                  {isMasterAdmin && <SelectItem value="admin">Admin — Full access</SelectItem>}
                 </SelectContent>
               </Select>
               {inviteRole === 'coach' && (
@@ -370,8 +383,8 @@ export default function AdminUsers() {
               {inviteRole === 'admin' && (
                 <p className="text-xs text-destructive mt-2">Admin users have full access to the admin panel.</p>
               )}
-              {!isSuperAdmin && (
-                <p className="text-xs text-muted-foreground mt-2">Only a super admin can invite new admins.</p>
+              {!isMasterAdmin && (
+                <p className="text-xs text-muted-foreground mt-2">Only the locked master admin can invite new admins.</p>
               )}
             </div>
           </div>

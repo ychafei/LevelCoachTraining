@@ -21,7 +21,7 @@ import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
-import { homePathForRole } from '@/lib/roleHome';
+import { homePathForRole, onboardingPath, postAuthRedirectPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,6 +43,14 @@ const ACCOUNT_TYPES = [
     accent: 'blue',
   },
   {
+    label: 'Parent / Guardian',
+    description: 'Create a family workspace to manage child athletes, waivers, approvals, payments, and messages.',
+    icon: ShieldCheck,
+    href: '/create-account/parent',
+    cta: 'Create parent account',
+    accent: 'indigo',
+  },
+  {
     label: 'Coach',
     description: 'Create a free coach profile and finish verification, availability, and payments before going live.',
     icon: Briefcase,
@@ -56,7 +64,7 @@ const ACCOUNT_TYPES = [
     icon: Building2,
     href: '/create-organization',
     cta: 'Create organization account',
-    accent: 'indigo',
+    accent: 'slate',
   },
 ];
 
@@ -98,7 +106,7 @@ export default function CreateAccount() {
                     <AccountTypeCard
                       key={type.label}
                       type={type}
-                      href={type.href === '/create-account/athlete' ? withNext(type.href, explicitNext) : type.href}
+                      href={(type.href === '/create-account/athlete' || type.href === '/create-account/parent') ? withNext(type.href, explicitNext) : type.href}
                     />
                   ))}
                 </div>
@@ -154,7 +162,9 @@ export function AthleteSignup() {
 
   useEffect(() => {
     if (!isLoadingAuth && isAuthenticated && user) {
-      navigate(getSafeNextPath(explicitNext) || homePathForRole(user), { replace: true });
+      const safeNext = getSafeNextPath(explicitNext);
+      const roleNext = onboardingPath(safeNext || '', 'athlete');
+      navigate(user.profile_setup_complete ? postAuthRedirectPath(user, safeNext) : roleNext, { replace: true });
     }
   }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate]);
 
@@ -241,7 +251,7 @@ export function AthleteSignup() {
     setFormError(null);
     try {
       await auth.signOut();
-      auth.createOAuthSession('google', getSafeNextPath(explicitNext) || '/create-account/athlete');
+      auth.createOAuthSession('google', onboardingPath(getSafeNextPath(explicitNext) || '', 'athlete'));
     } catch (err) {
       setFormError(err?.message || 'Could not start Google sign-up.');
     }
@@ -491,12 +501,320 @@ export function AthleteSignup() {
   );
 }
 
+export function ParentSignup() {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const { refetchUser, isAuthenticated, isLoadingAuth, user } = useAuth();
+
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    password: '',
+    confirmPassword: '',
+    terms: false,
+    marketing: false,
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const explicitNext = params.get('next');
+
+  useEffect(() => {
+    if (!isLoadingAuth && isAuthenticated && user) {
+      const safeNext = getSafeNextPath(explicitNext);
+      const roleNext = onboardingPath(safeNext || '', 'parent');
+      navigate(user.profile_setup_complete ? postAuthRedirectPath(user, safeNext) : roleNext, { replace: true });
+    }
+  }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate]);
+
+  const passwordChecks = useMemo(
+    () => PASSWORD_RULES.map((rule) => ({ ...rule, ok: rule.test(form.password) })),
+    [form.password],
+  );
+  const passwordValid = passwordChecks.every((check) => check.ok);
+
+  const updateForm = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  const validate = () => {
+    const next = {};
+    if (!form.firstName.trim()) next.firstName = 'First name is required.';
+    if (!form.lastName.trim()) next.lastName = 'Last name is required.';
+    if (!form.email.trim()) next.email = 'Email address is required.';
+    else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
+    if (!form.phone.trim()) next.phone = 'Phone number is required.';
+    if (!form.password) next.password = 'Password is required.';
+    else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
+    if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
+    else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError(null);
+    if (!validate()) return;
+
+    try {
+      setSubmitting(true);
+      await auth.signOut();
+      await auth.signUp(form.email.trim(), form.password);
+      await auth.updateCurrentUser({
+        role: 'user',
+        onboarding_role: 'parent',
+        onboarding_status: 'complete',
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        phone: form.phone.trim(),
+        terms_accepted: true,
+        profile_setup_complete: true,
+        updates_opt_in: form.marketing,
+      });
+      const fresh = await refetchUser();
+      navigate(getSafeNextPath(explicitNext) || homePathForRole(fresh), { replace: true });
+    } catch (err) {
+      setFormError(err?.message || 'Could not create your parent account. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setFormError(null);
+    try {
+      await auth.signOut();
+      auth.createOAuthSession('google', onboardingPath(getSafeNextPath(explicitNext) || '', 'parent'));
+    } catch (err) {
+      setFormError(err?.message || 'Could not start Google sign-up.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-white font-sans text-slate-950">
+      <Navbar />
+
+      <main className="pt-20">
+        <section className="border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/80 to-white px-4 py-7 sm:px-6 lg:px-8 lg:py-6">
+          <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_26px_70px_rgba(15,23,42,0.10)]">
+            <div className="px-6 py-7 sm:px-10 lg:px-10 xl:px-12">
+              <div className="mx-auto w-full max-w-[580px]">
+                <div className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
+                  <ShieldCheck className="h-4 w-4" />
+                  Parent / Guardian
+                </div>
+
+                <h1 className="mt-5 font-sans text-[31px] font-extrabold leading-tight tracking-normal text-slate-950 normal-case sm:text-[34px]">
+                  Create your family account
+                </h1>
+                <p className="mt-3 text-base leading-7 text-slate-600">
+                  Manage child athletes, waivers, booking approvals, payments, and coach communication from one workspace.
+                </p>
+
+                <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <AuthField
+                      id="parent-account-first-name"
+                      label="First name"
+                      icon={User}
+                      autoComplete="given-name"
+                      placeholder="First name"
+                      value={form.firstName}
+                      onChange={(event) => updateForm('firstName', event.target.value)}
+                      disabled={submitting}
+                      error={errors.firstName}
+                    />
+                    <AuthField
+                      id="parent-account-last-name"
+                      label="Last name"
+                      icon={User}
+                      autoComplete="family-name"
+                      placeholder="Last name"
+                      value={form.lastName}
+                      onChange={(event) => updateForm('lastName', event.target.value)}
+                      disabled={submitting}
+                      error={errors.lastName}
+                    />
+                  </div>
+
+                  <AuthField
+                    id="parent-account-email"
+                    label="Email address"
+                    type="email"
+                    icon={Mail}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    value={form.email}
+                    onChange={(event) => updateForm('email', event.target.value)}
+                    disabled={submitting}
+                    error={errors.email}
+                  />
+
+                  <AuthField
+                    id="parent-account-phone"
+                    label="Phone number"
+                    type="tel"
+                    icon={Phone}
+                    autoComplete="tel"
+                    placeholder="(248) 555-0123"
+                    value={form.phone}
+                    onChange={(event) => updateForm('phone', event.target.value)}
+                    disabled={submitting}
+                    error={errors.phone}
+                  />
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <AuthField
+                      id="parent-account-password"
+                      label="Password"
+                      type={showPassword ? 'text' : 'password'}
+                      icon={Lock}
+                      autoComplete="new-password"
+                      placeholder="************"
+                      value={form.password}
+                      onChange={(event) => updateForm('password', event.target.value)}
+                      disabled={submitting}
+                      error={errors.password}
+                      trailing={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((value) => !value)}
+                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      }
+                    />
+                    <AuthField
+                      id="parent-account-confirm-password"
+                      label="Confirm password"
+                      type={showConfirm ? 'text' : 'password'}
+                      icon={Lock}
+                      autoComplete="new-password"
+                      placeholder="************"
+                      value={form.confirmPassword}
+                      onChange={(event) => updateForm('confirmPassword', event.target.value)}
+                      disabled={submitting}
+                      error={errors.confirmPassword}
+                      trailing={
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm((value) => !value)}
+                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:text-slate-800"
+                          aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                        >
+                          {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {passwordChecks.map((check) => (
+                      <span
+                        key={check.id}
+                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold ${
+                          check.ok
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-500'
+                        }`}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        {check.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <CheckboxRow
+                      checked={form.terms}
+                      onChange={(checked) => updateForm('terms', checked)}
+                      disabled={submitting}
+                    >
+                      I agree to the{' '}
+                      <Link to="/terms" className="font-semibold text-blue-700 hover:underline">
+                        Terms of Service
+                      </Link>{' '}
+                      and{' '}
+                      <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
+                        Privacy Policy
+                      </Link>
+                    </CheckboxRow>
+                    {errors.terms && <p className="text-xs font-semibold text-red-600">{errors.terms}</p>}
+
+                    <CheckboxRow
+                      checked={form.marketing}
+                      onChange={(checked) => updateForm('marketing', checked)}
+                      disabled={submitting}
+                    >
+                      Send me product updates, training tips, and offers (optional)
+                    </CheckboxRow>
+                  </div>
+
+                  {formError && (
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                      {formError}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {submitting ? 'Creating account...' : 'Create Family Account'}
+                  </button>
+                </form>
+
+                <div className="my-4 flex items-center gap-4">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogle}
+                  disabled={submitting}
+                  className="flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <GoogleIcon className="h-5 w-5" />
+                  Continue with Google
+                </button>
+
+                <p className="mt-4 text-center text-sm text-slate-600">
+                  Already have an account?{' '}
+                  <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
+                    Sign in
+                  </Link>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <AuthFooter />
+    </div>
+  );
+}
+
 function AccountTypeCard({ type, href }) {
   const Icon = type.icon;
   const tone = {
     blue: 'bg-blue-50 text-blue-700 ring-blue-100 group-hover:bg-blue-600 group-hover:text-white',
     emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100 group-hover:bg-emerald-600 group-hover:text-white',
     indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-100 group-hover:bg-indigo-600 group-hover:text-white',
+    slate: 'bg-slate-50 text-slate-700 ring-slate-200 group-hover:bg-slate-800 group-hover:text-white',
   }[type.accent];
 
   return (
@@ -709,7 +1027,7 @@ function getSafeNextPath(next) {
     const parsed = new URL(next, window.location.origin);
     if (parsed.origin !== window.location.origin) return null;
 
-    if (['/login', '/sign-in', '/signup', '/create-account', '/create-account/athlete'].includes(parsed.pathname)) {
+    if (['/login', '/sign-in', '/signup', '/create-account', '/create-account/athlete', '/create-account/parent'].includes(parsed.pathname)) {
       return null;
     }
 

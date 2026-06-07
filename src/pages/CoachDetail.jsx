@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -29,8 +29,20 @@ import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+function mergeSearch(path, currentSearch) {
+  const params = new URLSearchParams(currentSearch);
+  if (!params.toString()) return path;
+  const [base, rawSearch = ''] = path.split('?');
+  const next = new URLSearchParams(rawSearch);
+  params.forEach((value, key) => {
+    if (!next.has(key)) next.set(key, value);
+  });
+  return `${base}?${next.toString()}`;
+}
+
 export default function CoachDetail() {
   const { coachId } = useParams();
+  const location = useLocation();
   const [coach, setCoach] = useState(null);
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +94,7 @@ export default function CoachDetail() {
   }
 
   const model = publicCoachDisplay(coach, { packages });
+  const bookIntroHref = mergeSearch(model.bookIntroHref, location.search);
   const enabledDays = DAYS.filter((day) => coach.availability?.[day]?.enabled);
   const details = [
     { label: 'Primary sport', value: model.primarySport, icon: Trophy },
@@ -143,7 +156,7 @@ export default function CoachDetail() {
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Book intro</p>
               <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Start with {model.firstName}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Preview availability, choose a goal, then create an account to finish booking safely.
+                Preview availability, add optional notes, then create an account to finish booking safely.
               </p>
               <div className="mt-4 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Next available</p>
@@ -157,7 +170,7 @@ export default function CoachDetail() {
                   <Link to="/coaches">Compare</Link>
                 </Button>
                 <Button asChild className="h-11 rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700">
-                  <Link to={model.bookIntroHref}>
+                  <Link to={bookIntroHref}>
                     Book Intro
                     <ArrowRight className="h-4 w-4" />
                   </Link>

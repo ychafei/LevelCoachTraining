@@ -16,9 +16,9 @@ import {
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
 
-// Editable sections of the Coach record. Photo and email are saved out-of-band (photo on
-// upload, email after verification); payment handles are edited in /coach/earnings;
-// everything else lives in `draft` and saves together.
+// Editable sections of the Coach record. Photo and email are saved out-of-band
+// (photo on upload, email after verification); Stripe payout setup lives in
+// /coach/earnings; everything else lives in `draft` and saves together.
 const EDITABLE_KEYS = ['bio', 'quote', 'training_area', 'specializations'];
 
 function pickEditable(coach) {
@@ -440,31 +440,18 @@ export default function CoachProfile() {
             )}
           </Section>
 
-          {/* Payment — read-only summary; full editor lives in /coach/earnings */}
+          {/* Payouts — read-only summary; Stripe setup lives in /coach/earnings */}
           <Section title="Payment" icon={Wallet}>
             <p className="text-xs text-muted-foreground mb-3">
-              Payment handles and cash acceptance are managed from your Earnings page so they live next to your unpaid totals.
+              Client payments run through Stripe Checkout. Stripe Connect setup is managed from your Earnings page.
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-              {[
-                { key: 'venmo',   label: 'Venmo' },
-                { key: 'zelle',   label: 'Zelle' },
-                { key: 'cashapp', label: 'Cash App' },
-                { key: 'paypal',  label: 'PayPal' },
-              ].map(h => (
-                <div key={h.key} className="bg-secondary/40 border border-border rounded p-2">
-                  <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{h.label}</p>
-                  <p className="text-sm text-foreground truncate">{coach[h.key] || <span className="text-muted-foreground/60">—</span>}</p>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                Cash at session: <span className="text-foreground">{coach.cash_accepted ? 'Accepted' : 'Not accepted'}</span>
+                Stripe account: <span className="text-foreground">{coach.stripe_account_id ? 'Connected' : 'Not connected'}</span>
               </p>
               <Link to="/coach/earnings">
                 <Button variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs">
-                  <ExternalLink className="w-3 h-3 mr-1" /> Manage in Earnings
+                  <ExternalLink className="w-3 h-3 mr-1" /> Manage Payouts
                 </Button>
               </Link>
             </div>

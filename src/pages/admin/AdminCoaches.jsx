@@ -16,8 +16,9 @@ import { toast } from 'sonner';
 import { describeFee } from '@/lib/earnings';
 import { logAdminAction } from '@/lib/audit';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { getLegalPacketStatus } from '@/lib/legal';
 
-const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0 };
+const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
 export default function AdminCoaches() {
   const { user, isAdmin } = useCurrentUser();
@@ -219,6 +220,26 @@ export default function AdminCoaches() {
   const save = async () => {
     const isUpdate = !!editing.id;
     const previous = isUpdate ? coaches.find(c => c.id === editing.id) : null;
+    const willActivate = editing.is_active === true && (!isUpdate || previous?.is_active === false);
+    if (willActivate) {
+      const linkedProfile = users.find((u) => u.coach_id === editing.id);
+      if (!isUpdate || !linkedProfile) {
+        toast.error('Coach activation requires a linked coach account with signed legal documents.');
+        return;
+      }
+      const legalStatus = await getLegalPacketStatus({
+        user: linkedProfile,
+        signerRole: 'coach',
+        coachId: editing.id,
+      });
+      if (!legalStatus.complete) {
+        toast.error(legalStatus.hasTemplates
+          ? 'Coach legal packet is incomplete. Keep this coach inactive until all required documents are signed.'
+          : 'Coach legal templates are not published. Seed legal templates before activating coaches.');
+        return;
+      }
+    }
+
     if (isUpdate) {
       await coachRepo.update(editing.id, editing);
     } else {
@@ -415,15 +436,14 @@ export default function AdminCoaches() {
                       ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Venmo</Label>
-                      <Input value={editing.venmo || ''} onChange={e => setEditing({...editing, venmo: e.target.value})} className="bg-secondary border-border mt-1" />
-                    </div>
-                    <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Zelle</Label>
-                      <Input value={editing.zelle || ''} onChange={e => setEditing({...editing, zelle: e.target.value})} className="bg-secondary border-border mt-1" />
-                    </div>
+                  <div className="border border-border rounded-lg p-3">
+                    <Label className="font-display tracking-wider uppercase text-xs">Stripe Connect</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Coach payouts are managed through Stripe Connect from the coach Earnings page.
+                    </p>
+                    <p className="text-sm text-foreground mt-2 truncate">
+                      {editing.stripe_account_id || 'No connected account yet'}
+                    </p>
                   </div>
                   <div className="border border-border rounded-lg p-3 space-y-3">
                     <Label className="font-display tracking-wider uppercase text-xs">Platform Fee</Label>

@@ -1,8 +1,13 @@
 import React from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { LogIn, ShieldAlert } from 'lucide-react';
+import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
+import { legalSignerRoleForUser } from '@/lib/legal';
+import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
+
+const MASTER_ADMIN_EMAIL = 'yousef.elchafei@gmail.com';
 
 // Shared spinner — short-lived; never sits forever because guards resolve
 // after isLoadingAuth/isLoadingPublicSettings flip.
@@ -86,6 +91,18 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
+export function RequireOnboardingComplete() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, onboardingComplete } = useAuth();
+  const location = useLocation();
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (!onboardingComplete) {
+    const next = `${location.pathname}${location.search}`;
+    return <Navigate to={`/onboarding?next=${encodeURIComponent(next)}`} replace />;
+  }
+  return <Outlet />;
+}
+
 // Coach-only (admins also pass — they can use coach features).
 export function RequireCoach() {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isCoach } = useAuth();
@@ -153,16 +170,115 @@ export function RequireSuperAdmin() {
   return <Outlet />;
 }
 
-// Client-only (regular user — not coach, not admin).
-export function RequireClient() {
-  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isCoach, isAdmin } = useAuth();
+export function RequireMasterAdmin() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isSuperAdmin } = useAuth();
   if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
   if (!isAuthenticated || !user) return <SignInRequired />;
-  if (isCoach || isAdmin) {
+  const isLockedMasterAdmin = isSuperAdmin && user.master_admin_locked === true;
+  const canBootstrapMasterAdmin = (user.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL;
+  if (!isLockedMasterAdmin && !canBootstrapMasterAdmin) {
+    return (
+      <AccessDenied
+        title="Master Admin Only"
+        message="This area is restricted to the locked platform owner account."
+      />
+    );
+  }
+  return <Outlet />;
+}
+
+export function RequireOrganizationAdmin() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isOrganizationAdmin } = useAuth();
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (!isOrganizationAdmin) {
+    return (
+      <AccessDenied
+        title="Organization Access Required"
+        message="This portal is for organization owners and admins."
+      />
+    );
+  }
+  return <Outlet />;
+}
+
+export function RequireGuardianOfAthlete() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isGuardian } = useAuth();
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (!isGuardian) {
+    return (
+      <AccessDenied
+        title="Parent Portal"
+        message="This portal is for parent and guardian accounts."
+      />
+    );
+  }
+  return <Outlet />;
+}
+
+export function RequireAthlete() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isAthlete } = useAuth();
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (!isAthlete) {
+    return (
+      <AccessDenied
+        title="Athlete Portal"
+        message="This portal is for athlete accounts."
+      />
+    );
+  }
+  return <Outlet />;
+}
+
+export function RequireSignedLegalPacket() {
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
+  const signerRole = legalSignerRoleForUser(user);
+  const status = useLegalPacketStatus({
+    user,
+    signerRole,
+    coachId: signerRole === 'coach' ? user?.coach_id || '' : '',
+    organizationId: signerRole === 'organization_admin' ? user?.primary_organization_id || '' : '',
+  });
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (status.loading) return <AuthSpinner />;
+  if (!status.complete) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+        <LegalSignaturePanel
+          signerRole={signerRole}
+          coachId={signerRole === 'coach' ? user?.coach_id || '' : ''}
+          organizationId={signerRole === 'organization_admin' ? user?.primary_organization_id || '' : ''}
+          title="Legal Packet Required"
+          description="Complete the current required legal documents before using this area."
+        />
+      </div>
+    );
+  }
+  return <Outlet />;
+}
+
+// Client-only (regular user — not coach, not admin).
+export function RequireClient() {
+  const {
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    isAuthenticated,
+    user,
+    isCoach,
+    isAdmin,
+    isGuardian,
+    isOrganizationAdmin,
+  } = useAuth();
+  if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
+  if (!isAuthenticated || !user) return <SignInRequired />;
+  if (isCoach || isAdmin || isGuardian || isOrganizationAdmin) {
     return (
       <AccessDenied
         title="Clients Only"
-        message="This feature is for clients. You're logged in as a coach or admin."
+        message="This feature is for athlete client accounts."
         cta={
           <div className="mt-4">
             <Button

@@ -10,6 +10,10 @@ const BUCKETS = {
   'site-content':        'site-content',
   'coach-resumes':       'coach-resumes',
   'message-attachments': 'message-attachments',
+  'legal-documents':     'legal-documents',
+  'coach-documents':     'coach-documents',
+  'org-logos':           'org-logos',
+  'generated-receipts':  'generated-receipts',
 };
 
 export const storage = {
@@ -23,5 +27,14 @@ export const storage = {
     const created = await appwriteStorage.createFile(bucketId, ID.unique(), file);
     const url = appwriteStorage.getFileView(bucketId, created.$id).toString();
     return { url, id: created.$id };
+  },
+
+  getFileViewUrl: (bucket, fileId) => {
+    const bucketId = BUCKETS[bucket];
+    if (!bucketId) {
+      throw new Error(`Unknown storage bucket: ${bucket}`);
+    }
+    if (!fileId) return '';
+    return appwriteStorage.getFileView(bucketId, fileId).toString();
   },
 };

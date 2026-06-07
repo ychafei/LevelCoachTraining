@@ -50,10 +50,10 @@ export function computeChecklist(user, coach) {
     },
     {
       key: 'payment',
-      label: 'Add at least one payment method',
-      blurb: 'Venmo / Zelle / Cash App / PayPal / Cash accepted.',
-      href: '/coach/profile',
-      done: !!(coach?.venmo || coach?.zelle || coach?.cashapp || coach?.paypal || coach?.cash_accepted),
+      label: 'Complete Stripe Connect onboarding',
+      blurb: 'Stripe Connect is required for card payouts.',
+      href: '/coach/earnings',
+      done: !!coach?.stripe_account_id,
       blocking: false,
     },
     {
