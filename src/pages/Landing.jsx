@@ -157,16 +157,16 @@ function AvatarBadge({ initials, avatarClass, avatarSrc, size = 'lg' }) {
   const dotClass = size === 'sm' ? 'h-2.5 w-2.5 border-2' : 'h-3 w-3 border-[2.5px]';
 
   return (
-    <div className="relative inline-grid shrink-0 self-start rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+    <div className={`relative shrink-0 self-start overflow-visible rounded-full ${sizeClass}`}>
       {avatarSrc ? (
         <img
           src={avatarSrc}
           alt=""
-          className={`${sizeClass} rounded-full object-cover object-center`}
+          className="h-full w-full rounded-full object-cover object-center"
         />
       ) : (
         <div
-          className={`grid ${sizeClass} place-items-center rounded-full bg-gradient-to-br ${avatarClass} font-display font-bold tracking-normal`}
+          className={`grid h-full w-full place-items-center rounded-full bg-gradient-to-br ${avatarClass} font-display font-bold tracking-normal`}
         >
           {initials}
         </div>

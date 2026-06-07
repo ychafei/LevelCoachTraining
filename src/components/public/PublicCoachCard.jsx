@@ -22,15 +22,15 @@ export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const dotClass = size === 'xl' ? 'h-4 w-4 border-[3px]' : 'h-3.5 w-3.5 border-[2.5px]';
 
   return (
-    <div className={`relative inline-grid shrink-0 self-start rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200 ${className}`}>
+    <div className={`relative shrink-0 self-start overflow-visible rounded-full ${sizeClass} ${className}`}>
       {model.photoUrl ? (
         <img
           src={model.photoUrl}
           alt={model.displayName}
-          className={`${sizeClass} rounded-full object-cover object-center`}
+          className="h-full w-full rounded-full object-cover object-center"
         />
       ) : (
-        <div className={`${sizeClass} grid place-items-center rounded-full bg-gradient-to-br from-blue-50 via-white to-emerald-50 font-extrabold text-blue-900`}>
+        <div className="grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-blue-50 via-white to-emerald-50 font-extrabold text-blue-900">
           {model.initials}
         </div>
       )}
