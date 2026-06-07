@@ -26,6 +26,7 @@ function displayName(profile) {
 export default function MasterAdminPortal() {
   const { user, refetchUser } = useAuth();
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapComplete, setBootstrapComplete] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [message, setMessage] = useState('');
   const [profiles, setProfiles] = useState([]);
@@ -37,6 +38,7 @@ export default function MasterAdminPortal() {
   const [targetRole, setTargetRole] = useState('admin');
   const [search, setSearch] = useState('');
   const masterEmailVerified = user?.email_verified === true || user?.emailVerification === true;
+  const masterAdminLocked = user?.master_admin_locked === true || bootstrapComplete;
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -58,6 +60,14 @@ export default function MasterAdminPortal() {
     void loadAdminData();
   }, []);
 
+  useEffect(() => {
+    setBootstrapComplete(false);
+  }, [user?.account_id]);
+
+  useEffect(() => {
+    if (user?.master_admin_locked === true) setBootstrapComplete(true);
+  }, [user?.master_admin_locked]);
+
   const bootstrap = async () => {
     if (!masterEmailVerified) {
       setMessage('Verify this email in Appwrite before running the master admin bootstrap.');
@@ -67,9 +77,11 @@ export default function MasterAdminPortal() {
     setMessage('');
     try {
       await auth.bootstrapMasterAdmin();
-      await refetchUser();
+      const fresh = await refetchUser();
+      setBootstrapComplete(fresh?.master_admin_locked === true);
       await loadAdminData();
       setMessage('Master admin bootstrap completed.');
+      setBootstrapComplete(true);
     } catch (err) {
       setMessage(err?.message || 'Could not bootstrap master admin.');
     } finally {
@@ -177,7 +189,7 @@ export default function MasterAdminPortal() {
           <Lock className="h-10 w-10 text-accent" />
         </div>
 
-        {!user?.master_admin_locked && (
+        {!masterAdminLocked && (
           <div className="mt-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-5">
             <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Bootstrap Required</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -215,6 +227,12 @@ export default function MasterAdminPortal() {
               )}
             </div>
             {message && <p className="mt-3 text-sm text-muted-foreground">{message}</p>}
+          </div>
+        )}
+
+        {masterAdminLocked && message && (
+          <div className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700">
+            {message}
           </div>
         )}
 
