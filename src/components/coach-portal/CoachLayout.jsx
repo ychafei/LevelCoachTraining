@@ -22,7 +22,7 @@ function RailLink({ to, label, icon: Icon, end }) {
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-oswald tracking-wider uppercase transition-colors ${
+        `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-display tracking-wider uppercase transition-colors ${
           isActive
             ? 'bg-accent/10 text-accent border border-accent/20'
             : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent'
@@ -41,7 +41,7 @@ function TabLink({ to, label, icon: Icon, end }) {
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex flex-col items-center gap-1 px-3 py-2 flex-shrink-0 text-[10px] font-oswald tracking-wider uppercase transition-colors ${
+        `flex flex-col items-center gap-1 px-3 py-2 flex-shrink-0 text-[10px] font-display tracking-wider uppercase transition-colors ${
           isActive ? 'text-accent border-b-2 border-accent' : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent'
         }`
       }
@@ -61,10 +61,10 @@ export default function CoachLayout() {
       {/* Portal header */}
       <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p className="text-[10px] font-oswald tracking-[0.3em] uppercase text-accent">
+          <p className="text-[10px] font-display tracking-[0.3em] uppercase text-accent">
             {isAdmin ? 'Admin · Coach Portal' : 'Coach Portal'}
           </p>
-          <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             {displayName}
           </h1>
         </div>

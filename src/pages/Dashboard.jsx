@@ -86,7 +86,7 @@ export default function Dashboard() {
         setCredits(userCredits);
 
         // Targeted unread count — only my conversations and their messages.
-        // NOTE: Base44 SDK doesn't expose an OR filter on arrays, so we fetch
+        // NOTE: legacy SDK doesn't expose an OR filter on arrays, so we fetch
         // conversations where I'm a participant by scanning; see risks section.
         const convos = await conversationRepo.filter({});
         const myConvos = convos.filter(c => c.participant_emails?.includes(user.email));
@@ -198,7 +198,7 @@ export default function Dashboard() {
         subject: `Session Cancelled — ${dateLabel}`,
         body: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-            <h2 style="color: #B89A45;">Session Cancelled</h2>
+            <h2 style="color: #2563EB;">Session Cancelled</h2>
             <p>Hi ${clientFullName},</p>
             <p>Your ${durLabel} session with <strong>${coachFullName}</strong> on <strong>${dateLabel}</strong> (${timeRange}) has been successfully cancelled.</p>
             ${creditRefunded
@@ -207,9 +207,9 @@ export default function Dashboard() {
                   ? `<p style="padding:12px; background:#3a1f1f; border-left:4px solid #f87171; color:#e5e7eb;"><strong>Please note:</strong> This cancellation was within the 24-hour window, so no session credit was returned. Contact support if you believe this is an exception.</p>`
                   : `<p>No credit was returned for this session.</p>`)
             }
-            <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#B89A45; color:#000; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">Go to Dashboard</a></p>
+            <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#2563EB; color:#fff; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">Go to Dashboard</a></p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #999;">LC Training — Private Soccer Coaching<br/>${window.location.origin}</p>
+            <p style="font-size: 12px; color: #999;">LevelCoach Training — Private Soccer Coaching<br/>${window.location.origin}</p>
           </div>
         `,
       }));
@@ -221,16 +221,16 @@ export default function Dashboard() {
           subject: `Session Cancelled — ${clientFullName} on ${dateLabel}`,
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #B89A45;">Session Cancelled</h2>
+              <h2 style="color: #2563EB;">Session Cancelled</h2>
               <p>Hi ${coach.first_name},</p>
               <p>The ${durLabel} session with <strong>${clientFullName}</strong> on <strong>${dateLabel}</strong> (${timeRange}) in ${session.county} County was cancelled by ${cancelledByLabel}.</p>
               ${creditRefunded
                 ? `<p>The client's session credit has been returned automatically.</p>`
                 : (isLateCancel ? `<p>This was a late cancellation (within 24 hours) — no credit was returned to the client.</p>` : '')
               }
-              <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#B89A45; color:#000; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Dashboard</a></p>
+              <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#2563EB; color:#fff; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Dashboard</a></p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">LC Training — Coach Portal<br/>${window.location.origin}</p>
+              <p style="font-size: 12px; color: #999;">LevelCoach Training — Coach Portal<br/>${window.location.origin}</p>
             </div>
           `,
         }));
@@ -289,7 +289,7 @@ export default function Dashboard() {
         subject: `Session Rescheduled — ${formatLongDateET(newDate)}`,
         body: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-            <h2 style="color: #B89A45;">Session Rescheduled</h2>
+            <h2 style="color: #2563EB;">Session Rescheduled</h2>
             <p>Hi ${clientFullName},</p>
             <p>Your ${durLabel} session with <strong>${coachFullName}</strong> has been successfully rescheduled.</p>
             <table style="width:100%; border-collapse:collapse; margin:16px 0;">
@@ -299,16 +299,16 @@ export default function Dashboard() {
               </tr>
               <tr>
                 <td style="padding:10px; border:1px solid #ddd;"><strong>New:</strong></td>
-                <td style="padding:10px; border:1px solid #ddd; color:#B89A45;"><strong>${newWhen}</strong></td>
+                <td style="padding:10px; border:1px solid #ddd; color:#2563EB;"><strong>${newWhen}</strong></td>
               </tr>
               <tr>
                 <td style="padding:10px; border:1px solid #ddd; background:#f8f8f8;"><strong>Location:</strong></td>
                 <td style="padding:10px; border:1px solid #ddd; background:#f8f8f8;">${rescheduleSession.county} County</td>
               </tr>
             </table>
-            <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#B89A45; color:#000; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Session</a></p>
+            <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#2563EB; color:#fff; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Session</a></p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #999;">LC Training — Private Soccer Coaching<br/>${window.location.origin}</p>
+            <p style="font-size: 12px; color: #999;">LevelCoach Training — Private Soccer Coaching<br/>${window.location.origin}</p>
           </div>
         `,
       }));
@@ -320,7 +320,7 @@ export default function Dashboard() {
           subject: `Session Rescheduled — ${clientFullName}`,
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #B89A45;">Session Rescheduled</h2>
+              <h2 style="color: #2563EB;">Session Rescheduled</h2>
               <p>Hi ${coach.first_name},</p>
               <p><strong>${clientFullName}</strong> has rescheduled their ${durLabel} session.</p>
               <table style="width:100%; border-collapse:collapse; margin:16px 0;">
@@ -330,16 +330,16 @@ export default function Dashboard() {
                 </tr>
                 <tr>
                   <td style="padding:10px; border:1px solid #ddd;"><strong>New:</strong></td>
-                  <td style="padding:10px; border:1px solid #ddd; color:#B89A45;"><strong>${newWhen}</strong></td>
+                  <td style="padding:10px; border:1px solid #ddd; color:#2563EB;"><strong>${newWhen}</strong></td>
                 </tr>
                 <tr>
                   <td style="padding:10px; border:1px solid #ddd; background:#f8f8f8;"><strong>County:</strong></td>
                   <td style="padding:10px; border:1px solid #ddd; background:#f8f8f8;">${rescheduleSession.county}</td>
                 </tr>
               </table>
-              <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#B89A45; color:#000; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Dashboard</a></p>
+              <p style="margin-top:20px;"><a href="${window.location.origin}/dashboard" style="background:#2563EB; color:#fff; padding:10px 18px; text-decoration:none; border-radius:6px; font-weight:bold;">View Dashboard</a></p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">LC Training — Coach Portal<br/>${window.location.origin}</p>
+              <p style="font-size: 12px; color: #999;">LevelCoach Training — Coach Portal<br/>${window.location.origin}</p>
             </div>
           `,
         }));
@@ -464,14 +464,14 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
           <div>
-            <h1 className="font-oswald text-4xl font-bold tracking-tight text-foreground">DASHBOARD</h1>
+            <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">DASHBOARD</h1>
             <p className="text-muted-foreground mt-1">
               {isCoach ? 'Manage your coaching sessions' : 'Track your training sessions'}
             </p>
           </div>
           <div className="flex gap-3">
             <Link to="/messages">
-              <Button variant="outline" className="font-oswald tracking-wider uppercase text-xs relative">
+              <Button variant="outline" className="font-display tracking-wider uppercase text-xs relative">
                 <MessageSquare className="w-4 h-4 mr-2" /> Messages
                 {unreadCount > 0 && (
                   <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-accent text-accent-foreground text-xs flex items-center justify-center">
@@ -481,13 +481,13 @@ export default function Dashboard() {
               </Button>
             </Link>
             <Link to="/settings">
-              <Button variant="outline" className="font-oswald tracking-wider uppercase text-xs">
+              <Button variant="outline" className="font-display tracking-wider uppercase text-xs">
                 <Settings className="w-4 h-4 mr-2" /> Settings
               </Button>
             </Link>
             {isAdmin && (
               <Link to="/admin">
-                <Button className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+                <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                   <Shield className="w-4 h-4 mr-2" /> Admin Panel
                 </Button>
               </Link>
@@ -508,7 +508,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3">
                     <Zap className="w-5 h-5 text-accent flex-shrink-0" />
                     <div>
-                      <p className="font-oswald text-lg font-bold text-foreground tracking-wider">
+                      <p className="font-display text-lg font-bold text-foreground tracking-wider">
                         {credit.package_name || 'Session'}
                       </p>
                       <p className="text-sm text-muted-foreground">
@@ -517,7 +517,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <Link to={`/book?credit_id=${credit.id}`}>
-                    <Button className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90 whitespace-nowrap">
+                    <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90 whitespace-nowrap">
                       Schedule Remaining Session{remaining === 1 ? '' : 's'}
                     </Button>
                   </Link>
@@ -532,16 +532,16 @@ export default function Dashboard() {
           <div className="mb-10 bg-card border border-border rounded-lg overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-accent" />
-              <h2 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground">Training Progress</h2>
+              <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">Training Progress</h2>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border">
               {/* Completed */}
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Sessions Completed</span>
+                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Sessions Completed</span>
                 </div>
-                <p className="font-oswald text-3xl font-bold text-foreground">{progress.totalCompleted}</p>
+                <p className="font-display text-3xl font-bold text-foreground">{progress.totalCompleted}</p>
                 <p className="text-xs text-muted-foreground mt-1">Lifetime</p>
               </div>
 
@@ -549,7 +549,7 @@ export default function Dashboard() {
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <UserIcon className="w-4 h-4 text-accent" />
-                  <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Most Recent Coach</span>
+                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Most Recent Coach</span>
                 </div>
                 {progress.lastCoach ? (
                   <Link to={`/coaches/${progress.lastCoach.id}`} className="flex items-center gap-2 hover:opacity-80">
@@ -559,7 +559,7 @@ export default function Dashboard() {
                         : <UserIcon className="w-4 h-4 text-muted-foreground" />}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-oswald tracking-wider text-foreground text-sm truncate">{progress.lastCoach.first_name} {progress.lastCoach.last_name}</p>
+                      <p className="font-display tracking-wider text-foreground text-sm truncate">{progress.lastCoach.first_name} {progress.lastCoach.last_name}</p>
                       <p className="text-[10px] text-muted-foreground truncate">{progress.lastCoach.county} County</p>
                     </div>
                   </Link>
@@ -572,12 +572,12 @@ export default function Dashboard() {
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="w-4 h-4 text-accent" />
-                  <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Most Common Goals</span>
+                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Most Common Goals</span>
                 </div>
                 {progress.topGoals.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {progress.topGoals.map(g => (
-                      <Badge key={g} variant="secondary" className="text-[10px] font-oswald tracking-wide uppercase bg-secondary">{g}</Badge>
+                      <Badge key={g} variant="secondary" className="text-[10px] font-display tracking-wide uppercase bg-secondary">{g}</Badge>
                     ))}
                   </div>
                 ) : (
@@ -589,19 +589,19 @@ export default function Dashboard() {
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <CalendarClock className="w-4 h-4 text-accent" />
-                  <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Up Next</span>
+                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Up Next</span>
                 </div>
                 {progress.nextSession ? (
                   <div>
-                    <p className="font-oswald tracking-wider text-foreground text-sm">{formatLongDateET(progress.nextSession.date).split(',')[0]}</p>
+                    <p className="font-display tracking-wider text-foreground text-sm">{formatLongDateET(progress.nextSession.date).split(',')[0]}</p>
                     <p className="text-xs text-muted-foreground">{formatTimeET(progress.nextSession.date, progress.nextSession.start_time)}</p>
                   </div>
                 ) : progress.remainingCredits > 0 ? (
-                  <Link to="/book" className="text-sm font-oswald tracking-wider text-accent hover:underline">
+                  <Link to="/book" className="text-sm font-display tracking-wider text-accent hover:underline">
                     {progress.remainingCredits} credit{progress.remainingCredits === 1 ? '' : 's'} → schedule →
                   </Link>
                 ) : (
-                  <Link to="/book" className="text-sm font-oswald tracking-wider text-accent hover:underline">
+                  <Link to="/book" className="text-sm font-display tracking-wider text-accent hover:underline">
                     Book a session →
                   </Link>
                 )}
@@ -616,24 +616,24 @@ export default function Dashboard() {
         {/* New user welcome prompt */}
         {!isCoach && !isAdmin && sessions.length === 0 && credits.length === 0 && (
           <div className="mb-8 p-5 bg-primary/10 border border-primary/20 rounded-lg">
-            <h3 className="font-oswald text-lg font-bold tracking-wider text-foreground mb-1">WELCOME TO LC TRAINING!</h3>
+            <h3 className="font-display text-lg font-bold tracking-wider text-foreground mb-1">WELCOME TO LC TRAINING!</h3>
             <p className="text-sm text-muted-foreground mb-4">You're all set. Here's what you can do to get started:</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Link to="/book">
                 <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
-                  <p className="font-oswald tracking-wider text-sm text-foreground">Book a Session</p>
+                  <p className="font-display tracking-wider text-sm text-foreground">Book a Session</p>
                   <p className="text-xs text-muted-foreground mt-1">Choose a package and pick your coach.</p>
                 </div>
               </Link>
               <Link to="/settings">
                 <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
-                  <p className="font-oswald tracking-wider text-sm text-foreground">Complete Your Profile</p>
+                  <p className="font-display tracking-wider text-sm text-foreground">Complete Your Profile</p>
                   <p className="text-xs text-muted-foreground mt-1">Add your info and preferences.</p>
                 </div>
               </Link>
               <Link to="/matching">
                 <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors cursor-pointer">
-                  <p className="font-oswald tracking-wider text-sm text-foreground">Find a Training Partner</p>
+                  <p className="font-display tracking-wider text-sm text-foreground">Find a Training Partner</p>
                   <p className="text-xs text-muted-foreground mt-1">Connect with other players in your area.</p>
                 </div>
               </Link>
@@ -647,10 +647,10 @@ export default function Dashboard() {
             {/* Upcoming */}
             <div>
               <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                <h2 className="font-oswald text-xl font-bold tracking-wider text-foreground">UPCOMING SESSIONS</h2>
+                <h2 className="font-display text-xl font-bold tracking-wider text-foreground">UPCOMING SESSIONS</h2>
                 {!isCoach && progress.lastCoach && progress.remainingCredits === 0 && upcoming.length > 0 && (
                   <Link to={`/book?coach_id=${progress.lastCoach.id}&county=${encodeURIComponent(progress.lastCoach.county || '')}`}>
-                    <Button variant="outline" size="sm" className="font-oswald tracking-wider uppercase text-xs">
+                    <Button variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs">
                       <Repeat className="w-3 h-3 mr-1.5" /> Rebook with {progress.lastCoach.first_name}
                     </Button>
                   </Link>
@@ -664,27 +664,27 @@ export default function Dashboard() {
                     <div className="mt-4 flex flex-wrap gap-2 justify-center">
                       {progress.remainingCredits > 0 ? (
                         <Link to="/book">
-                          <Button className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+                          <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                             <CalendarClock className="w-3 h-3 mr-1.5" /> Schedule {progress.remainingCredits} Credit{progress.remainingCredits === 1 ? '' : 's'}
                           </Button>
                         </Link>
                       ) : (
                         <Link to="/book">
-                          <Button className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+                          <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                             Book a Session
                           </Button>
                         </Link>
                       )}
                       {progress.lastCoach && (
                         <Link to={`/book?coach_id=${progress.lastCoach.id}&county=${encodeURIComponent(progress.lastCoach.county || '')}`}>
-                          <Button variant="outline" className="font-oswald tracking-wider uppercase text-xs">
+                          <Button variant="outline" className="font-display tracking-wider uppercase text-xs">
                             <Repeat className="w-3 h-3 mr-1.5" /> Rebook with {progress.lastCoach.first_name}
                           </Button>
                         </Link>
                       )}
                       {user && !user.profile_setup_complete && (
                         <Link to="/settings">
-                          <Button variant="ghost" className="font-oswald tracking-wider uppercase text-xs">
+                          <Button variant="ghost" className="font-display tracking-wider uppercase text-xs">
                             Finish profile →
                           </Button>
                         </Link>
@@ -712,7 +712,7 @@ export default function Dashboard() {
                               </Link>
                             )}
                             <div className="min-w-0">
-                              <h3 className="font-oswald text-lg font-bold tracking-wider">
+                              <h3 className="font-display text-lg font-bold tracking-wider">
                                 {formatLongDateET(session.date)}
                               </h3>
                               <p className="text-sm text-muted-foreground">
@@ -729,7 +729,7 @@ export default function Dashboard() {
                               </Link>
                             ) : null}
                             {!isCoach && session.payment_method && (
-                              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase ${
+                              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-display tracking-wide uppercase ${
                                 session.payment_method === 'cash' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
                                 session.payment_method === 'credits' ? 'bg-primary/10 text-primary border border-primary/20' :
                                 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -761,12 +761,12 @@ export default function Dashboard() {
                         {/* Coach-shared content (client visible) */}
                         {!isCoach && (session.client_visible_notes || session.homework) && (
                           <div className="mt-4 border-t border-border pt-3 space-y-2">
-                            <p className="text-[10px] font-oswald tracking-widest uppercase text-accent flex items-center gap-1">
+                            <p className="text-[10px] font-display tracking-widest uppercase text-accent flex items-center gap-1">
                               <Sparkles className="w-3 h-3" /> From your coach
                             </p>
                             {session.homework && (
                               <div className="bg-secondary/40 border border-border rounded p-3">
-                                <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-1">
+                                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-1">
                                   <BookOpen className="w-3 h-3" /> Homework
                                 </p>
                                 <p className="text-sm text-foreground whitespace-pre-line">{session.homework}</p>
@@ -774,7 +774,7 @@ export default function Dashboard() {
                             )}
                             {session.client_visible_notes && (
                               <div className="bg-secondary/40 border border-border rounded p-3">
-                                <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-1">Notes</p>
+                                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1">Notes</p>
                                 <p className="text-sm text-foreground whitespace-pre-line">{session.client_visible_notes}</p>
                               </div>
                             )}
@@ -787,7 +787,7 @@ export default function Dashboard() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleCancel(session)}
-                                className="font-oswald tracking-wider uppercase text-xs text-destructive hover:text-destructive"
+                                className="font-display tracking-wider uppercase text-xs text-destructive hover:text-destructive"
                               >
                                 Cancel
                               </Button>
@@ -798,7 +798,7 @@ export default function Dashboard() {
                                     await sessionRepo.update(session.id, { payment_status: 'paid' });
                                     setSessions(prev => prev.map(s => s.id === session.id ? { ...s, payment_status: 'paid' } : s));
                                   }}
-                                  className="bg-green-600 text-white font-oswald tracking-wider uppercase text-xs hover:bg-green-700"
+                                  className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
                                 >
                                   Confirm Cash
                                 </Button>
@@ -815,7 +815,7 @@ export default function Dashboard() {
                                       size="sm"
                                       variant="outline"
                                       onClick={() => handleStartReschedule(session)}
-                                      className="font-oswald tracking-wider uppercase text-xs"
+                                      className="font-display tracking-wider uppercase text-xs"
                                     >
                                       <CalendarClock className="w-3 h-3 mr-1" /> Reschedule
                                     </Button>
@@ -824,7 +824,7 @@ export default function Dashboard() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleCancel(session)}
-                                    className="font-oswald tracking-wider uppercase text-xs text-destructive hover:text-destructive"
+                                    className="font-display tracking-wider uppercase text-xs text-destructive hover:text-destructive"
                                   >
                                     <XCircle className="w-3 h-3 mr-1" /> Cancel
                                   </Button>
@@ -848,7 +848,7 @@ export default function Dashboard() {
             {/* Past */}
             {past.length > 0 && (
               <div>
-                <h2 className="font-oswald text-xl font-bold tracking-wider text-foreground mb-4">PAST SESSIONS</h2>
+                <h2 className="font-display text-xl font-bold tracking-wider text-foreground mb-4">PAST SESSIONS</h2>
                 <div className="space-y-3">
                   {past.slice(0, 10).map(session => {
                     const coach = coaches[session.coach_id];
@@ -868,7 +868,7 @@ export default function Dashboard() {
                               </Link>
                             )}
                             <div className="min-w-0">
-                              <p className="font-oswald tracking-wider text-sm">
+                              <p className="font-display tracking-wider text-sm">
                                  {format(new Date(session.date + 'T00:00:00'), 'MMM d, yyyy')} · {formatTimeET(session.date, session.start_time)} · {session.duration_minutes} min
                               </p>
                               <p className="text-xs text-muted-foreground">
@@ -885,7 +885,7 @@ export default function Dashboard() {
                           <div className="mt-3 pt-3 border-t border-border space-y-2">
                             {session.homework && (
                               <div>
-                                <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-0.5">
+                                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-0.5">
                                   <BookOpen className="w-3 h-3" /> Homework
                                 </p>
                                 <p className="text-sm text-foreground whitespace-pre-line">{session.homework}</p>
@@ -893,7 +893,7 @@ export default function Dashboard() {
                             )}
                             {session.client_visible_notes && (
                               <div>
-                                <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-0.5">Coach notes</p>
+                                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-0.5">Coach notes</p>
                                 <p className="text-sm text-foreground whitespace-pre-line">{session.client_visible_notes}</p>
                               </div>
                             )}
@@ -917,7 +917,7 @@ export default function Dashboard() {
             {/* Packages / receipts (clients only) */}
             {!isCoach && credits.length > 0 && (
               <div className="bg-card border border-border rounded-lg p-4">
-                <h3 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                <h3 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground mb-3 flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-accent" /> Your Packages
                 </h3>
                 <div className="space-y-3">
@@ -937,11 +937,11 @@ export default function Dashboard() {
                     return (
                       <div key={c.id} className="border-b border-border last:border-0 pb-3 last:pb-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="font-oswald tracking-wider text-foreground text-sm truncate">{c.package_name || 'Session credit'}</p>
+                          <p className="font-display tracking-wider text-foreground text-sm truncate">{c.package_name || 'Session credit'}</p>
                           {remaining === 0 ? (
-                            <Badge variant="secondary" className="text-[10px] font-oswald tracking-widest uppercase">Used up</Badge>
+                            <Badge variant="secondary" className="text-[10px] font-display tracking-widest uppercase">Used up</Badge>
                           ) : (
-                            <span className="text-[10px] font-oswald tracking-widest uppercase text-accent flex-shrink-0">{remaining} left</span>
+                            <span className="text-[10px] font-display tracking-widest uppercase text-accent flex-shrink-0">{remaining} left</span>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -956,14 +956,14 @@ export default function Dashboard() {
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
                   Receipts for electronic payments are emailed by the processor. Need a copy or a billing fix?{' '}
-                  <a href="mailto:support@lctrainings.com" className="text-accent hover:underline">Contact support</a>.
+                  <a href="mailto:support@levelcoach.com" className="text-accent hover:underline">Contact support</a>.
                 </p>
               </div>
             )}
 
             {/* Quick actions */}
             <div className="bg-card border border-border rounded-lg p-4">
-              <h3 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground mb-4">Quick Actions</h3>
+              <h3 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground mb-4">Quick Actions</h3>
               <div className="space-y-2">
                 {!isCoach && (
                   <Link to="/book" className="block">
@@ -989,7 +989,7 @@ export default function Dashboard() {
                     <Settings className="w-4 h-4 mr-2" /> Settings
                   </Button>
                 </Link>
-                <a href="mailto:support@lctrainings.com" className="block">
+                <a href="mailto:support@levelcoach.com" className="block">
                   <Button variant="ghost" className="w-full justify-start text-sm">
                     <LifeBuoy className="w-4 h-4 mr-2" /> Contact Support
                   </Button>
@@ -1005,7 +1005,7 @@ export default function Dashboard() {
       <Dialog open={!!rescheduleSession} onOpenChange={(open) => { if (!open) setRescheduleSession(null); }}>
         <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-oswald text-2xl font-bold tracking-tight uppercase">Reschedule Session</DialogTitle>
+            <DialogTitle className="font-display text-2xl font-bold tracking-tight uppercase">Reschedule Session</DialogTitle>
             {rescheduleSession && (
               <DialogDescription>
                 Pick a new date and time with {coaches[rescheduleSession.coach_id]?.first_name} {coaches[rescheduleSession.coach_id]?.last_name}. All times shown in ET.
@@ -1016,7 +1016,7 @@ export default function Dashboard() {
           {rescheduleSession && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
                 <Calendar
                   mode="single"
                   selected={rescheduleDate}
@@ -1027,7 +1027,7 @@ export default function Dashboard() {
               </div>
               {rescheduleDate && (
                 <div>
-                  <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Time (ET)</p>
+                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Time (ET)</p>
                   <div className="grid grid-cols-3 gap-2">
                     {TIME_SLOTS.map((time) => {
                       const taken = isRescheduleTimeSlotTaken(time);
@@ -1038,7 +1038,7 @@ export default function Dashboard() {
                           key={time}
                           onClick={() => !disabled && setRescheduleTime(time)}
                           disabled={disabled}
-                          className={`p-2 rounded-md border text-xs font-oswald tracking-wide transition-all ${
+                          className={`p-2 rounded-md border text-xs font-display tracking-wide transition-all ${
                             disabled
                               ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed'
                               : rescheduleTime === time
@@ -1060,14 +1060,14 @@ export default function Dashboard() {
             <Button
               variant="outline"
               onClick={() => setRescheduleSession(null)}
-              className="font-oswald tracking-wider uppercase"
+              className="font-display tracking-wider uppercase"
             >
               Cancel
             </Button>
             <Button
               onClick={handleConfirmReschedule}
               disabled={!rescheduleDate || !rescheduleTime || rescheduling}
-              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
             >
               {rescheduling ? 'Rescheduling...' : 'Confirm Reschedule'}
             </Button>

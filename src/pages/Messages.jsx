@@ -32,7 +32,7 @@ export default function Messages() {
 
   const loadConversations = async () => {
     try {
-      // NOTE: Base44 SDK doesn't expose an "array-contains" OR filter, so we
+      // NOTE: legacy SDK doesn't expose an "array-contains" OR filter, so we
       // fetch all conversations and narrow client-side. When conversation
       // volume grows this should move behind a server function that returns
       // only rows the caller participates in.
@@ -132,7 +132,7 @@ export default function Messages() {
   return (
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-6">MESSAGES</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">MESSAGES</h1>
 
         <div className="bg-card border border-border rounded-lg overflow-hidden" style={{ height: '70vh' }}>
           <div className="flex h-full">
@@ -142,7 +142,7 @@ export default function Messages() {
                 <Button
                   size="sm"
                   onClick={() => setShowNewConvo(!showNewConvo)}
-                  className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+                  className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
                 >
                   <Plus className="w-3 h-3 mr-1" /> Message a Coach
                 </Button>
@@ -154,7 +154,7 @@ export default function Messages() {
                         onClick={() => startConvoWithCoach(c)}
                         className="w-full text-left px-3 py-2 rounded-md bg-secondary hover:bg-secondary/80 transition-colors text-sm"
                       >
-                        <span className="font-oswald tracking-wider">{c.first_name} {c.last_name}</span>
+                        <span className="font-display tracking-wider">{c.first_name} {c.last_name}</span>
                         <span className="text-xs text-muted-foreground ml-2">{c.county}</span>
                       </button>
                     ))}
@@ -171,7 +171,7 @@ export default function Messages() {
                       onClick={() => loadMessages(convo)}
                       className={`w-full text-left p-4 border-b border-border hover:bg-secondary/50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-secondary' : ''}`}
                     >
-                      <p className="font-oswald tracking-wider text-sm text-foreground">{getOtherName(convo)}</p>
+                      <p className="font-display tracking-wider text-sm text-foreground">{getOtherName(convo)}</p>
                       {convo.last_message && (
                         <p className="text-xs text-muted-foreground mt-1 truncate">{convo.last_message}</p>
                       )}
@@ -190,7 +190,7 @@ export default function Messages() {
                     <button onClick={() => setSelectedConvo(null)} className="sm:hidden">
                       <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                     </button>
-                    <p className="font-oswald tracking-wider text-foreground">{getOtherName(selectedConvo)}</p>
+                    <p className="font-display tracking-wider text-foreground">{getOtherName(selectedConvo)}</p>
                   </div>
 
                   {/* Monitoring Disclaimer */}

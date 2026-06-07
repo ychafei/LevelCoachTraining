@@ -17,13 +17,7 @@ import { describeFee } from '@/lib/earnings';
 import { logAdminAction } from '@/lib/audit';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 
-const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0, coach_type: 'private_training', title: '' };
-
-const TYPE_TABS = [
-  { value: 'all', label: 'All' },
-  { value: 'private_training', label: 'Private Training' },
-  { value: 'team', label: 'LCFC / Team' },
-];
+const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, venmo: '', zelle: '', cashapp: '', paypal: '', cash_accepted: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
 export default function AdminCoaches() {
   const { user, isAdmin } = useCurrentUser();
@@ -39,12 +33,9 @@ export default function AdminCoaches() {
   const [sendingVerify, setSendingVerify] = useState(false);
   const [specInput, setSpecInput] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [typeFilter, setTypeFilter] = useState('all');
   const { confirm, dialog: confirmDialog } = useConfirm();
 
-  const visibleCoaches = typeFilter === 'all'
-    ? coaches
-    : coaches.filter(c => (c.coach_type || 'private_training') === typeFilter);
+  const visibleCoaches = coaches;
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
@@ -342,15 +333,15 @@ export default function AdminCoaches() {
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">MANAGE COACHES</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">MANAGE COACHES</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => setEditing({...emptyCoach})} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+              <Button onClick={() => setEditing({...emptyCoach})} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                 <Plus className="w-4 h-4 mr-2" /> Add Coach
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto bg-card border-border">
-              <DialogHeader><DialogTitle className="font-oswald tracking-wider">{editing?.id ? 'EDIT COACH' : 'ADD COACH'}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="font-display tracking-wider">{editing?.id ? 'EDIT COACH' : 'ADD COACH'}</DialogTitle></DialogHeader>
               {editing && (
                 <div className="space-y-4 mt-4">
                   {/* Profile Photo */}
@@ -359,59 +350,38 @@ export default function AdminCoaches() {
                       {editing.photo_url ? (
                         <img src={editing.photo_url} alt="Coach" className="w-full h-full object-cover" />
                       ) : (
-                        <span className="font-oswald text-xl text-muted-foreground/40">{editing.first_name?.[0]}{editing.last_name?.[0]}</span>
+                        <span className="font-display text-xl text-muted-foreground/40">{editing.first_name?.[0]}{editing.last_name?.[0]}</span>
                       )}
                     </div>
                     <label className="cursor-pointer">
                       <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                      <Button type="button" variant="outline" size="sm" className="font-oswald tracking-wider uppercase text-xs pointer-events-none">
+                      <Button type="button" variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs pointer-events-none">
                         <Upload className="w-3 h-3 mr-1" />{uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                       </Button>
                     </label>
                   </div>
-                  <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Coach Type</Label>
-                    <Select value={editing.coach_type || 'private_training'} onValueChange={v => setEditing({...editing, coach_type: v})}>
-                      <SelectTrigger className="bg-secondary border-border mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="private_training">Private Training (LC Training)</SelectItem>
-                        <SelectItem value="team">Team / LCFC</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">First Name</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">First Name</Label>
                       <Input value={editing.first_name} onChange={e => setEditing({...editing, first_name: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Last Name</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Last Name</Label>
                       <Input value={editing.last_name} onChange={e => setEditing({...editing, last_name: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
-                  {editing.coach_type === 'team' && (
-                    <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Title</Label>
-                      <Input
-                        value={editing.title || ''}
-                        onChange={e => setEditing({...editing, title: e.target.value})}
-                        className="bg-secondary border-border mt-1"
-                        placeholder="Head Coach, Assistant, GK Coach…"
-                      />
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Email</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Email</Label>
                       <Input value={editing.email} onChange={e => setEditing({...editing, email: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Phone</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Phone</Label>
                       <Input value={editing.phone} onChange={e => setEditing({...editing, phone: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">County</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">County</Label>
                     <Select value={editing.county} onValueChange={v => setEditing({...editing, county: v})}>
                       <SelectTrigger className="bg-secondary border-border mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -422,19 +392,19 @@ export default function AdminCoaches() {
                     </Select>
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Training Area</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Training Area</Label>
                     <Input value={editing.training_area || ''} onChange={e => setEditing({...editing, training_area: e.target.value})} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Bio</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Bio</Label>
                     <Textarea value={editing.bio || ''} onChange={e => setEditing({...editing, bio: e.target.value})} className="bg-secondary border-border mt-1" rows={3} />
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Quote</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Quote</Label>
                     <Input value={editing.quote || ''} onChange={e => setEditing({...editing, quote: e.target.value})} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Specializations</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Specializations</Label>
                     <div className="flex gap-2 mt-1">
                       <Input value={specInput} onChange={e => setSpecInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSpec())} className="bg-secondary border-border" placeholder="Add specialization" />
                       <Button type="button" onClick={addSpec} variant="outline" size="sm">Add</Button>
@@ -447,16 +417,16 @@ export default function AdminCoaches() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Venmo</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Venmo</Label>
                       <Input value={editing.venmo || ''} onChange={e => setEditing({...editing, venmo: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Zelle</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Zelle</Label>
                       <Input value={editing.zelle || ''} onChange={e => setEditing({...editing, zelle: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
                   <div className="border border-border rounded-lg p-3 space-y-3">
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Platform Fee</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Platform Fee</Label>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { v: 'none', label: 'None' },
@@ -469,7 +439,7 @@ export default function AdminCoaches() {
                             key={opt.v}
                             type="button"
                             onClick={() => setEditing({ ...editing, platform_fee_type: opt.v, platform_fee_value: opt.v === 'none' ? 0 : (editing.platform_fee_value || 0) })}
-                            className={`px-3 py-2 text-xs font-oswald tracking-wider uppercase rounded border transition-colors ${active ? 'bg-accent text-accent-foreground border-accent' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
+                            className={`px-3 py-2 text-xs font-display tracking-wider uppercase rounded border transition-colors ${active ? 'bg-accent text-accent-foreground border-accent' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
                           >
                             {opt.label}
                           </button>
@@ -497,33 +467,11 @@ export default function AdminCoaches() {
                     <div className="flex items-center gap-2"><Switch checked={editing.is_active} onCheckedChange={v => setEditing({...editing, is_active: v})} /><Label className="text-sm">Active</Label></div>
                     <div className="flex items-center gap-2"><Switch checked={editing.is_head_coach} onCheckedChange={v => setEditing({...editing, is_head_coach: v})} /><Label className="text-sm">Head Coach</Label></div>
                   </div>
-                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">Save Coach</Button>
+                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">Save Coach</Button>
                 </div>
               )}
             </DialogContent>
           </Dialog>
-        </div>
-
-        <div className="flex items-center gap-2 mb-4 border-b border-border">
-          {TYPE_TABS.map(t => {
-            const count = t.value === 'all'
-              ? coaches.length
-              : coaches.filter(c => (c.coach_type || 'private_training') === t.value).length;
-            const active = typeFilter === t.value;
-            return (
-              <button
-                key={t.value}
-                onClick={() => setTypeFilter(t.value)}
-                className={`px-4 py-2 text-xs font-oswald tracking-wider uppercase transition-colors border-b-2 -mb-px ${
-                  active
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t.label} <span className="ml-1 text-muted-foreground">({count})</span>
-              </button>
-            );
-          })}
         </div>
 
         <div className="space-y-3">
@@ -533,14 +481,11 @@ export default function AdminCoaches() {
             <div key={coach.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                  <span className="font-oswald text-sm text-muted-foreground">{coach.first_name?.[0]}{coach.last_name?.[0]}</span>
+                  <span className="font-display text-sm text-muted-foreground">{coach.first_name?.[0]}{coach.last_name?.[0]}</span>
                 </div>
                 <div>
-                  <p className="font-oswald tracking-wider text-foreground">{coach.first_name} {coach.last_name}</p>
+                  <p className="font-display tracking-wider text-foreground">{coach.first_name} {coach.last_name}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <Badge variant="outline" className="text-[10px] font-oswald tracking-widest uppercase">
-                      {(coach.coach_type || 'private_training') === 'team' ? 'LCFC' : 'Private'}
-                    </Badge>
                     {coach.county && (
                       <span className="text-xs text-accent flex items-center gap-1"><MapPin className="w-3 h-3" />{coach.county}</span>
                     )}
@@ -557,18 +502,18 @@ export default function AdminCoaches() {
                     : '';
                   return linked ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-accent font-oswald tracking-wide">Linked: {linkedName}</span>
+                      <span className="text-xs text-accent font-display tracking-wide">Linked: {linkedName}</span>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs font-oswald tracking-wider uppercase h-7 hover:text-red-500 hover:border-red-500/50"
+                        className="text-xs font-display tracking-wider uppercase h-7 hover:text-red-500 hover:border-red-500/50"
                         onClick={() => unlinkUser(coach)}
                       >
                         Unlink
                       </Button>
                     </div>
                   ) : (
-                    <Button size="sm" variant="outline" className="text-xs font-oswald tracking-wider uppercase h-7" onClick={() => setLinkDialog(coach)}>
+                    <Button size="sm" variant="outline" className="text-xs font-display tracking-wider uppercase h-7" onClick={() => setLinkDialog(coach)}>
                       Link User
                     </Button>
                   );
@@ -596,7 +541,7 @@ export default function AdminCoaches() {
         onOpenChange={(o) => { if (!o) { setLinkDialog(null); setLinkSearch(''); setLinkShowAll(false); setLinkEmail(''); } }}
       >
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">LINK USER TO {linkDialog?.first_name?.toUpperCase()} {linkDialog?.last_name?.toUpperCase()}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display tracking-wider">LINK USER TO {linkDialog?.first_name?.toUpperCase()} {linkDialog?.last_name?.toUpperCase()}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground mb-3">Select the user account that belongs to this coach. Their role will be set to "coach".</p>
           <Input
             value={linkSearch}
@@ -633,7 +578,7 @@ export default function AdminCoaches() {
                       onClick={() => linkUser(u.id)}
                       className="w-full text-left p-3 rounded-lg border border-border bg-secondary hover:border-accent/50 transition-all"
                     >
-                      <p className="font-oswald tracking-wide text-sm text-foreground">
+                      <p className="font-display tracking-wide text-sm text-foreground">
                         {name || '(no name set)'}
                         {u.role && u.role !== 'user' && (
                           <span className="ml-2 text-[10px] uppercase text-accent">{u.role}</span>
@@ -651,7 +596,7 @@ export default function AdminCoaches() {
           })()}
 
           <div className="border-t border-border mt-4 pt-4">
-            <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-2">
+            <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-2">
               Or link manually by email
             </p>
             <div className="flex gap-2">
@@ -667,14 +612,14 @@ export default function AdminCoaches() {
                 onClick={linkByEmail}
                 disabled={linkingEmail || sendingVerify || !linkEmail.trim()}
                 variant="outline"
-                className="font-oswald tracking-wider uppercase text-xs shrink-0 border-border"
+                className="font-display tracking-wider uppercase text-xs shrink-0 border-border"
               >
                 {linkingEmail ? 'Linking…' : 'Link now'}
               </Button>
               <Button
                 onClick={sendVerifyLink}
                 disabled={sendingVerify || linkingEmail || !linkEmail.trim()}
-                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs shrink-0"
+                className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs shrink-0"
               >
                 {sendingVerify ? 'Sending…' : 'Send verify email'}
               </Button>

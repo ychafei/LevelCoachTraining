@@ -15,7 +15,7 @@ function toWritable(data) {
   return out;
 }
 
-// Create a Base44-shaped repo (list/filter/create/update/delete) backed by an
+// Create a app-shaped repo (list/filter/create/update/delete) backed by an
 // Appwrite collection. Documents are normalised via mapDoc so call sites can
 // keep using `.id`, `.created_date`, `.updated_date`.
 export function makeRepo(collectionId) {

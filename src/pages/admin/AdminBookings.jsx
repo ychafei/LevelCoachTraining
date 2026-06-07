@@ -199,7 +199,7 @@ export default function AdminBookings() {
       sortAccessor: 'when_sort',
       cell: (row) => (
         <div>
-          <p className="font-oswald tracking-wider text-foreground text-sm">{formatSessionDateTimeET(row.date, row.start_time)}</p>
+          <p className="font-display tracking-wider text-foreground text-sm">{formatSessionDateTimeET(row.date, row.start_time)}</p>
           <p className="text-xs text-muted-foreground">{row.duration_minutes} min · {row.county}</p>
         </div>
       ),
@@ -286,14 +286,14 @@ export default function AdminBookings() {
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
-          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">ALL BOOKINGS</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">ALL BOOKINGS</h1>
           <div className="flex items-center gap-2">
             {isSuperAdmin && (
               <Button
                 variant="outline"
                 onClick={bulkDelete}
                 disabled={filtered.length === 0}
-                className="font-oswald tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                className="font-display tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                 title="Permanently delete every session matching the current filter (super admin)"
               >
                 <Lock className="w-3 h-3 mr-1.5" />

@@ -62,12 +62,12 @@ export default function CoachClients() {
       cell: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-            <span className="font-oswald text-xs text-muted-foreground">
+            <span className="font-display text-xs text-muted-foreground">
               {(row.client_name || row.client_email || '').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-oswald tracking-wider text-foreground text-sm truncate">
+            <p className="font-display tracking-wider text-foreground text-sm truncate">
               {row.client_name}{row.age ? <span className="text-muted-foreground font-normal"> · {row.age}</span> : null}
             </p>
             <p className="text-xs text-muted-foreground truncate">{row.client_email}</p>
@@ -129,7 +129,7 @@ export default function CoachClients() {
           s.tone === 'green'  ? 'bg-green-500/10 text-green-400 border-green-500/20' :
           s.tone === 'accent' ? 'bg-accent/10 text-accent border-accent/20' :
                                 'bg-secondary text-muted-foreground border-border';
-        return <Badge className={`${tone} border text-[10px] font-oswald tracking-widest uppercase`}>{s.label}</Badge>;
+        return <Badge className={`${tone} border text-[10px] font-display tracking-widest uppercase`}>{s.label}</Badge>;
       },
     },
     {
@@ -142,7 +142,7 @@ export default function CoachClients() {
   if (!user?.coach_id && isAdmin) {
     return (
       <div className="bg-card border border-accent/30 rounded-lg p-6">
-        <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-2">My Clients</h2>
+        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-2">My Clients</h2>
         <p className="text-sm text-muted-foreground">
           Your admin account isn't linked to a coach profile, so there are no clients to show.
         </p>
@@ -156,7 +156,7 @@ export default function CoachClients() {
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
           <div>
-            <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">Coach Profile Not Linked</h2>
+            <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Coach Profile Not Linked</h2>
             <p className="text-sm text-muted-foreground mt-1">Ask an admin to link your account to a coach record before you can see clients.</p>
           </div>
         </div>
@@ -168,7 +168,7 @@ export default function CoachClients() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-oswald text-2xl font-bold tracking-wider text-foreground uppercase">My Clients</h1>
+          <h1 className="font-display text-2xl font-bold tracking-wider text-foreground uppercase">My Clients</h1>
           <p className="text-sm text-muted-foreground">{clients.length} total · {clients.filter(c => c.upcoming_sessions > 0).length} with upcoming sessions</p>
         </div>
       </div>
@@ -182,7 +182,7 @@ export default function CoachClients() {
       ) : clients.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <h2 className="font-oswald text-lg tracking-wider text-foreground uppercase">No Clients Yet</h2>
+          <h2 className="font-display text-lg tracking-wider text-foreground uppercase">No Clients Yet</h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
             Once a client books a session with you, they'll show up here with their history, credits, and notes.
           </p>

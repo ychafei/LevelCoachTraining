@@ -108,7 +108,7 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-oswald tracking-wider">{ADJUST_TITLES[mode].toUpperCase()}</DialogTitle>
+          <DialogTitle className="font-display tracking-wider">{ADJUST_TITLES[mode].toUpperCase()}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {credit.client_name || credit.client_email} · {credit.package_name || 'Package'}
@@ -116,22 +116,22 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
 
         <div className="bg-secondary/50 border border-border rounded p-3 grid grid-cols-3 gap-2 text-center">
           <div>
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Total</p>
-            <p className="font-oswald text-lg text-foreground">{total}</p>
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Total</p>
+            <p className="font-display text-lg text-foreground">{total}</p>
           </div>
           <div>
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Used</p>
-            <p className="font-oswald text-lg text-foreground">{used}</p>
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Used</p>
+            <p className="font-display text-lg text-foreground">{used}</p>
           </div>
           <div>
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Remaining</p>
-            <p className={`font-oswald text-lg ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{remaining}</p>
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Remaining</p>
+            <p className={`font-display text-lg ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{remaining}</p>
           </div>
         </div>
 
         <div className="space-y-4 mt-2">
           <div>
-            <Label className="font-oswald tracking-wider uppercase text-xs">Amount</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Amount</Label>
             <p className="text-[11px] text-muted-foreground mb-1">{ADJUST_HELP[mode]}</p>
             <Input
               type="number"
@@ -143,7 +143,7 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
             />
           </div>
           <div>
-            <Label className="font-oswald tracking-wider uppercase text-xs">
+            <Label className="font-display tracking-wider uppercase text-xs">
               Reason <span className="text-destructive">*</span>
             </Label>
             <Textarea
@@ -158,11 +158,11 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
 
         {amtValid && (
           <div className="bg-secondary/50 border border-border rounded p-3 mt-2">
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-2">After</p>
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-2">After</p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
                 <p className="text-[10px] text-muted-foreground">Total</p>
-                <p className="font-oswald text-base text-foreground">
+                <p className="font-display text-base text-foreground">
                   {nextTotal}
                   {nextTotal !== total && (
                     <span className={`text-xs ml-1 ${nextTotal > total ? 'text-green-400' : 'text-destructive'}`}>
@@ -173,7 +173,7 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground">Used</p>
-                <p className="font-oswald text-base text-foreground">
+                <p className="font-display text-base text-foreground">
                   {nextUsed}
                   {nextUsed !== used && (
                     <span className={`text-xs ml-1 ${nextUsed > used ? 'text-destructive' : 'text-green-400'}`}>
@@ -184,7 +184,7 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground">Remaining</p>
-                <p className={`font-oswald text-base ${nextRemaining < 0 ? 'text-destructive' : 'text-accent'}`}>
+                <p className={`font-display text-base ${nextRemaining < 0 ? 'text-destructive' : 'text-accent'}`}>
                   {nextRemaining}
                 </p>
               </div>
@@ -201,7 +201,7 @@ function AdjustDialog({ credit, mode, onClose, onSaved, actor }) {
         <Button
           onClick={submit}
           disabled={!isValid || saving}
-          className="mt-4 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 disabled:opacity-50"
+          className="mt-4 w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 disabled:opacity-50"
         >
           {saving ? 'Saving...' : `${ADJUST_TITLES[mode]}${amtValid ? ` (${amt})` : ''}`}
         </Button>
@@ -257,7 +257,7 @@ function EditInfoDialog({ credit, onClose, onSaved, actor }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-oswald tracking-wider">EDIT PACKAGE INFO</DialogTitle>
+          <DialogTitle className="font-display tracking-wider">EDIT PACKAGE INFO</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">{credit.client_name || credit.client_email}</p>
         <p className="text-[11px] text-muted-foreground">
@@ -265,7 +265,7 @@ function EditInfoDialog({ credit, onClose, onSaved, actor }) {
         </p>
         <div className="space-y-4 mt-4">
           <div>
-            <Label className="font-oswald tracking-wider uppercase text-xs">Package Name</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Package Name</Label>
             <Input
               value={packageName}
               onChange={(e) => setPackageName(e.target.value)}
@@ -273,7 +273,7 @@ function EditInfoDialog({ credit, onClose, onSaved, actor }) {
             />
           </div>
           <div>
-            <Label className="font-oswald tracking-wider uppercase text-xs">Duration per Session</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Duration per Session</Label>
             <Select value={duration} onValueChange={setDuration}>
               <SelectTrigger className="w-full mt-1 bg-secondary border-border">
                 <SelectValue />
@@ -291,7 +291,7 @@ function EditInfoDialog({ credit, onClose, onSaved, actor }) {
         <Button
           onClick={submit}
           disabled={!dirty || saving}
-          className="mt-4 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 disabled:opacity-50"
+          className="mt-4 w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
@@ -439,7 +439,7 @@ export default function AdminCredits() {
         <div className="flex items-center gap-2">
           <Zap className={`w-4 h-4 flex-shrink-0 ${row._remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`} />
           <div>
-            <p className="font-oswald tracking-wider text-foreground text-sm">{row.client_name || row.client_email}</p>
+            <p className="font-display tracking-wider text-foreground text-sm">{row.client_name || row.client_email}</p>
             <p className="text-xs text-muted-foreground">{row.client_email}</p>
           </div>
         </div>
@@ -529,7 +529,7 @@ export default function AdminCredits() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
           <div>
-            <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">SESSION CREDITS</h1>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">SESSION CREDITS</h1>
             <p className="text-muted-foreground text-sm mt-1">
               {totalsByMath.records} record{totalsByMath.records === 1 ? '' : 's'} ·
               <span className="text-accent font-medium ml-1">{totalsByMath.totalRemaining} session{totalsByMath.totalRemaining === 1 ? '' : 's'} outstanding</span>
@@ -540,7 +540,7 @@ export default function AdminCredits() {
               variant="outline"
               onClick={bulkDelete}
               disabled={credits.length === 0}
-              className="font-oswald tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+              className="font-display tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
               title="Permanently delete every SessionCredit record (super admin)"
             >
               <Lock className="w-3 h-3 mr-1.5" />

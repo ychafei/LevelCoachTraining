@@ -81,29 +81,29 @@ export default function OnboardingModal({ user, onComplete }) {
       try {
         await emailLib.send({
           to: form.parent_email,
-          subject: 'Your Child Has Signed Up for LC Training',
+          subject: 'Your Child Has Signed Up for LevelCoach Training',
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #B89A45;">LC Training — Parent/Guardian Notification</h2>
+              <h2 style="color: #2563EB;">LevelCoach Training — Parent/Guardian Notification</h2>
               <p>Hi ${form.parent_first_name},</p>
-              <p><strong>${childName}</strong> (age ${age}) has created an account on <strong>LC Training</strong>, a private soccer coaching platform.</p>
-              <h3 style="color: #B89A45;">What is LC Training?</h3>
-              <p>LC Training provides one-on-one and small group soccer coaching sessions for players of all ages and skill levels in Oakland, Macomb, and Wayne counties.</p>
-              <h3 style="color: #B89A45;">What your child can do on the platform:</h3>
+              <p><strong>${childName}</strong> (age ${age}) has created an account on <strong>LevelCoach Training</strong>, a private soccer coaching platform.</p>
+              <h3 style="color: #2563EB;">What is LevelCoach Training?</h3>
+              <p>LevelCoach Training provides one-on-one and small group soccer coaching sessions for players of all ages and skill levels in Oakland, Macomb, and Wayne counties.</p>
+              <h3 style="color: #2563EB;">What your child can do on the platform:</h3>
               <ul>
                 <li>Book private coaching sessions with certified coaches</li>
                 <li>Connect with other players their age through our matching system (first name and age only are visible)</li>
                 <li>Message matched players (all messages are monitored for safety)</li>
               </ul>
-              <h3 style="color: #B89A45;">Your information on file:</h3>
+              <h3 style="color: #2563EB;">Your information on file:</h3>
               <ul>
                 <li>Name: ${form.parent_first_name} ${form.parent_last_name}</li>
                 <li>Phone: ${form.parent_phone}</li>
                 <li>Email: ${form.parent_email}</li>
               </ul>
-              <p>If you have any questions or did not authorize this, please contact us immediately at <a href="mailto:support@lctrainings.com" style="color: #B89A45;">support@lctrainings.com</a>.</p>
+              <p>If you have any questions or did not authorize this, please contact us immediately at <a href="mailto:support@levelcoach.com" style="color: #2563EB;">support@levelcoach.com</a>.</p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">LC Training — Private Soccer Coaching<br/>${window.location.origin}</p>
+              <p style="font-size: 12px; color: #999;">LevelCoach Training — Private Soccer Coaching<br/>${window.location.origin}</p>
             </div>
           `,
         });
@@ -120,7 +120,7 @@ export default function OnboardingModal({ user, onComplete }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 space-y-5">
         <div>
-          <h2 className="font-oswald text-2xl uppercase tracking-wider text-accent">Welcome to LC Training</h2>
+          <h2 className="font-display text-2xl uppercase tracking-wider text-accent">Welcome to LevelCoach Training</h2>
           <p className="text-muted-foreground text-sm mt-1">Step {step} of {totalSteps} — Let's set up your profile</p>
           <div className="flex gap-1 mt-2">
             {Array.from({ length: totalSteps }).map((_, i) => (
@@ -199,7 +199,7 @@ export default function OnboardingModal({ user, onComplete }) {
             <Button
               disabled={!canProceedStep1}
               onClick={() => setStep(2)}
-              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-oswald uppercase tracking-wider"
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
             >
               Continue
             </Button>
@@ -265,7 +265,7 @@ export default function OnboardingModal({ user, onComplete }) {
               <Button
                 disabled={!canProceedStep2}
                 onClick={() => setStep(3)}
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-oswald uppercase tracking-wider"
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
               >
                 Continue
               </Button>
@@ -278,7 +278,7 @@ export default function OnboardingModal({ user, onComplete }) {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Please read and agree to our terms before getting started.</p>
             <div className="bg-secondary rounded-md p-3 text-xs text-muted-foreground max-h-40 overflow-y-auto leading-relaxed">
-              By using LC Training, you agree to our{' '}
+              By using LevelCoach Training, you agree to our{' '}
               <a href="/terms" target="_blank" className="text-accent underline">Terms of Service</a> and{' '}
               <a href="/privacy" target="_blank" className="text-accent underline">Privacy Policy</a>. Sessions are subject to cancellation policies. All communications are monitored for safety.
             </div>
@@ -295,7 +295,7 @@ export default function OnboardingModal({ user, onComplete }) {
               <Button
                 disabled={!canFinish || saving}
                 onClick={handleSave}
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-oswald uppercase tracking-wider"
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
               >
                 {saving ? 'Saving...' : 'Get Started'}
               </Button>

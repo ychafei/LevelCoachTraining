@@ -14,9 +14,9 @@ export const storage   = new Storage(client);
 export const functions = new Functions(client);
 export { Query, ID };
 
-export const DB_ID = 'lctraining';
+export const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID || 'levelcoach';
 
-// Logical entity name → Appwrite collection id. Names match the Base44 entity
+// Logical entity name → Appwrite collection id. Names match the legacy entity
 // names so legacy callers keep working.
 export const COL = {
   Coach:             'coaches',
@@ -35,24 +35,17 @@ export const COL = {
   SiteContent:       'site_content',
   UnsubscribeRecord: 'unsubscribe_records',
   UserBan:           'user_bans',
-  Player:            'players',
-  TeamMatch:         'team_matches',
-  GalleryItem:       'gallery_items',
-  LcfcSettings:      'lcfc_settings',
-  LcfcStaff:         'lcfc_staff',
-  LcfcNews:          'lcfc_news',
-  LcfcSponsor:       'lcfc_sponsors',
   CoachLinkRequest:  'coach_link_requests',
 };
 
-// Field-name aliases between Base44 and Appwrite system fields.
+// Field-name aliases between legacy and Appwrite system fields.
 const SORT_ALIAS = {
   created_date: '$createdAt',
   updated_date: '$updatedAt',
   id: '$id',
 };
 
-// Translate a Base44-style sort string like "-created_date" or "display_order"
+// Translate a legacy-style sort string like "-created_date" or "display_order"
 // into Appwrite Query orderAsc/orderDesc clauses.
 export function parseSort(sort) {
   if (!sort) return [];
@@ -66,7 +59,7 @@ export function parseSort(sort) {
 }
 
 // Turn a {field: value} where-object into Appwrite Query.equal clauses. Arrays
-// become Query.equal(field, [a,b,c]) which Appwrite treats as IN. Base44-style
+// become Query.equal(field, [a,b,c]) which Appwrite treats as IN. legacy-style
 // keys (`id`, `created_date`, `updated_date`) are aliased to Appwrite's system
 // attributes ($id/$createdAt/$updatedAt) — without this, `.filter({ id })`
 // silently matches nothing because there is no plain `id` attribute.
@@ -77,7 +70,7 @@ export function whereToQueries(where) {
     .map(([k, v]) => Query.equal(SORT_ALIAS[k] || k, v));
 }
 
-// Normalise an Appwrite document into a Base44-shaped record. Existing UI
+// Normalise an Appwrite document into a app-shaped record. Existing UI
 // reads .id, .created_date, .updated_date — keep them as aliases so we don't
 // have to touch every component.
 export function mapDoc(doc) {

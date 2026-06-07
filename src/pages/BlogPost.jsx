@@ -19,7 +19,7 @@ export default function BlogPost() {
         setPost(res[0]);
         // Inject SEO meta tags
         const p = res[0];
-        document.title = `${p.title} — LC Training`;
+        document.title = `${p.title} — LevelCoach Training`;
         const setMeta = (name, content) => {
           if (!content) return;
           let el = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
@@ -55,8 +55,8 @@ export default function BlogPost() {
   if (!post) {
     return (
       <div className="py-24 text-center">
-        <h1 className="font-oswald text-3xl font-bold text-foreground mb-4">POST NOT FOUND</h1>
-        <Link to="/blog" className="text-accent font-oswald tracking-wider uppercase text-sm">← Back to Blog</Link>
+        <h1 className="font-display text-3xl font-bold text-foreground mb-4">POST NOT FOUND</h1>
+        <Link to="/blog" className="text-accent font-display tracking-wider uppercase text-sm">← Back to Blog</Link>
       </div>
     );
   }
@@ -64,19 +64,19 @@ export default function BlogPost() {
   return (
     <div className="py-24">
       <article className="max-w-3xl mx-auto px-4 sm:px-6">
-        <Link to="/blog" className="inline-flex items-center gap-2 text-muted-foreground hover:text-accent text-sm font-oswald tracking-wider uppercase mb-8 transition-colors">
+        <Link to="/blog" className="inline-flex items-center gap-2 text-muted-foreground hover:text-accent text-sm font-display tracking-wider uppercase mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Blog
         </Link>
 
         {post.tags?.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-4">
             {post.tags.map(tag => (
-              <Badge key={tag} variant="secondary" className="text-xs font-oswald tracking-wide uppercase">{tag}</Badge>
+              <Badge key={tag} variant="secondary" className="text-xs font-display tracking-wide uppercase">{tag}</Badge>
             ))}
           </div>
         )}
 
-        <h1 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-4">
+        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-4">
           {post.title}
         </h1>
 
@@ -105,7 +105,7 @@ export default function BlogPost() {
           </div>
         )}
 
-        <div className="prose prose-invert prose-sm max-w-none prose-headings:font-oswald prose-headings:tracking-wider prose-headings:uppercase prose-a:text-accent">
+        <div className="prose prose-invert prose-sm max-w-none prose-headings:font-display prose-headings:tracking-wider prose-headings:uppercase prose-a:text-accent">
           <ReactMarkdown>{post.body || ''}</ReactMarkdown>
         </div>
       </article>

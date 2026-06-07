@@ -11,12 +11,12 @@ import { ChevronDown, MapPin, User, Package, Timer, Zap, DollarSign } from 'luci
 function Row({ label, value, icon: Icon, hint }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2">
-      <span className="flex items-center gap-1.5 text-[11px] font-oswald tracking-widest uppercase text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-[11px] font-display tracking-widest uppercase text-muted-foreground">
         {Icon && <Icon className="w-3 h-3" />}
         {label}
       </span>
       <div className="text-right min-w-0">
-        <p className="text-sm font-oswald tracking-wider text-foreground truncate">{value || <span className="text-muted-foreground/60">—</span>}</p>
+        <p className="text-sm font-display tracking-wider text-foreground truncate">{value || <span className="text-muted-foreground/60">—</span>}</p>
         {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
       </div>
     </div>
@@ -99,7 +99,7 @@ export default function BookingSummaryCard(props) {
       {/* Desktop sidebar */}
       <aside className="hidden lg:block">
         <div className="sticky top-24 bg-card border border-border rounded-lg p-5">
-          <p className="text-[10px] font-oswald tracking-[0.3em] uppercase text-muted-foreground mb-3">Your Selection</p>
+          <p className="text-[10px] font-display tracking-[0.3em] uppercase text-muted-foreground mb-3">Your Selection</p>
           <Body {...props} />
         </div>
       </aside>
@@ -113,8 +113,8 @@ export default function BookingSummaryCard(props) {
           aria-expanded={open}
         >
           <div className="min-w-0">
-            <p className="text-[10px] font-oswald tracking-[0.3em] uppercase text-muted-foreground">Your Selection</p>
-            <p className="font-oswald tracking-wider text-foreground text-sm truncate">{headerLine}</p>
+            <p className="text-[10px] font-display tracking-[0.3em] uppercase text-muted-foreground">Your Selection</p>
+            <p className="font-display tracking-wider text-foreground text-sm truncate">{headerLine}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>

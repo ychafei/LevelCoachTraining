@@ -5,14 +5,12 @@ import useCurrentUser from '@/hooks/useCurrentUser';
 import {
   Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare,
   Shield, MailX, Zap, CalendarClock, CheckCircle2, UserCheck, History,
-  TrendingUp, Trophy,
+  TrendingUp,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 const adminLinks = [
-  { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage private + team coaches' },
-  { label: 'Team', path: '/admin/team', icon: Trophy, desc: 'Roster, schedule, gallery' },
-  { label: 'LCFC Page', path: '/admin/lcfc', icon: Trophy, desc: 'Hero, about, roster, tryouts, news, sponsors' },
+  { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage coaches and verification' },
   { label: 'Bookings', path: '/admin/bookings', icon: Calendar, desc: 'View all sessions' },
   { label: 'Credits', path: '/admin/credits', icon: Zap, desc: 'Add, refund, or remove credits' },
   { label: 'Content', path: '/admin/content', icon: FileText, desc: 'Edit site content' },
@@ -88,9 +86,9 @@ function StatTile({ label, value, icon: Icon, hint, to }) {
     <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors h-full">
       <div className="flex items-center gap-2 mb-2">
         <Icon className="w-4 h-4 text-accent" />
-        <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{label}</span>
+        <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{label}</span>
       </div>
-      <p className="font-oswald text-2xl font-bold text-foreground">{value}</p>
+      <p className="font-display text-2xl font-bold text-foreground">{value}</p>
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
     </div>
   );
@@ -197,11 +195,11 @@ export default function AdminPanel() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-end justify-between flex-wrap gap-3 mb-2">
           <div>
-            <h1 className="font-oswald text-4xl font-bold tracking-tight text-foreground">ADMIN PANEL</h1>
-            <p className="text-muted-foreground">Operations overview for LC Training.</p>
+            <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">ADMIN PANEL</h1>
+            <p className="text-muted-foreground">Operations overview for LevelCoach Training.</p>
           </div>
           {user?.email && (
-            <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground">
+            <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">
               Signed in as <span className="text-foreground">{user.email}</span>
             </p>
           )}
@@ -209,7 +207,7 @@ export default function AdminPanel() {
 
         {/* Metrics grid */}
         <div className="mt-8">
-          <h2 className="font-oswald text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
+          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
             <TrendingUp className="w-3.5 h-3.5" /> Snapshot
           </h2>
           {loading ? (
@@ -282,7 +280,7 @@ export default function AdminPanel() {
 
         {/* Recent admin activity */}
         <div className="mt-10">
-          <h2 className="font-oswald text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
+          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
             <History className="w-3.5 h-3.5" /> Recent Admin Activity
           </h2>
           <div className="bg-card border border-border rounded-lg divide-y divide-border">
@@ -310,7 +308,7 @@ export default function AdminPanel() {
                 <div key={entry.id} className="p-3 flex items-start justify-between gap-3 text-sm">
                   <div className="min-w-0 flex-1">
                     <p className="text-foreground">
-                      <span className="font-oswald tracking-wider text-accent">{actor}</span>
+                      <span className="font-display tracking-wider text-accent">{actor}</span>
                       <span className="text-muted-foreground"> {verb}</span>
                       {target && <span className="text-muted-foreground"> · {target}</span>}
                       {reason && <span className="text-muted-foreground italic">{reason}</span>}
@@ -321,7 +319,7 @@ export default function AdminPanel() {
                       </p>
                     )}
                   </div>
-                  <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground flex-shrink-0">
+                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex-shrink-0">
                     {when}
                   </span>
                 </div>
@@ -332,7 +330,7 @@ export default function AdminPanel() {
 
         {/* Navigation tiles (existing) */}
         <div className="mt-10">
-          <h2 className="font-oswald text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3">
+          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3">
             Manage
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -343,7 +341,7 @@ export default function AdminPanel() {
                 className="bg-card border border-border rounded-lg p-6 hover:border-accent/30 transition-all group"
               >
                 <Icon className="w-6 h-6 text-accent mb-3 group-hover:scale-110 transition-transform" />
-                <h3 className="font-oswald text-lg tracking-wider text-foreground">{label.toUpperCase()}</h3>
+                <h3 className="font-display text-lg tracking-wider text-foreground">{label.toUpperCase()}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{desc}</p>
               </Link>
             ))}

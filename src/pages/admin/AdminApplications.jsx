@@ -17,22 +17,16 @@ const statusColor = {
 
 const TYPE_TABS = [
   { value: 'all', label: 'All' },
-  { value: 'team_player', label: 'Team Player' },
-  { value: 'team_coach', label: 'Team Coach' },
   { value: 'private_training_coach', label: 'Private Coach' },
   { value: 'general', label: 'General' },
 ];
 
 const typeBadge = {
-  team_player: 'bg-primary/10 text-primary border-primary/20',
-  team_coach: 'bg-accent/10 text-accent border-accent/20',
   private_training_coach: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   general: 'bg-secondary text-muted-foreground border-border',
 };
 
 const typeLabel = {
-  team_player: 'Player',
-  team_coach: 'Team Coach',
   private_training_coach: 'Private Coach',
   general: 'General',
 };
@@ -84,7 +78,7 @@ export default function AdminApplications() {
       sortAccessor: '_name',
       cell: (row) => (
         <div>
-          <p className="font-oswald tracking-wider text-foreground text-sm">{row._name || '—'}</p>
+          <p className="font-display tracking-wider text-foreground text-sm">{row._name || '—'}</p>
           <p className="text-xs text-muted-foreground">{row.email}</p>
           {row.dob && <p className="text-xs text-muted-foreground">DOB: {format(new Date(row.dob), 'MMM d, yyyy')}</p>}
         </div>
@@ -96,7 +90,7 @@ export default function AdminApplications() {
       sortable: true,
       sortAccessor: '_type',
       cell: (row) => (
-        <Badge className={`${typeBadge[row._type] || typeBadge.general} border text-[10px] font-oswald tracking-widest uppercase`}>
+        <Badge className={`${typeBadge[row._type] || typeBadge.general} border text-[10px] font-display tracking-widest uppercase`}>
           {typeLabel[row._type] || row._type}
         </Badge>
       ),
@@ -163,7 +157,7 @@ export default function AdminApplications() {
   return (
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-6">APPLICATIONS</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">APPLICATIONS</h1>
 
         <div className="flex items-center gap-1 mb-6 border-b border-border overflow-x-auto">
           {TYPE_TABS.map(t => {
@@ -175,7 +169,7 @@ export default function AdminApplications() {
               <button
                 key={t.value}
                 onClick={() => setTypeFilter(t.value)}
-                className={`px-4 py-2 text-xs font-oswald tracking-wider uppercase transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`px-4 py-2 text-xs font-display tracking-wider uppercase transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   active
                     ? 'border-accent text-accent'
                     : 'border-transparent text-muted-foreground hover:text-foreground'

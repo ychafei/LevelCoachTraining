@@ -65,7 +65,7 @@ export default function AdminUsers() {
 
   // Non-super-admins cannot edit super-admins, cannot demote the last super-admin,
   // and cannot promote someone to admin. Super-admins are the only ones who can
-  // escalate to admin. This is also enforced server-side in Base44 permissions
+  // escalate to admin. This is also enforced server-side in Appwrite permissions
   // (see remaining-risks summary).
   const canEditUser = (target) => {
     if (!target) return false;
@@ -186,8 +186,8 @@ export default function AdminUsers() {
     if (!warnMessage.trim()) { toast.error('Please enter a warning message'); return; }
     await emailLib.send({
       to: warnDialog.email,
-      subject: 'Account Warning — LC Training',
-      body: `<p>Hi ${warnDialog.full_name || warnDialog.email},</p><p>${warnMessage}</p><p>If you have questions, reply to this email or contact support@lctrainings.com.</p><p>— LC Training Team</p>`,
+      subject: 'Account Warning — LevelCoach Training',
+      body: `<p>Hi ${warnDialog.full_name || warnDialog.email},</p><p>${warnMessage}</p><p>If you have questions, reply to this email or contact support@levelcoach.com.</p><p>— LevelCoach Training Team</p>`,
     });
     await logAdminAction({
       actor: me,
@@ -216,7 +216,7 @@ export default function AdminUsers() {
       sortAccessor: (r) => r.full_name || r.email,
       cell: (row) => (
         <div>
-          <p className="font-oswald tracking-wider text-foreground text-sm">{row.full_name || '—'}</p>
+          <p className="font-display tracking-wider text-foreground text-sm">{row.full_name || '—'}</p>
           <p className="text-xs text-muted-foreground">{row.email}</p>
         </div>
       ),
@@ -228,7 +228,7 @@ export default function AdminUsers() {
       sortAccessor: '_role_label',
       cell: (row) => (
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase border ${
+          <span className={`text-xs px-2 py-0.5 rounded font-display tracking-wide uppercase border ${
             row.role === 'admin' ? 'bg-accent/10 text-accent border-accent/20' :
             row.role === 'coach' ? 'bg-primary/10 text-primary border-primary/20' :
             'bg-secondary text-muted-foreground border-border'
@@ -246,9 +246,9 @@ export default function AdminUsers() {
         if (!editable) {
           return (
             <div className="flex items-center gap-2 justify-end">
-              {isSelf && <span className="text-xs font-oswald tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
+              {isSelf && <span className="text-xs font-display tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
               {row.is_super_admin && (
-                <span className="text-xs font-oswald tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
+                <span className="text-xs font-display tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
                   <Lock className="w-3 h-3" /> Super admin
                 </span>
               )}
@@ -300,14 +300,14 @@ export default function AdminUsers() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">USER MANAGEMENT</h1>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">USER MANAGEMENT</h1>
             {isSuperAdmin && (
-              <p className="text-xs text-accent font-oswald tracking-wider uppercase mt-1 flex items-center gap-1">
+              <p className="text-xs text-accent font-display tracking-wider uppercase mt-1 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Super admin session
               </p>
             )}
           </div>
-          <Button onClick={() => setInviteDialog(true)} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+          <Button onClick={() => setInviteDialog(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
             <UserPlus className="w-4 h-4 mr-2" /> Invite User
           </Button>
         </div>
@@ -327,24 +327,24 @@ export default function AdminUsers() {
 
       <Dialog open={!!banDialog} onOpenChange={() => setBanDialog(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">BAN USER</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display tracking-wider">BAN USER</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{banDialog?.full_name} ({banDialog?.email})</p>
           <div className="mt-4">
-            <Label className="font-oswald tracking-wider uppercase text-xs">Reason</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Reason</Label>
             <Textarea value={banReason} onChange={e => setBanReason(e.target.value)} className="bg-secondary border-border mt-1" rows={3} />
           </div>
-          <Button onClick={banUser} className="mt-4 w-full bg-destructive text-destructive-foreground font-oswald tracking-wider uppercase hover:bg-destructive/90">Confirm Ban</Button>
+          <Button onClick={banUser} className="mt-4 w-full bg-destructive text-destructive-foreground font-display tracking-wider uppercase hover:bg-destructive/90">Confirm Ban</Button>
         </DialogContent>
       </Dialog>
 
       {/* Invite Dialog */}
       <Dialog open={inviteDialog} onOpenChange={setInviteDialog}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">INVITE NEW USER</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display tracking-wider">INVITE NEW USER</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">They'll receive an email to set up their account and log in.</p>
           <div className="space-y-4 mt-4">
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Email Address</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Email Address</Label>
               <Input
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
@@ -353,7 +353,7 @@ export default function AdminUsers() {
               />
             </div>
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Role</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Role</Label>
               <Select value={inviteRole} onValueChange={setInviteRole}>
                 <SelectTrigger className="w-full mt-1 bg-secondary border-border">
                   <SelectValue />
@@ -375,7 +375,7 @@ export default function AdminUsers() {
               )}
             </div>
           </div>
-          <Button onClick={handleInvite} disabled={inviting} className="mt-6 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+          <Button onClick={handleInvite} disabled={inviting} className="mt-6 w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
             {inviting ? 'Sending...' : 'Send Invitation'}
           </Button>
         </DialogContent>
@@ -384,15 +384,15 @@ export default function AdminUsers() {
       {/* Credits Dialog */}
       <Dialog open={!!creditDialog} onOpenChange={() => setCreditDialog(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">ISSUE SESSIONS</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display tracking-wider">ISSUE SESSIONS</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{creditDialog?.full_name} ({creditDialog?.email})</p>
           <div className="space-y-4 mt-4">
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Number of Sessions</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Number of Sessions</Label>
               <Input type="number" value={creditSessions} onChange={e => setCreditSessions(e.target.value)} placeholder="e.g. 5" className="bg-secondary border-border mt-1" min="1" step="1" />
             </div>
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Duration per Session</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Duration per Session</Label>
               <Select value={creditDuration} onValueChange={setCreditDuration}>
                 <SelectTrigger className="w-full mt-1 bg-secondary border-border">
                   <SelectValue />
@@ -407,7 +407,7 @@ export default function AdminUsers() {
               </Select>
             </div>
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Package Name</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Package Name</Label>
               <Input value={creditPackageName} onChange={e => setCreditPackageName(e.target.value)} className="bg-secondary border-border mt-1" />
             </div>
           </div>
@@ -443,7 +443,7 @@ export default function AdminUsers() {
               setCreditDialog(null);
               setCreditSaving(false);
             }}
-            className="mt-4 w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+            className="mt-4 w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
           >
             {creditSaving ? 'Saving...' : `Issue ${creditSessions || '?'} Session(s)`}
           </Button>
@@ -453,14 +453,14 @@ export default function AdminUsers() {
       {/* Warning Dialog */}
       <Dialog open={!!warnDialog} onOpenChange={() => setWarnDialog(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-oswald tracking-wider">SEND WARNING</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display tracking-wider">SEND WARNING</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{warnDialog?.full_name} ({warnDialog?.email})</p>
           <p className="text-xs text-muted-foreground mt-1">This will send a warning email directly to the user.</p>
           <div className="mt-4">
-            <Label className="font-oswald tracking-wider uppercase text-xs">Warning Message</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Warning Message</Label>
             <Textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} placeholder="Describe the policy violation or issue..." className="bg-secondary border-border mt-1" rows={4} />
           </div>
-          <Button onClick={sendWarning} className="mt-4 w-full bg-yellow-500 text-black font-oswald tracking-wider uppercase hover:bg-yellow-400">
+          <Button onClick={sendWarning} className="mt-4 w-full bg-yellow-500 text-black font-display tracking-wider uppercase hover:bg-yellow-400">
             <AlertTriangle className="w-4 h-4 mr-2" /> Send Warning Email
           </Button>
         </DialogContent>

@@ -2,17 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { sessionRepo, sessionCreditRepo, pricingPackageRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { rpc } from '@/lib/rpc';
-import { normalizePublicCoach } from '@/lib/publicCoach';
+import {
+  formatAvailabilityTime,
+  normalizePublicCoach,
+  publicCoachDisplay,
+} from '@/lib/publicCoach';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, ArrowRight, MapPin, User, Timer, CheckCircle2, Package } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Package,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  User,
+} from 'lucide-react';
 import { format, isBefore, startOfDay, parseISO, isWithinInterval } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import PayPalCheckout from '@/components/PayPalCheckout';
 import StripeCheckout from '@/components/StripeCheckout';
 import OnboardingModal from '@/components/OnboardingModal';
 import BookingSummaryCard from '@/components/booking/BookingSummaryCard';
+import { DEMO_COACH_PROFILES } from '@/lib/demoCoachProfiles';
+import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const DURATIONS = [
   { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
@@ -55,6 +75,7 @@ export default function Book() {
   const [coach, setCoach]                     = useState(saved?.coach ? normalizePublicCoach(saved.coach) : null);
   const [coaches, setCoaches]                 = useState([]);
   const [packages, setPackages]               = useState([]);
+  const [publicDataLoaded, setPublicDataLoaded] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(saved?.selectedPackage || null);
   const [existingCredit, setExistingCredit]   = useState(null);
   const [useExistingCredit, setUseExistingCredit] = useState(false);
@@ -70,14 +91,34 @@ export default function Book() {
   const [scheduling, setScheduling]           = useState(false); // true = user chose "Schedule Now"
   const [blocks, setBlocks]                   = useState([]);
   const [existingSessions, setExistingSessions] = useState([]);
-  const [selectedDate, setSelectedDate]       = useState(null);
-  const [selectedTime, setSelectedTime]       = useState('');
+  const [selectedDate, setSelectedDate]       = useState(saved?.selectedDate ? parseISO(saved.selectedDate) : null);
+  const [selectedTime, setSelectedTime]       = useState(saved?.selectedTime || '');
   const [submitting, setSubmitting]           = useState(false);
   const [sessionBooked, setSessionBooked]     = useState(false);
 
   useEffect(() => {
-    rpc.invoke('getPublicCoaches', {}).then(res => setCoaches((res.data.coaches || []).map(normalizePublicCoach)));
-    pricingPackageRepo.filter({ is_visible: true }, 'display_order').then(setPackages);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [coachRes, packageRows, demosEnabled] = await Promise.all([
+          rpc.invoke('getPublicCoaches', {}).catch((err) => {
+            console.warn('Public coaches unavailable; booking will fall back to demo profiles if enabled.', err);
+            return null;
+          }),
+          pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
+          loadDemoCoachProfilesEnabled(),
+        ]);
+        if (cancelled) return;
+        const liveCoaches = (coachRes?.data?.coaches || coachRes?.coaches || []).map(normalizePublicCoach);
+        setCoaches(demosEnabled ? [...liveCoaches, ...DEMO_COACH_PROFILES] : liveCoaches);
+        setPackages(packageRows);
+      } catch (err) {
+        console.error('Book public data load failed', err);
+      } finally {
+        if (!cancelled) setPublicDataLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // One-shot: pre-select coach from /coaches/:id "Book with this coach" link.
@@ -103,9 +144,18 @@ export default function Book() {
 
   useEffect(() => {
     if (coach) {
+      if (coach.is_demo) {
+        setBlocks([]);
+        setExistingSessions([]);
+        return;
+      }
       rpc.invoke('getCoachAvailability', { coach_id: coach.id }).then(res => {
         setBlocks(res.data.blocks || []);
         setExistingSessions(res.data.sessions || []);
+      }).catch((err) => {
+        console.warn('Coach availability unavailable', err);
+        setBlocks([]);
+        setExistingSessions([]);
       });
     }
   }, [coach]);
@@ -208,10 +258,25 @@ export default function Book() {
     ? `https://paypal.me/${paypalHandle}${sessionPrice ? '/' + sessionPrice : ''}`
     : null;
 
+  const saveBookingIntent = (extra = {}) => {
+    sessionStorage.setItem('lc_booking', JSON.stringify({
+      step,
+      county,
+      coach,
+      selectedPackage,
+      duration,
+      goals,
+      selectedTags,
+      selectedDate: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null,
+      selectedTime,
+      ...extra,
+    }));
+  };
+
   // Called after user confirms payment
   const handlePaymentConfirmed = async (method) => {
     if (!user) {
-      sessionStorage.setItem('lc_booking', JSON.stringify({ step, county, coach, selectedPackage, duration, goals, selectedTags }));
+      saveBookingIntent();
       auth.signIn(window.location.href);
       return;
     }
@@ -349,7 +414,7 @@ export default function Book() {
             <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-8 h-8 text-accent" />
             </div>
-            <h1 className="font-oswald text-3xl font-bold tracking-tight mb-4">SESSION BOOKED!</h1>
+            <h1 className="font-display text-3xl font-bold tracking-tight mb-4">SESSION BOOKED!</h1>
             <p className="text-muted-foreground mb-2">
               Your session has been confirmed{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.
             </p>
@@ -357,7 +422,7 @@ export default function Book() {
 
             {remainingOnCredit > 0 && (
               <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-6">
-                <p className="font-oswald text-sm font-bold tracking-wider text-accent uppercase mb-1">
+                <p className="font-display text-sm font-bold tracking-wider text-accent uppercase mb-1">
                   {remainingOnCredit} session{remainingOnCredit !== 1 ? 's' : ''} remaining
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -369,13 +434,13 @@ export default function Book() {
             <div className="flex flex-col gap-3">
               {remainingOnCredit > 0 && (
                 <Button onClick={handleScheduleAnother}
-                  className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+                  className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
                   Schedule Another Session
                 </Button>
               )}
               <Button variant={remainingOnCredit > 0 ? 'outline' : 'default'}
                 onClick={() => window.location.href = '/dashboard'}
-                className={remainingOnCredit > 0 ? 'font-oswald tracking-wider uppercase' : 'bg-accent text-accent-foreground font-oswald tracking-wider uppercase'}>
+                className={remainingOnCredit > 0 ? 'font-display tracking-wider uppercase' : 'bg-accent text-accent-foreground font-display tracking-wider uppercase'}>
                 Go to Dashboard
               </Button>
             </div>
@@ -390,14 +455,14 @@ export default function Book() {
         return (
           <div className="min-h-[80vh] py-12">
             <div className="max-w-3xl mx-auto px-4 sm:px-6">
-              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY & COACH</h2>
+              <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY & COACH</h2>
               <p className="text-muted-foreground text-sm mb-6">Choose your county to see available coaches.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                 {['Oakland', 'Macomb', 'Wayne'].map((c) => (
                   <button key={c} onClick={() => setCounty(c)}
                     className={`p-6 rounded-lg border text-center transition-all ${county === c ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     <MapPin className={`w-5 h-5 mx-auto mb-2 ${county === c ? 'text-accent' : 'text-muted-foreground'}`} />
-                    <span className="font-oswald text-base font-bold tracking-wider">{c.toUpperCase()}</span>
+                    <span className="font-display text-base font-bold tracking-wider">{c.toUpperCase()}</span>
                   </button>
                 ))}
               </div>
@@ -413,8 +478,8 @@ export default function Book() {
                           {c.photo_url ? <img src={c.photo_url} alt={c.first_name} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-muted-foreground" />}
                         </div>
                         <div>
-                          <p className="font-oswald text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
-                          {c.is_head_coach && <p className="text-xs text-accent font-oswald tracking-wider uppercase">Head Coach</p>}
+                          <p className="font-display text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
+                          {c.is_head_coach && <p className="text-xs text-accent font-display tracking-wider uppercase">Head Coach</p>}
                         </div>
                       </button>
                     ))}
@@ -429,19 +494,19 @@ export default function Book() {
       return (
         <div className="min-h-[80vh] py-12">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SCHEDULE YOUR SESSION</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SCHEDULE YOUR SESSION</h2>
             <p className="text-muted-foreground text-sm mb-8">Pick a date and time{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
-                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
                 <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate}
                   disabled={(date) => isBefore(date, startOfDay(new Date())) || isDateBlocked(date)}
                   className="rounded-lg border border-border bg-card p-4" />
               </div>
               {selectedDate && (
                 <div>
-                  <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Time</p>
+                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Time</p>
                   <div className="grid grid-cols-3 gap-2">
                     {TIME_SLOTS.map((time) => {
                       const taken    = isTimeSlotTaken(time);
@@ -449,7 +514,7 @@ export default function Book() {
                       const disabled = taken || outside;
                       return (
                         <button key={time} onClick={() => !disabled && setSelectedTime(time)} disabled={disabled}
-                          className={`p-2 rounded-md border text-xs font-oswald tracking-wide transition-all ${disabled ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed' : selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}>
+                          className={`p-2 rounded-md border text-xs font-display tracking-wide transition-all ${disabled ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed' : selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}>
                           {time}
                         </button>
                       );
@@ -460,11 +525,11 @@ export default function Book() {
             </div>
 
             <div className="flex gap-3 mt-8">
-              <Button variant="outline" onClick={() => setScheduling(false)} className="font-oswald tracking-wider uppercase">
+              <Button variant="outline" onClick={() => setScheduling(false)} className="font-display tracking-wider uppercase">
                 Back
               </Button>
               <Button onClick={handleBookSession} disabled={!selectedDate || !selectedTime || submitting}
-                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+                className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
                 {submitting ? 'Booking...' : 'Confirm Session'}
               </Button>
             </div>
@@ -483,9 +548,9 @@ export default function Book() {
           <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-green-400" />
           </div>
-          <h1 className="font-oswald text-3xl font-bold tracking-tight mb-4">PAYMENT CONFIRMED!</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight mb-4">PAYMENT CONFIRMED!</h1>
           <div className="bg-card border border-border rounded-lg p-4 mb-8">
-            <p className="font-oswald text-lg font-bold tracking-wider mb-1">
+            <p className="font-display text-lg font-bold tracking-wider mb-1">
               {confirmedCredit?.package_name || selectedPackage?.name}
             </p>
             <p className="text-muted-foreground text-sm">
@@ -495,16 +560,68 @@ export default function Book() {
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => setScheduling(true)}
-              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
               Schedule Now
             </Button>
             <Button variant="outline" onClick={() => window.location.href = '/dashboard'}
-              className="font-oswald tracking-wider uppercase">
+              className="font-display tracking-wider uppercase">
               Schedule Later from Dashboard
             </Button>
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (preCoachId && !user) {
+    if (!coach && !publicDataLoaded) {
+      return (
+        <div className="min-h-[70vh] bg-slate-50 px-4 py-24 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+          <p className="mt-4 text-sm font-semibold text-slate-600">Loading intro booking...</p>
+        </div>
+      );
+    }
+
+    if (!coach) {
+      return (
+        <div className="min-h-[70vh] bg-slate-50 px-4 py-24">
+          <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <h1 className="font-display text-2xl font-bold text-slate-950">Coach not found</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-600">That coach profile is no longer available.</p>
+            <Button asChild className="mt-5 rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
+              <Link to="/coaches">Find another coach</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    const introPackage = packages.find((pkg) => Number(pkg.sessions) === 1) || packages[0] || null;
+    const introDuration = duration || DURATIONS[0];
+    const demoOrCoachPrice = Number(coach.intro_price || coach.session_rate || coach.price || 0);
+    const introPrice = introPackage ? calcPrice(introPackage, introDuration) : (demoOrCoachPrice || null);
+
+    return (
+      <LoggedOutBookIntro
+        coach={coach}
+        packages={packages}
+        introPackage={introPackage}
+        introDuration={introDuration}
+        introPrice={introPrice}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        selectedTime={selectedTime}
+        setSelectedTime={setSelectedTime}
+        selectedTags={selectedTags}
+        setSelectedTags={setSelectedTags}
+        goals={goals}
+        setGoals={setGoals}
+        isDateBlocked={isDateBlocked}
+        isTimeSlotTaken={isTimeSlotTaken}
+        isTimeSlotOutsideAvailability={isTimeSlotOutsideAvailability}
+        saveBookingIntent={saveBookingIntent}
+      />
     );
   }
 
@@ -541,8 +658,8 @@ export default function Book() {
         {/* Progress */}
         <div className="mb-12">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-oswald tracking-widest uppercase text-muted-foreground">Step {step + 1} of {STEPS.length}</span>
-            <span className="text-xs font-oswald tracking-widest uppercase text-accent">{STEPS[step]}</span>
+            <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Step {step + 1} of {STEPS.length}</span>
+            <span className="text-xs font-display tracking-widest uppercase text-accent">{STEPS[step]}</span>
           </div>
           <div className="h-1 bg-secondary rounded-full overflow-hidden">
             <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
@@ -552,13 +669,13 @@ export default function Book() {
         {/* Step 0: County */}
         {step === 0 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SELECT YOUR COUNTY</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {['Oakland', 'Macomb', 'Wayne'].map((c) => (
                 <button key={c} onClick={() => setCounty(c)}
                   className={`p-8 rounded-lg border text-center transition-all ${county === c ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                   <MapPin className={`w-6 h-6 mx-auto mb-3 ${county === c ? 'text-accent' : 'text-muted-foreground'}`} />
-                  <span className="font-oswald text-lg font-bold tracking-wider">{c.toUpperCase()}</span>
+                  <span className="font-display text-lg font-bold tracking-wider">{c.toUpperCase()}</span>
                 </button>
               ))}
             </div>
@@ -570,7 +687,7 @@ export default function Book() {
           const countyCoaches = coaches.filter(c => c.county === county);
           if (countyCoaches.length === 0) return (
             <div>
-              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
+              <h2 className="font-display text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
               <p className="text-muted-foreground">No coaches available in {county} County at this time.</p>
             </div>
           );
@@ -579,14 +696,14 @@ export default function Book() {
             if (!coach) setCoach(displayCoach);
             return (
               <div>
-                <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
+                <h2 className="font-display text-3xl font-bold tracking-tight mb-8">YOUR COACH</h2>
                 <div className="bg-card border border-accent/30 rounded-lg p-6 flex items-center gap-6">
                   <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
                     {displayCoach.photo_url ? <img src={displayCoach.photo_url} alt={displayCoach.first_name} className="w-full h-full object-cover" /> : <User className="w-6 h-6 text-muted-foreground" />}
                   </div>
                   <div>
-                    <h3 className="font-oswald text-xl font-bold tracking-wider">{displayCoach.first_name} {displayCoach.last_name}</h3>
-                    <p className="text-sm text-accent font-oswald tracking-wider uppercase">{county} County — {displayCoach.is_head_coach ? 'Head Coach' : 'Coach'}</p>
+                    <h3 className="font-display text-xl font-bold tracking-wider">{displayCoach.first_name} {displayCoach.last_name}</h3>
+                    <p className="text-sm text-accent font-display tracking-wider uppercase">{county} County — {displayCoach.is_head_coach ? 'Head Coach' : 'Coach'}</p>
                   </div>
                 </div>
               </div>
@@ -594,7 +711,7 @@ export default function Book() {
           }
           return (
             <div>
-              <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SELECT YOUR COACH</h2>
+              <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SELECT YOUR COACH</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {countyCoaches.map((c) => (
                   <button key={c.id} onClick={() => setCoach(c)}
@@ -603,8 +720,8 @@ export default function Book() {
                       {c.photo_url ? <img src={c.photo_url} alt={c.first_name} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-muted-foreground" />}
                     </div>
                     <div>
-                      <p className="font-oswald text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
-                      {c.is_head_coach && <p className="text-xs text-accent font-oswald tracking-wider uppercase">Head Coach</p>}
+                      <p className="font-display text-lg font-bold tracking-wider">{c.first_name} {c.last_name}</p>
+                      {c.is_head_coach && <p className="text-xs text-accent font-display tracking-wider uppercase">Head Coach</p>}
                     </div>
                   </button>
                 ))}
@@ -616,12 +733,12 @@ export default function Book() {
         {/* Step 2: Package */}
         {step === 2 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SELECT A PACKAGE</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SELECT A PACKAGE</h2>
             <p className="text-muted-foreground text-sm mb-8">Multi-session packages give you credits to schedule sessions whenever you're ready.</p>
 
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                <p className="text-primary font-oswald tracking-wider text-sm uppercase mb-1">You have existing sessions!</p>
+                <p className="text-primary font-display tracking-wider text-sm uppercase mb-1">You have existing sessions!</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   <strong>{existingCredit.total_credits - existingCredit.used_credits}</strong> session(s) remaining on <strong>{existingCredit.package_name}</strong>
                   {existingCredit.session_duration_minutes ? ` · ${existingCredit.session_duration_minutes / 60} hr each` : ''}.
@@ -640,11 +757,11 @@ export default function Book() {
                       }
                       setScheduling(true);
                     }}
-                    className="px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
+                    className="px-4 py-2 rounded-md border text-xs font-display tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
                     ✓ Use Existing Sessions → Schedule Now
                   </button>
                   <button onClick={() => setUseExistingCredit(false)}
-                    className={`px-4 py-2 rounded-md border text-xs font-oswald tracking-wide uppercase transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
+                    className={`px-4 py-2 rounded-md border text-xs font-display tracking-wide uppercase transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
                     Buy New Package
                   </button>
                 </div>
@@ -659,11 +776,11 @@ export default function Book() {
                   <button key={pkg.id} onClick={() => { setSelectedPackage(pkg); setUseExistingCredit(false); }}
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
-                      <span className="absolute top-3 right-3 text-xs font-oswald tracking-wide bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
+                      <span className="absolute top-3 right-3 text-xs font-display tracking-wide bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
                     )}
                     <Package className={`w-5 h-5 mb-3 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} />
-                    <p className="font-oswald text-xl font-bold tracking-wider">{pkg.name.toUpperCase()}</p>
-                    <p className="text-2xl font-oswald font-bold text-accent mt-1">${pkg.price}</p>
+                    <p className="font-display text-xl font-bold tracking-wider">{pkg.name.toUpperCase()}</p>
+                    <p className="text-2xl font-display font-bold text-accent mt-1">${pkg.price}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : `1 session · $${perSession}/hr base`}
                     </p>
@@ -687,7 +804,7 @@ export default function Book() {
         {/* Step 3: Duration */}
         {step === 3 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-2">SESSION DURATION</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SESSION DURATION</h2>
             <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly rate.</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {DURATIONS.map((d) => {
@@ -697,14 +814,14 @@ export default function Book() {
                   <button key={d.minutes} onClick={() => setDuration(d)}
                     className={`p-6 rounded-lg border text-center transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {d.discount > 0 && (
-                      <span className="absolute top-2 right-2 text-xs font-oswald bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+                      <span className="absolute top-2 right-2 text-xs font-display bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
                         -{Math.round(d.discount * 100)}%
                       </span>
                     )}
                     <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} />
-                    <span className="font-oswald text-lg font-bold tracking-wider block">{d.label}</span>
+                    <span className="font-display text-lg font-bold tracking-wider block">{d.label}</span>
                     {price !== null && (
-                      <span className={`text-sm font-oswald font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
+                      <span className={`text-sm font-display font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
                     )}
                   </button>
                 );
@@ -716,12 +833,12 @@ export default function Book() {
         {/* Step 4: Goals */}
         {step === 4 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">SESSION GOALS</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SESSION GOALS</h2>
             <div className="flex flex-wrap gap-2 mb-6">
               {GOAL_TAGS.map((tag) => (
                 <button key={tag}
                   onClick={() => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                  className={`px-4 py-2 rounded-full border text-sm font-oswald tracking-wide uppercase transition-all ${selectedTags.includes(tag) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
+                  className={`px-4 py-2 rounded-full border text-sm font-display tracking-wide uppercase transition-all ${selectedTags.includes(tag) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
                   {tag}
                 </button>
               ))}
@@ -732,12 +849,12 @@ export default function Book() {
 
             {user && !user.profile_setup_complete && (
               <div className="mt-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
-                <p className="text-accent font-oswald tracking-wider uppercase text-sm mb-1">Profile Setup Required</p>
+                <p className="text-accent font-display tracking-wider uppercase text-sm mb-1">Profile Setup Required</p>
                 <p className="text-xs text-muted-foreground mb-3">Complete your profile before proceeding to checkout.</p>
                 <Button
                   onClick={() => setShowProfileGate(true)}
                   size="sm"
-                  className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
                 >
                   Set Up Profile
                 </Button>
@@ -760,11 +877,11 @@ export default function Book() {
         {/* Step 5: Checkout */}
         {step === 5 && (
           <div>
-            <h2 className="font-oswald text-3xl font-bold tracking-tight mb-8">CHECKOUT</h2>
+            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">CHECKOUT</h2>
 
             {/* Order Summary */}
             <div className="bg-card border border-border rounded-lg p-6 mb-6">
-              <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-4">Order Summary</p>
+              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Order Summary</p>
               <div className="space-y-1">
                 {[
                   ['Package', selectedPackage?.name],
@@ -775,13 +892,13 @@ export default function Book() {
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between py-2 border-b border-border last:border-0">
                     <span className="text-muted-foreground text-sm">{label}</span>
-                    <span className="font-oswald tracking-wider text-sm">{val}</span>
+                    <span className="font-display tracking-wider text-sm">{val}</span>
                   </div>
                 ))}
               </div>
               <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
-                <span className="font-oswald text-lg font-bold tracking-wider">PER SESSION TOTAL</span>
-                <span className="font-oswald text-2xl font-bold text-accent">${sessionPrice}</span>
+                <span className="font-display text-lg font-bold tracking-wider">PER SESSION TOTAL</span>
+                <span className="font-display text-2xl font-bold text-accent">${sessionPrice}</span>
               </div>
               {duration?.discount > 0 && (
                 <p className="text-xs text-green-400 mt-2">{Math.round(duration.discount * 100)}% multi-hour discount applied</p>
@@ -796,7 +913,7 @@ export default function Book() {
             {/* Payment Options */}
             {!useExistingCredit && (
               <div className="bg-card border border-border rounded-lg p-6 mb-6">
-                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
+                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
                 <p className="text-sm text-muted-foreground mb-4">
                   Pay <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> securely.
                 </p>
@@ -804,9 +921,9 @@ export default function Book() {
                   <div className="text-center py-4">
                     <p className="text-sm text-muted-foreground mb-4">You must be signed in to complete your purchase.</p>
                     <Button
-                      className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+                      className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
                       onClick={() => {
-                        sessionStorage.setItem('lc_booking', JSON.stringify({ step, county, coach, selectedPackage, duration, goals, selectedTags }));
+                        saveBookingIntent();
                         auth.signIn(window.location.href);
                       }}
                     >
@@ -816,7 +933,7 @@ export default function Book() {
                 ) : (
                   <div className="space-y-4">
                     <div>
-                      <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Choose Payment Method</p>
+                      <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Choose Payment Method</p>
                       <div className="grid grid-cols-3 gap-2">
                         {[
                           { id: 'paypal', label: 'PayPal', icon: '🅿️' },
@@ -830,7 +947,7 @@ export default function Book() {
                             className={`p-3 rounded-lg border text-center transition-all ${paymentMethod === opt.id ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
                           >
                             <div className="text-xl mb-1">{opt.icon}</div>
-                            <div className="text-xs font-oswald tracking-wider uppercase">{opt.label}</div>
+                            <div className="text-xs font-display tracking-wider uppercase">{opt.label}</div>
                           </button>
                         ))}
                       </div>
@@ -866,12 +983,12 @@ export default function Book() {
                       <div className="border-t border-border pt-4">
                         <div className="bg-secondary/50 border border-border rounded-lg p-3 mb-3">
                           <p className="text-xs text-muted-foreground">
-                            Bring <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> in exact cash to your session. Your coach collects payment directly — LC Training is not involved in the cash transaction.
+                            Bring <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> in exact cash to your session. Your coach collects payment directly — LevelCoach Training is not involved in the cash transaction.
                           </p>
                         </div>
                         <Button
                           onClick={() => handlePaymentConfirmed('cash')}
-                          className="w-full bg-secondary border border-border text-foreground font-oswald tracking-wider uppercase hover:bg-secondary/80 h-12"
+                          className="w-full bg-secondary border border-border text-foreground font-display tracking-wider uppercase hover:bg-secondary/80 h-12"
                         >
                           I Understand — Reserve My Sessions
                         </Button>
@@ -884,7 +1001,7 @@ export default function Book() {
 
             {/* Confirm button (existing credits only) */}
             <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
-              <p className="text-xs text-accent font-oswald tracking-wide uppercase mb-1">After completing payment</p>
+              <p className="text-xs text-accent font-display tracking-wide uppercase mb-1">After completing payment</p>
               <p className="text-xs text-muted-foreground">
                 Click below once you've sent the payment. Your credits will be activated and you can schedule sessions whenever you're ready.
               </p>
@@ -892,7 +1009,7 @@ export default function Book() {
 
             {useExistingCredit && (
               <Button onClick={() => handlePaymentConfirmed('credits')} disabled={submitting}
-                className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
+                className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
                 {submitting ? 'Activating Credits...' : 'Use My Credits & Continue'}
               </Button>
             )}
@@ -908,18 +1025,18 @@ export default function Book() {
         {step < 5 && (
           <div className="flex justify-between mt-6 lg:mt-10">
             <Button variant="outline" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
-              className="font-oswald tracking-wider uppercase">
+              className="font-display tracking-wider uppercase">
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}
-              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
               Next <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </div>
         )}
         {step === 5 && (
           <div className="flex mt-6">
-            <Button variant="outline" onClick={() => setStep(4)} className="font-oswald tracking-wider uppercase">
+            <Button variant="outline" onClick={() => setStep(4)} className="font-display tracking-wider uppercase">
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
           </div>
@@ -932,6 +1049,265 @@ export default function Book() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LoggedOutBookIntro({
+  coach,
+  packages,
+  introPackage,
+  introDuration,
+  introPrice,
+  selectedDate,
+  setSelectedDate,
+  selectedTime,
+  setSelectedTime,
+  selectedTags,
+  setSelectedTags,
+  goals,
+  setGoals,
+  isDateBlocked,
+  isTimeSlotTaken,
+  isTimeSlotOutsideAvailability,
+  saveBookingIntent,
+}) {
+  const model = publicCoachDisplay(coach, { packages });
+  const enabledDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    .filter((day) => coach.availability?.[day]?.enabled);
+
+  const saveIntroIntent = (nextStep = introPackage ? 4 : 2) => {
+    saveBookingIntent({
+      step: nextStep,
+      selectedPackage: introPackage,
+      duration: introDuration,
+      intro: true,
+    });
+  };
+
+  const createAccount = () => {
+    saveIntroIntent();
+    window.location.assign(`/create-account/athlete?next=${encodeURIComponent(window.location.href)}`);
+  };
+
+  const signIn = () => {
+    saveIntroIntent();
+    auth.signIn(window.location.href);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-950">
+      <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_58%,#eef5ff_100%)]">
+        <div className="mx-auto max-w-[1480px] px-4 py-7 sm:px-6 lg:px-8">
+          <Link to={model.profileHref} className="inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:underline">
+            <ArrowLeft className="h-4 w-4" />
+            Back to profile
+          </Link>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-blue-700 ring-1 ring-blue-100">
+                <Sparkles className="h-3.5 w-3.5" />
+                Intro session preview
+              </div>
+              <h1 className="mt-4 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
+                Book an intro with {model.firstName}
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                Pick a time, share a goal, then create a free athlete account to confirm the booking safely.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
+                  {model.photoUrl ? (
+                    <img src={model.photoUrl} alt={model.displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center font-display text-xl font-bold text-blue-900">{model.initials}</div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-2xl font-bold text-slate-950">{model.displayName}</p>
+                    {model.verified && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                        <BadgeCheck className="h-3 w-3" />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">{model.organizationName}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                    <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-blue-600" />{model.locationLabel}</span>
+                    <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5 text-blue-600" />{model.availability}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <IntroStat icon={Clock} label="Duration" value={introDuration?.label || '1 Hour'} />
+                <IntroStat
+                  icon={Package}
+                  label="Intro price"
+                  value={introPrice != null ? `$${introPrice}` : model.rateLabel || 'Shown after account'}
+                />
+                <IntroStat icon={ShieldCheck} label="Booking" value="Account required" />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Choose a time</p>
+                  <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Preview availability</h2>
+                </div>
+                <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                  Logged out
+                </span>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-[320px_1fr]">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setSelectedTime('');
+                  }}
+                  disabled={(date) => isBefore(date, startOfDay(new Date())) || isDateBlocked(date)}
+                  className="rounded-lg border border-slate-200 bg-white p-3"
+                />
+
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Available times</p>
+                  {selectedDate ? (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {TIME_SLOTS.map((time) => {
+                        const taken = isTimeSlotTaken(time);
+                        const outside = isTimeSlotOutsideAvailability(time);
+                        const disabled = taken || outside;
+                        return (
+                          <button
+                            key={time}
+                            type="button"
+                            onClick={() => !disabled && setSelectedTime(time)}
+                            disabled={disabled}
+                            className={`h-10 rounded-lg border text-xs font-bold transition ${
+                              disabled
+                                ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300 line-through'
+                                : selectedTime === time
+                                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                            }`}
+                          >
+                            {formatAvailabilityTime(time)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
+                      Select a date to preview open times from {model.firstName}'s saved availability.
+                    </div>
+                  )}
+
+                  {enabledDays.length > 0 && (
+                    <p className="mt-3 text-xs leading-5 text-slate-500">
+                      Usual days: {enabledDays.map((day) => day.slice(0, 3)).join(', ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-[1480px] grid-cols-1 gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Training goals</p>
+          <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">What should the intro focus on?</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {GOAL_TAGS.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]))}
+                className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
+                  selectedTags.includes(tag)
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+          <Textarea
+            value={goals}
+            onChange={(event) => setGoals(event.target.value)}
+            placeholder="Anything the coach should know before your intro?"
+            className="mt-4 min-h-28 border-slate-200 bg-slate-50"
+          />
+        </div>
+
+        <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24 lg:self-start">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Intro summary</p>
+          <div className="mt-4 space-y-3 text-sm">
+            <SummaryRow label="Coach" value={model.displayName} />
+            <SummaryRow label="Date" value={selectedDate ? format(selectedDate, 'EEE, MMM d') : 'Choose a date'} />
+            <SummaryRow label="Time" value={selectedTime ? formatAvailabilityTime(selectedTime) : 'Choose a time'} />
+            <SummaryRow label="Duration" value={introDuration?.label || '1 Hour'} />
+            <SummaryRow label="Price" value={introPrice != null ? `$${introPrice}` : 'Shown after account'} />
+          </div>
+
+          <div className="mt-5 rounded-lg bg-blue-50 p-4 ring-1 ring-blue-100">
+            <p className="text-sm font-bold text-slate-950">Account required to confirm</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">
+              This keeps athlete details, payment, reminders, and coach messages inside LevelCoach.
+            </p>
+          </div>
+
+          <Button
+            onClick={createAccount}
+            disabled={!selectedDate || !selectedTime}
+            className="mt-4 h-11 w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700"
+          >
+            Create Free Account
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={signIn}
+            className="mt-2 h-11 w-full rounded-lg border-blue-200 bg-white font-bold text-blue-700 hover:bg-blue-50"
+          >
+            Sign In Instead
+          </Button>
+          {(!selectedDate || !selectedTime) && (
+            <p className="mt-3 text-center text-xs font-semibold text-slate-500">Pick a date and time to continue.</p>
+          )}
+        </aside>
+      </section>
+    </div>
+  );
+}
+
+function IntroStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-bold text-slate-950">{value}</span>
     </div>
   );
 }

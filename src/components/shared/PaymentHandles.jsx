@@ -24,7 +24,7 @@ export default function PaymentHandles({ coach, compact = false }) {
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
-      <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Payment Methods</p>
+      <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Payment Methods</p>
       <div className="space-y-2">
         {handles.map(h => (
           <div key={h.name} className="flex justify-between text-sm">

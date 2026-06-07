@@ -1,6 +1,5 @@
 import React from 'react';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -29,7 +28,7 @@ export default function WeeklyAvailabilityEditor({ availability = {}, onChange }
                 checked={d.enabled}
                 onCheckedChange={(v) => updateDay(day, 'enabled', v)}
               />
-              <span className={`font-oswald tracking-wider text-sm w-24 ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
+              <span className={`font-display tracking-wider text-sm w-24 ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {day.toUpperCase()}
               </span>
               {d.enabled ? (

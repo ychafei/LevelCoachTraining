@@ -4,7 +4,7 @@ export default function Privacy() {
   return (
     <div className="py-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">PRIVACY POLICY</h1>
+        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">PRIVACY POLICY</h1>
         <div className="prose prose-invert prose-sm max-w-none space-y-6 text-muted-foreground">
           <p>Last updated: {new Date().toLocaleDateString()}</p>
           <h2 className="text-foreground">Information We Collect</h2>

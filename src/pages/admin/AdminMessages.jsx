@@ -30,7 +30,7 @@ export default function AdminMessages() {
   return (
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-8">CONVERSATIONS</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-8">CONVERSATIONS</h1>
 
         {loading ? (
           <div className="text-center py-12"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>
@@ -66,7 +66,7 @@ export default function AdminMessages() {
                   {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.sender_email === selected.participant_emails?.[0] ? 'justify-start' : 'justify-end'}`}>
                       <div className="max-w-[70%] bg-secondary rounded-lg px-3 py-2">
-                        <p className="text-xs text-accent font-oswald tracking-wider mb-0.5">{msg.sender_name}</p>
+                        <p className="text-xs text-accent font-display tracking-wider mb-0.5">{msg.sender_name}</p>
                         <p className="text-sm text-foreground">{msg.content}</p>
                         <p className="text-xs text-muted-foreground mt-1">{msg.created_date ? format(new Date(msg.created_date), 'MMM d, h:mm a') : ''}</p>
                       </div>

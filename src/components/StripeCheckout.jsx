@@ -41,7 +41,7 @@ export default function StripeCheckout({ amount, packageId, packageName, package
       <Button
         onClick={handleClick}
         disabled={loading}
-        className="w-full bg-[#635BFF] text-white font-oswald tracking-wider uppercase hover:bg-[#5851DB] h-12 text-sm"
+        className="w-full bg-[#635BFF] text-white font-display tracking-wider uppercase hover:bg-[#5851DB] h-12 text-sm"
       >
         <CreditCard className="w-4 h-4 mr-2" />
         {loading ? 'Redirecting...' : 'Pay with Card'}

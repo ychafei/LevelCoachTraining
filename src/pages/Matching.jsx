@@ -114,10 +114,10 @@ export default function Matching() {
     return (
       <div className="py-24 text-center max-w-md mx-auto px-4">
         <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
         <p className="text-muted-foreground text-sm mb-6">Opt in from Settings to discover other players in your area.</p>
         <Link to="/settings">
-          <Button className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+          <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
             Go to Settings
           </Button>
         </Link>
@@ -147,19 +147,19 @@ export default function Matching() {
         const consentUrl = `${window.location.origin}/parent-consent?token=${token}`;
         await emailLib.send({
           to: emailToUse,
-          subject: `Consent Requested: ${childName} wants to use LC Training Player Matching`,
+          subject: `Consent Requested: ${childName} wants to use LevelCoach Training Player Matching`,
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #B89A45;">LC Training — Parent/Guardian Consent</h2>
+              <h2 style="color: #2563EB;">LevelCoach Training — Parent/Guardian Consent</h2>
               <p>Hi,</p>
-              <p><strong>${childName}</strong>${userAge ? ` (age ${userAge})` : ''} has requested your consent to use the Player Matching feature on LC Training.</p>
+              <p><strong>${childName}</strong>${userAge ? ` (age ${userAge})` : ''} has requested your consent to use the Player Matching feature on LevelCoach Training.</p>
               <p>Player Matching lets your child connect with other players in the Oakland, Macomb, and Wayne county areas. Only first name and age are visible to other players, and all messages are monitored for safety.</p>
               <p style="margin: 24px 0;">
-                <a href="${consentUrl}" style="background:#B89A45; color:#000; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:bold;">Review &amp; Respond</a>
+                <a href="${consentUrl}" style="background:#2563EB; color:#fff; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:bold;">Review &amp; Respond</a>
               </p>
               <p style="font-size: 12px; color: #666;">Or copy this link into your browser:<br/>${consentUrl}</p>
               <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">If you did not expect this email, you can ignore it. Questions? <a href="mailto:support@lctrainings.com" style="color: #B89A45;">support@lctrainings.com</a></p>
+              <p style="font-size: 12px; color: #999;">If you did not expect this email, you can ignore it. Questions? <a href="mailto:support@levelcoach.com" style="color: #2563EB;">support@levelcoach.com</a></p>
             </div>
           `,
         });
@@ -175,7 +175,7 @@ export default function Matching() {
     return (
       <div className="py-24 max-w-md mx-auto px-4">
         <ShieldCheck className="w-12 h-12 text-accent mx-auto mb-4" />
-        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground mb-2 text-center">PARENT CONSENT REQUIRED</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground mb-2 text-center">PARENT CONSENT REQUIRED</h1>
         <p className="text-muted-foreground text-sm mb-6 text-center">
           Because you are under 18, a parent or guardian must consent before you can use Player Matching.
         </p>
@@ -184,7 +184,7 @@ export default function Matching() {
           <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-4 flex gap-3 items-start">
             <MailCheck className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-oswald tracking-wider text-accent text-sm uppercase">Consent email sent</p>
+              <p className="font-display tracking-wider text-accent text-sm uppercase">Consent email sent</p>
               <p className="text-xs text-muted-foreground mt-1">
                 We sent a link to <strong className="text-foreground">{user.parent_consent_email}</strong>. Ask them to click it to unlock Player Matching. You can resend below if needed.
               </p>
@@ -194,7 +194,7 @@ export default function Matching() {
 
         <div className="bg-card border border-border rounded-lg p-5 space-y-4">
           <div>
-            <Label className="font-oswald tracking-wider uppercase text-xs">Parent / Guardian Email</Label>
+            <Label className="font-display tracking-wider uppercase text-xs">Parent / Guardian Email</Label>
             <Input
               type="email"
               value={parentEmailInput || defaultEmail}
@@ -209,7 +209,7 @@ export default function Matching() {
           <Button
             disabled={sendingConsent}
             onClick={sendConsentEmail}
-            className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+            className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
           >
             {sendingConsent ? 'Sending...' : consentPending ? 'Resend Consent Email' : 'Send Consent Email'}
           </Button>
@@ -226,13 +226,13 @@ export default function Matching() {
   return (
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-2">PLAYER MATCHING</h1>
         <p className="text-muted-foreground mb-10">Connect with other players in your area.</p>
 
         {/* Matched Players */}
         {matched.length > 0 && (
           <div className="mb-10">
-            <h2 className="font-oswald text-lg tracking-widest uppercase text-green-400 mb-4">Your Matches</h2>
+            <h2 className="font-display text-lg tracking-widest uppercase text-green-400 mb-4">Your Matches</h2>
             <div className="space-y-3">
               {matched.map(req => {
                 const otherName = req.requester_email === user.email ? req.target_name : req.requester_name;
@@ -240,12 +240,12 @@ export default function Matching() {
                 return (
                   <div key={req.id} className="bg-card border border-green-500/20 rounded-lg p-4 flex items-center justify-between">
                     <div>
-                      <p className="font-oswald tracking-wider text-foreground">{otherName}</p>
+                      <p className="font-display tracking-wider text-foreground">{otherName}</p>
                       {otherAge && <p className="text-xs text-muted-foreground">Age {otherAge}</p>}
                     </div>
                     {req.conversation_id && (
                       <Link to="/messages">
-                        <Button size="sm" className="bg-primary text-primary-foreground font-oswald tracking-wider uppercase text-xs hover:bg-primary/90">
+                        <Button size="sm" className="bg-primary text-primary-foreground font-display tracking-wider uppercase text-xs hover:bg-primary/90">
                           <MessageSquare className="w-3 h-3 mr-1" /> Message
                         </Button>
                       </Link>
@@ -260,19 +260,19 @@ export default function Matching() {
         {/* Incoming Requests */}
         {incoming.length > 0 && (
           <div className="mb-10">
-            <h2 className="font-oswald text-lg tracking-widest uppercase text-accent mb-4">Incoming Requests</h2>
+            <h2 className="font-display text-lg tracking-widest uppercase text-accent mb-4">Incoming Requests</h2>
             <div className="space-y-3">
               {incoming.map(req => (
                 <div key={req.id} className="bg-card border border-accent/20 rounded-lg p-4 flex items-center justify-between">
                   <div>
-                    <p className="font-oswald tracking-wider">{req.requester_name}</p>
+                    <p className="font-display tracking-wider">{req.requester_name}</p>
                     {req.requester_player_age && <p className="text-xs text-muted-foreground">Age {req.requester_player_age}</p>}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => handleRequest(req, 'accepted')} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs">
+                    <Button size="sm" onClick={() => handleRequest(req, 'accepted')} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs">
                       <Check className="w-3 h-3 mr-1" /> Accept
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleRequest(req, 'declined')} className="font-oswald tracking-wider uppercase text-xs">
+                    <Button size="sm" variant="outline" onClick={() => handleRequest(req, 'declined')} className="font-display tracking-wider uppercase text-xs">
                       <X className="w-3 h-3 mr-1" /> Decline
                     </Button>
                   </div>
@@ -284,17 +284,17 @@ export default function Matching() {
 
         {/* Safety banner — privacy reminder for everyone */}
         <div className="mb-8 bg-card border border-border rounded-lg p-4 text-xs text-muted-foreground leading-relaxed">
-          <p className="font-oswald tracking-widest uppercase text-foreground text-[10px] mb-1">How matching keeps you safe</p>
+          <p className="font-display tracking-widest uppercase text-foreground text-[10px] mb-1">How matching keeps you safe</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Only your <strong className="text-foreground">first name</strong> and age are shown to other players. Email and phone are never shared.</li>
             <li>Players under 18 need a parent/guardian to consent before matching unlocks.</li>
-            <li>Messages route through LC Training so a coach or admin can step in if anything feels off — <a href="mailto:support@lctrainings.com" className="text-accent hover:underline">tell us</a>.</li>
+            <li>Messages route through LevelCoach Training so a coach or admin can step in if anything feels off — <a href="mailto:support@levelcoach.com" className="text-accent hover:underline">tell us</a>.</li>
             <li>You can opt out any time from <Link to="/settings" className="text-accent hover:underline">Settings</Link>.</li>
           </ul>
         </div>
 
         {/* Discover */}
-        <h2 className="font-oswald text-lg tracking-widest uppercase text-muted-foreground mb-4">Discover Players</h2>
+        <h2 className="font-display text-lg tracking-widest uppercase text-muted-foreground mb-4">Discover Players</h2>
         {clients.length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-8 text-center">
             <p className="text-muted-foreground text-sm">No other players have opted in yet.</p>
@@ -311,7 +311,7 @@ export default function Matching() {
               if (isMatched) return null; // already shown in matched section
               return (
                 <div key={client.email} className="bg-card border border-border rounded-lg p-6 text-center hover:border-accent/30 transition-colors">
-                  <p className="font-oswald text-xl font-bold tracking-wider text-foreground">{client.first_name}</p>
+                  <p className="font-display text-xl font-bold tracking-wider text-foreground">{client.first_name}</p>
                   {client.player_age && (
                     <p className="text-xs text-muted-foreground mt-1">Age {client.player_age}</p>
                   )}
@@ -319,7 +319,7 @@ export default function Matching() {
                     size="sm"
                     disabled={hasPending}
                     onClick={() => sendRequest(client)}
-                    className="mt-4 bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+                    className="mt-4 bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
                   >
                     {hasPending ? 'Request Sent' : <><Send className="w-3 h-3 mr-1" /> Connect</>}
                   </Button>

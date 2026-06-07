@@ -45,9 +45,9 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-md bg-[#F7F5EF] text-[#0B0B0B] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-6">
+      <div className="w-full max-w-md bg-[#FFFFFF] text-[#0F172A] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-6">
         <div>
-          <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-wide text-center">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide text-center">
             Set a new password
           </h1>
         </div>
@@ -59,7 +59,7 @@ export default function ResetPassword() {
             </p>
             <Link
               to="/forgot-password"
-              className="inline-block text-sm text-[#0B0B0B] underline underline-offset-4 hover:opacity-80"
+              className="inline-block text-sm text-[#0F172A] underline underline-offset-4 hover:opacity-80"
             >
               Request a new one
             </Link>
@@ -80,7 +80,7 @@ export default function ResetPassword() {
                   disabled={submitting}
                   required
                   minLength={8}
-                  className="pl-9 bg-white text-[#0B0B0B] placeholder:text-neutral-400 border-neutral-300"
+                  className="pl-9 bg-white text-[#0F172A] placeholder:text-neutral-400 border-neutral-300"
                 />
               </div>
             </div>
@@ -98,7 +98,7 @@ export default function ResetPassword() {
                   onChange={(e) => setConfirm(e.target.value)}
                   disabled={submitting}
                   required
-                  className="pl-9 bg-white text-[#0B0B0B] placeholder:text-neutral-400 border-neutral-300"
+                  className="pl-9 bg-white text-[#0F172A] placeholder:text-neutral-400 border-neutral-300"
                 />
               </div>
             </div>
@@ -108,7 +108,7 @@ export default function ResetPassword() {
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full bg-[#0B0B0B] hover:bg-black text-white py-2.5 rounded-md"
+              className="w-full bg-[#0F172A] hover:bg-black text-white py-2.5 rounded-md"
             >
               Reset password
             </Button>

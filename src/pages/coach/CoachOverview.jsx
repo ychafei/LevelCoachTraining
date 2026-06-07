@@ -191,13 +191,13 @@ export default function CoachOverview() {
     return (
       <div className="space-y-6">
         <div className="bg-card border border-accent/30 rounded-lg p-6">
-          <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-2">Coach Portal</h2>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-2">Coach Portal</h2>
           <p className="text-sm text-muted-foreground mb-4">
             You're signed in as an admin without a linked coach profile. Link your admin account to a coach record (in
             the Users panel) if you want to use this portal with real data.
           </p>
           <Link to="/admin/users">
-            <Button variant="outline" className="font-oswald tracking-wider uppercase text-xs">Open Users Panel</Button>
+            <Button variant="outline" className="font-display tracking-wider uppercase text-xs">Open Users Panel</Button>
           </Link>
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function CoachOverview() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-oswald text-xl sm:text-2xl font-bold tracking-wider text-foreground truncate">
+          <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-foreground truncate">
             {coach ? `${coach.first_name} ${coach.last_name}` : 'Coach'}
           </h2>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -237,8 +237,8 @@ export default function CoachOverview() {
           </div>
         </div>
         <div className="hidden sm:block text-right">
-          <p className="text-[10px] font-oswald tracking-[0.25em] uppercase text-muted-foreground">Setup</p>
-          <p className="font-oswald text-xl font-bold text-accent">{checklist.pct}%</p>
+          <p className="text-[10px] font-display tracking-[0.25em] uppercase text-muted-foreground">Setup</p>
+          <p className="font-display text-xl font-bold text-accent">{checklist.pct}%</p>
         </div>
       </div>
 
@@ -257,7 +257,7 @@ export default function CoachOverview() {
                 <p className="text-sm flex-1">{a.text}</p>
                 {a.cta && (
                   <Link to={a.cta.href}>
-                    <Button variant="outline" size="sm" className="font-oswald tracking-wider uppercase text-xs">
+                    <Button variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs">
                       {a.cta.label}
                     </Button>
                   </Link>
@@ -279,9 +279,9 @@ export default function CoachOverview() {
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <s.icon className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{s.label}</span>
+              <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</span>
             </div>
-            <p className="font-oswald text-2xl font-bold text-foreground">{s.value}</p>
+            <p className="font-display text-2xl font-bold text-foreground">{s.value}</p>
           </div>
         ))}
       </div>
@@ -292,7 +292,7 @@ export default function CoachOverview() {
           {/* Today */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">Today</h2>
+              <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Today</h2>
               <span className="text-xs text-muted-foreground">{formatLongDateET(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(new Date()))}</span>
             </div>
             {todaySessions.length === 0 ? (
@@ -329,7 +329,7 @@ export default function CoachOverview() {
                   />
                 ))}
                 <div className="text-right">
-                  <Link to="/coach/sessions" className="text-xs font-oswald tracking-wider uppercase text-accent hover:underline">
+                  <Link to="/coach/sessions" className="text-xs font-display tracking-wider uppercase text-accent hover:underline">
                     View all sessions →
                   </Link>
                 </div>
@@ -339,7 +339,7 @@ export default function CoachOverview() {
 
           {/* Next 7 days */}
           <div>
-            <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-3">Next 7 Days</h2>
+            <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Next 7 Days</h2>
             {upcoming7.length === 0 ? (
               <div className="bg-card border border-border rounded-lg p-6 text-center">
                 <CalendarClock className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -351,21 +351,21 @@ export default function CoachOverview() {
                   <div key={s.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="text-center flex-shrink-0 w-14">
-                        <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">
+                        <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">
                           {new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', weekday: 'short' }).format(new Date(`${s.date}T12:00:00Z`))}
                         </p>
-                        <p className="font-oswald text-lg font-bold text-foreground">
+                        <p className="font-display text-lg font-bold text-foreground">
                           {new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', day: 'numeric' }).format(new Date(`${s.date}T12:00:00Z`))}
                         </p>
                       </div>
                       <div className="min-w-0">
-                        <p className="font-oswald tracking-wider text-foreground text-sm truncate">
+                        <p className="font-display tracking-wider text-foreground text-sm truncate">
                           {formatTimeET(s.date, s.start_time).replace(' ET', '')} · {s.client_name}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">{s.duration_minutes} min · {s.county}</p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-oswald tracking-widest uppercase">
+                    <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase">
                       {s.status}
                     </Badge>
                   </div>
@@ -380,7 +380,7 @@ export default function CoachOverview() {
           <OnboardingChecklist user={user} coach={coach} />
 
           <div>
-            <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-3">Recently Completed</h2>
+            <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Recently Completed</h2>
             {recentCompleted.length === 0 ? (
               <div className="bg-card border border-border rounded-lg p-6 text-center">
                 <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -395,8 +395,8 @@ export default function CoachOverview() {
                     className="block bg-card border border-border rounded-lg p-3 hover:border-accent/30 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-oswald tracking-wider text-foreground text-sm truncate">{s.client_name}</p>
-                      <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground flex-shrink-0">
+                      <p className="font-display tracking-wider text-foreground text-sm truncate">{s.client_name}</p>
+                      <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex-shrink-0">
                         {formatLongDateET(s.date).split(',')[0]}
                       </span>
                     </div>
@@ -415,7 +415,7 @@ export default function CoachOverview() {
 
           {/* Quick actions */}
           <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="font-oswald text-xs font-bold tracking-widest uppercase text-muted-foreground mb-3">Quick Actions</h3>
+            <h3 className="font-display text-xs font-bold tracking-widest uppercase text-muted-foreground mb-3">Quick Actions</h3>
             <div className="space-y-1.5">
               <Link to="/coach/sessions" className="block">
                 <Button variant="ghost" className="w-full justify-start text-sm">
@@ -455,15 +455,15 @@ function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
         className="flex items-center gap-3 min-w-0 flex-1 hover:text-accent transition-colors"
       >
         <div className="text-center flex-shrink-0">
-          <p className="font-oswald text-xl font-bold text-accent leading-none">
+          <p className="font-display text-xl font-bold text-accent leading-none">
             {formatTimeET(s.date, s.start_time).replace(' ET', '')}
           </p>
-          <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mt-1">
+          <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mt-1">
             {s.duration_minutes} min
           </p>
         </div>
         <div className="min-w-0">
-          <p className="font-oswald tracking-wider text-foreground truncate">
+          <p className="font-display tracking-wider text-foreground truncate">
             {s.client_name}{s.client_age ? ` · ${s.client_age}` : ''}
           </p>
           {s.session_goals && (
@@ -481,7 +481,7 @@ function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
           <Button
             size="sm"
             onClick={onMarkCompleted}
-            className="bg-green-600 text-white font-oswald tracking-wider uppercase text-xs hover:bg-green-700"
+            className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
           >
             <CheckCircle2 className="w-3 h-3 mr-1" /> Done
           </Button>
@@ -491,13 +491,13 @@ function TodaySessionCard({ session: s, onMarkCompleted, onMarkPaid }) {
             size="sm"
             variant="outline"
             onClick={onMarkPaid}
-            className="font-oswald tracking-wider uppercase text-xs"
+            className="font-display tracking-wider uppercase text-xs"
           >
             <DollarSign className="w-3 h-3 mr-1" /> Mark Paid
           </Button>
         )}
         <Link to="/coach/messages">
-          <Button size="sm" variant="ghost" className="font-oswald tracking-wider uppercase text-xs">
+          <Button size="sm" variant="ghost" className="font-display tracking-wider uppercase text-xs">
             <MessageSquare className="w-3 h-3 mr-1" /> Chat
           </Button>
         </Link>

@@ -125,38 +125,38 @@ export default function CoachSchedule() {
   return (
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground mb-2">SCHEDULE MANAGER</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-2">SCHEDULE MANAGER</h1>
         <p className="text-muted-foreground mb-10">Manage your availability and block off dates.</p>
 
         {/* Weekly Availability */}
         <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <h2 className="font-oswald text-lg tracking-widest uppercase text-foreground mb-1">
+          <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-1">
             <Clock className="inline w-4 h-4 mr-2" />Weekly Availability
           </h2>
           <p className="text-xs text-muted-foreground mb-4">Set which days and hours you're available for bookings.</p>
           <WeeklyAvailabilityEditor availability={availability} onChange={setAvailability} />
-          <Button onClick={saveAvailability} disabled={savingAvail} className="mt-4 bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+          <Button onClick={saveAvailability} disabled={savingAvail} className="mt-4 bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
             {savingAvail ? 'Saving...' : 'Save Availability'}
           </Button>
         </div>
 
         {/* Add Block */}
         <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <h2 className="font-oswald text-lg tracking-widest uppercase text-foreground mb-4">
+          <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-4">
             <Plus className="inline w-4 h-4 mr-2" />Add Block
           </h2>
           <div className="space-y-4">
             <div>
-              <Label className="font-oswald tracking-wider uppercase text-xs">Label</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">Label</Label>
               <Input placeholder="e.g. Vacation, Personal Day" value={newBlock.label} onChange={e => setNewBlock({...newBlock, label: e.target.value})} className="bg-secondary border-border mt-1" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="font-oswald tracking-wider uppercase text-xs">Start Date</Label>
+                <Label className="font-display tracking-wider uppercase text-xs">Start Date</Label>
                 <Input type="date" value={newBlock.start_date} onChange={e => setNewBlock({...newBlock, start_date: e.target.value})} className="bg-secondary border-border mt-1" />
               </div>
               <div>
-                <Label className="font-oswald tracking-wider uppercase text-xs">End Date</Label>
+                <Label className="font-display tracking-wider uppercase text-xs">End Date</Label>
                 <Input type="date" value={newBlock.end_date} onChange={e => setNewBlock({...newBlock, end_date: e.target.value})} className="bg-secondary border-border mt-1" />
               </div>
             </div>
@@ -167,23 +167,23 @@ export default function CoachSchedule() {
             {!newBlock.block_all_day && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">Start Time</Label>
+                  <Label className="font-display tracking-wider uppercase text-xs">Start Time</Label>
                   <Input type="time" value={newBlock.blocked_start_time} onChange={e => setNewBlock({...newBlock, blocked_start_time: e.target.value})} className="bg-secondary border-border mt-1" />
                 </div>
                 <div>
-                  <Label className="font-oswald tracking-wider uppercase text-xs">End Time</Label>
+                  <Label className="font-display tracking-wider uppercase text-xs">End Time</Label>
                   <Input type="time" value={newBlock.blocked_end_time} onChange={e => setNewBlock({...newBlock, blocked_end_time: e.target.value})} className="bg-secondary border-border mt-1" />
                 </div>
               </div>
             )}
-            <Button onClick={addBlock} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">
+            <Button onClick={addBlock} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
               Add Block
             </Button>
           </div>
         </div>
 
         {/* Current Blocks */}
-        <h2 className="font-oswald text-lg tracking-widest uppercase text-foreground mb-4">
+        <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-4">
           <Calendar className="inline w-4 h-4 mr-2" />Current Blocks
         </h2>
         {blocks.length === 0 ? (
@@ -195,7 +195,7 @@ export default function CoachSchedule() {
             {blocks.map(block => (
               <div key={block.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
                 <div>
-                  <p className="font-oswald tracking-wider text-sm text-foreground">{block.label || 'Blocked'}</p>
+                  <p className="font-display tracking-wider text-sm text-foreground">{block.label || 'Blocked'}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {format(new Date(block.start_date), 'MMM d')} — {format(new Date(block.end_date), 'MMM d, yyyy')}
                     {!block.block_all_day && ` · ${block.blocked_start_time} – ${block.blocked_end_time}`}

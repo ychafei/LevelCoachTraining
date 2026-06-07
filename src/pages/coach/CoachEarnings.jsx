@@ -32,10 +32,10 @@ function TrendTooltip({ active, payload }) {
   const b = payload[0].payload;
   return (
     <div className="bg-card border border-border rounded-lg p-3 text-xs space-y-1 shadow-lg">
-      <p className="font-oswald tracking-wider uppercase text-[10px] text-muted-foreground">
+      <p className="font-display tracking-wider uppercase text-[10px] text-muted-foreground">
         {shortDate(b.weekStart)} – {shortDate(b.weekEnd)}
       </p>
-      <p className="text-foreground">Net: <span className="font-oswald">{formatCurrency(b.net)}</span></p>
+      <p className="text-foreground">Net: <span className="font-display">{formatCurrency(b.net)}</span></p>
       {b.fees > 0 && <p className="text-muted-foreground">Gross: {formatCurrency(b.gross)} · Fee: {formatCurrency(b.fees)}</p>}
       <p className="text-muted-foreground">{b.sessions} session{b.sessions === 1 ? '' : 's'}</p>
     </div>
@@ -139,7 +139,7 @@ export default function CoachEarnings() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-oswald tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
+          <p className="font-display tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
           <p className="text-sm text-muted-foreground mt-1">Earnings need a linked coach record. Ask an admin to link your account.</p>
         </div>
       </div>
@@ -157,7 +157,7 @@ export default function CoachEarnings() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Earnings</h1>
+        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Earnings</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Derived from your completed sessions. {summary.hasFee
             ? <>Platform fee: <span className="text-foreground">{coach.platform_fee_type === 'percent' ? `${coach.platform_fee_value}%` : `${formatCurrency(coach.platform_fee_value)} per session`}</span>.</>
@@ -177,9 +177,9 @@ export default function CoachEarnings() {
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <s.icon className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{s.label}</span>
+              <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</span>
             </div>
-            <p className="font-oswald text-2xl font-bold text-foreground">{s.value}</p>
+            <p className="font-display text-2xl font-bold text-foreground">{s.value}</p>
             <p className="text-[11px] text-muted-foreground mt-1 truncate">{s.sub}</p>
           </div>
         ))}
@@ -188,8 +188,8 @@ export default function CoachEarnings() {
       {/* Trend chart */}
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">8-Week Trend</h2>
-          <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Net per week</span>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">8-Week Trend</h2>
+          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Net per week</span>
         </div>
         {trendIsEmpty ? (
           <div className="py-12 text-center">
@@ -226,8 +226,8 @@ export default function CoachEarnings() {
       {/* Pending cash list */}
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">Pending Cash</h2>
-          <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{summary.pendingCashCount} unpaid</span>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Pending Cash</h2>
+          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{summary.pendingCashCount} unpaid</span>
         </div>
         {pendingCashSessions.length === 0 ? (
           <div className="py-8 text-center">
@@ -241,7 +241,7 @@ export default function CoachEarnings() {
                 <div className="min-w-0 flex-1">
                   <Link
                     to={`/coach/clients/${encodeURIComponent(s.client_email)}`}
-                    className="font-oswald tracking-wider text-foreground text-sm hover:text-accent truncate block"
+                    className="font-display tracking-wider text-foreground text-sm hover:text-accent truncate block"
                   >
                     {s.client_name || s.client_email}
                   </Link>
@@ -255,7 +255,7 @@ export default function CoachEarnings() {
                 <Button
                   size="sm"
                   onClick={() => markPaid(s.id)}
-                  className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
                 >
                   Mark Paid
                 </Button>
@@ -268,14 +268,14 @@ export default function CoachEarnings() {
       {/* Handles editor */}
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">Payment Handles</h2>
-          {handlesDirty && <span className="text-[10px] font-oswald tracking-widest uppercase text-yellow-400">Unsaved</span>}
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Payment Handles</h2>
+          {handlesDirty && <span className="text-[10px] font-display tracking-widest uppercase text-yellow-400">Unsaved</span>}
         </div>
         <p className="text-xs text-muted-foreground mb-4">Shown to clients on the payment screen so they can pay you directly.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {HANDLES.map(h => (
             <div key={h.key}>
-              <Label className="font-oswald tracking-wider uppercase text-xs">{h.label}</Label>
+              <Label className="font-display tracking-wider uppercase text-xs">{h.label}</Label>
               <Input
                 value={draftHandles[h.key]}
                 onChange={e => setDraftHandles(prev => ({ ...prev, [h.key]: e.target.value }))}
@@ -296,7 +296,7 @@ export default function CoachEarnings() {
           <Button
             onClick={saveHandles}
             disabled={!handlesDirty || savingHandles}
-            className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
+            className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
           >
             <Save className="w-3 h-3 mr-2" /> {savingHandles ? 'Saving…' : 'Save Handles'}
           </Button>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,115 +6,95 @@
 
 @layer base {
   :root {
-    --font-oswald: 'Oswald', sans-serif;
-    --font-dm-sans: 'DM Sans', sans-serif;
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-    /* Les Chèvres brand palette — premium soccer training identity.
-       Black + charcoal for surfaces, warm cream for legibility on dark,
-       muted metallic gold as the only chromatic accent. */
-    --color-brand-black: #0B0B0B;
-    --color-brand-charcoal: #151515;
-    --color-brand-white: #F7F5EF;
-    --color-brand-gold: #B89A45;
-    --color-brand-gold-soft: #D1B76A;
+    --color-brand-navy: #0F172A;
+    --color-brand-blue: #2563EB;
+    --color-brand-blue-dark: #1D4ED8;
+    --color-brand-sky: #EAF2FF;
+    --color-brand-slate: #475569;
+    --color-brand-surface: #FFFFFF;
 
-    /* HSL companions, used as Tailwind/shadcn token components. */
-    --brand-black-hsl:      0 0% 4%;
-    --brand-charcoal-hsl:   0 0% 8%;
-    --brand-charcoal-2-hsl: 0 0% 12%;       /* slightly raised surface inside cards */
-    --brand-white-hsl:      45 33% 95%;
-    --brand-gold-hsl:       44 46% 50%;
-    --brand-gold-soft-hsl:  44 53% 62%;
-    --brand-line-hsl:       40 18% 18%;     /* warm charcoal border */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
 
-    /* shadcn / Tailwind tokens — wired to the brand palette so every
-       `bg-background`, `text-accent`, `border-border` etc. picks up the new
-       colors automatically. */
-    --background: var(--brand-black-hsl);
-    --foreground: var(--brand-white-hsl);
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --card: var(--brand-charcoal-hsl);
-    --card-foreground: var(--brand-white-hsl);
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    --popover: var(--brand-charcoal-hsl);
-    --popover-foreground: var(--brand-white-hsl);
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
 
-    /* "primary" is reserved for soft/secondary informational tints
-       (confirmed badges, credits chips). Gold-soft keeps it on-palette. */
-    --primary: var(--brand-gold-soft-hsl);
-    --primary-foreground: var(--brand-black-hsl);
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
 
-    /* Slightly raised surface used for chips, hover wells, secondary buttons. */
-    --secondary: var(--brand-charcoal-2-hsl);
-    --secondary-foreground: var(--brand-white-hsl);
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --muted: var(--brand-charcoal-2-hsl);
-    --muted-foreground: 40 8% 65%;
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
 
-    /* "accent" is the strong brand gold — buttons, links, dividers. */
-    --accent: var(--brand-gold-hsl);
-    --accent-foreground: var(--brand-black-hsl);
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --destructive: 0 75% 55%;
-    --destructive-foreground: var(--brand-white-hsl);
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
 
-    --border: var(--brand-line-hsl);
-    --input: var(--brand-line-hsl);
-    --ring: var(--brand-gold-hsl);
-
-    /* Charts — black/gold spectrum so dashboards stay on-brand. */
-    --chart-1: var(--brand-gold-hsl);
-    --chart-2: var(--brand-gold-soft-hsl);
-    --chart-3: 40 30% 78%;
-    --chart-4: 40 18% 40%;
-    --chart-5: 0 0% 25%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 160 84% 39%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 262 83% 58%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: var(--brand-charcoal-hsl);
-    --sidebar-foreground: var(--brand-white-hsl);
-    --sidebar-primary: var(--brand-gold-hsl);
-    --sidebar-primary-foreground: var(--brand-black-hsl);
-    --sidebar-accent: var(--brand-charcoal-2-hsl);
-    --sidebar-accent-foreground: var(--brand-white-hsl);
-    --sidebar-border: var(--brand-line-hsl);
-    --sidebar-ring: var(--brand-gold-hsl);
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 214 32% 91%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 221 83% 53%;
   }
 
-  /* Dark theme mirrors :root — the site is dark-by-default, brand-driven. */
   .dark {
-    --background: var(--brand-black-hsl);
-    --foreground: var(--brand-white-hsl);
-    --card: var(--brand-charcoal-hsl);
-    --card-foreground: var(--brand-white-hsl);
-    --popover: var(--brand-charcoal-hsl);
-    --popover-foreground: var(--brand-white-hsl);
-    --primary: var(--brand-gold-soft-hsl);
-    --primary-foreground: var(--brand-black-hsl);
-    --secondary: var(--brand-charcoal-2-hsl);
-    --secondary-foreground: var(--brand-white-hsl);
-    --muted: var(--brand-charcoal-2-hsl);
-    --muted-foreground: 40 8% 65%;
-    --accent: var(--brand-gold-hsl);
-    --accent-foreground: var(--brand-black-hsl);
-    --destructive: 0 75% 55%;
-    --destructive-foreground: var(--brand-white-hsl);
-    --border: var(--brand-line-hsl);
-    --input: var(--brand-line-hsl);
-    --ring: var(--brand-gold-hsl);
-    --chart-1: var(--brand-gold-hsl);
-    --chart-2: var(--brand-gold-soft-hsl);
-    --chart-3: 40 30% 78%;
-    --chart-4: 40 18% 40%;
-    --chart-5: 0 0% 25%;
-    --sidebar-background: var(--brand-charcoal-hsl);
-    --sidebar-foreground: var(--brand-white-hsl);
-    --sidebar-primary: var(--brand-gold-hsl);
-    --sidebar-primary-foreground: var(--brand-black-hsl);
-    --sidebar-accent: var(--brand-charcoal-2-hsl);
-    --sidebar-accent-foreground: var(--brand-white-hsl);
-    --sidebar-border: var(--brand-line-hsl);
-    --sidebar-ring: var(--brand-gold-hsl);
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 160 84% 39%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 262 83% 58%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 214 32% 91%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 221 83% 53%;
   }
 }
 
@@ -124,25 +104,22 @@
   }
 
   body {
-    @apply bg-background text-foreground font-dm-sans;
+    @apply bg-background text-foreground font-sans;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-oswald);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-family: var(--font-display);
+    letter-spacing: 0;
   }
 
-  /* Brand link affordance — gold underline-on-hover matches the design language. */
   a.brand-link {
-    @apply text-accent hover:text-[hsl(var(--brand-gold-soft-hsl))] transition-colors;
+    @apply text-blue-700 transition-colors hover:text-blue-800;
   }
 }
 
 @layer components {
-  /* Reusable gold-section divider used under section titles. */
   .brand-divider {
     height: 2px;
-    background: linear-gradient(to right, hsl(var(--brand-gold-hsl)) 0%, hsl(var(--brand-gold-hsl) / 0.4) 40%, transparent 100%);
+    background: linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.32) 40%, transparent 100%);
   }
 }

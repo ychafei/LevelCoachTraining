@@ -1,6 +1,6 @@
 // scripts/provision-appwrite.mjs
 //
-// One-shot, idempotent provisioner for the LCTraining Appwrite project.
+// One-shot, idempotent provisioner for the LevelCoach Training Appwrite project.
 // Creates the database, 15 collections (with attributes + indexes), and 6
 // storage buckets. Safe to re-run — collections/attributes/indexes/buckets
 // that already exist are skipped.
@@ -12,6 +12,7 @@
 //   VITE_APPWRITE_ENDPOINT    e.g. https://nyc.cloud.appwrite.io/v1
 //   VITE_APPWRITE_PROJECT_ID  e.g. 69efb263000fe1c34344
 //   APPWRITE_API_KEY          server-side key (no VITE_ prefix)
+//   APPWRITE_DATABASE_ID      optional, defaults to "levelcoach"
 
 import { Client, Databases, Storage, Permission, Role } from 'node-appwrite';
 import { readFileSync } from 'node:fs';
@@ -54,7 +55,7 @@ const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT).setKey(API
 const databases = new Databases(client);
 const storage   = new Storage(client);
 
-const DB_ID = 'lctraining';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'levelcoach';
 
 // --- Idempotent helpers -----------------------------------------------------
 
@@ -77,7 +78,7 @@ async function safe(label, fn) {
 
 async function ensureDatabase() {
   console.log(`\n[Database] ${DB_ID}`);
-  await safe(`database "${DB_ID}"`, () => databases.create(DB_ID, 'LCTraining'));
+  await safe(`database "${DB_ID}"`, () => databases.create(DB_ID, 'LevelCoach Training'));
 }
 
 // Collection-level permissions used during provisioning.

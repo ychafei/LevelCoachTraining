@@ -58,10 +58,10 @@ function SessionNotesEditor({ session, onSaved }) {
     return (
       <div className="mt-3 bg-secondary/50 border border-border rounded p-3">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground flex items-center gap-1">
+          <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1">
             <StickyNote className="w-3 h-3" /> Private Notes
           </p>
-          <button type="button" onClick={() => setEditing(true)} className="text-[10px] font-oswald tracking-widest uppercase text-accent hover:underline">
+          <button type="button" onClick={() => setEditing(true)} className="text-[10px] font-display tracking-widest uppercase text-accent hover:underline">
             Edit
           </button>
         </div>
@@ -72,7 +72,7 @@ function SessionNotesEditor({ session, onSaved }) {
 
   return (
     <div className="mt-3">
-      <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-1 flex items-center gap-1">
+      <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1 flex items-center gap-1">
         <StickyNote className="w-3 h-3" /> Private Notes (only visible to you)
       </p>
       <Textarea
@@ -87,7 +87,7 @@ function SessionNotesEditor({ session, onSaved }) {
           size="sm"
           onClick={save}
           disabled={saving || !isDirty}
-          className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
         >
           {saving ? 'Saving...' : <><Save className="w-3 h-3 mr-1" /> Save</>}
         </Button>
@@ -158,7 +158,7 @@ function CoachingPlan({ sessions, onSaved }) {
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center gap-2 mb-2">
           <ClipboardList className="w-4 h-4 text-accent" />
-          <h2 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
+          <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
         </div>
         <p className="text-xs text-muted-foreground">
           The plan saves to your most relevant session with this client. Book or hold a session first to start the plan.
@@ -192,7 +192,7 @@ function CoachingPlan({ sessions, onSaved }) {
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <div className="flex items-center gap-2">
           <ClipboardList className="w-4 h-4 text-accent" />
-          <h2 className="font-oswald text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
+          <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
         </div>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
@@ -202,12 +202,12 @@ function CoachingPlan({ sessions, onSaved }) {
       {/* Private — coach only */}
       <div className="flex items-center gap-2 mb-2">
         <Lock className="w-3 h-3 text-muted-foreground" />
-        <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Private — coach only</p>
+        <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Private — coach only</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
         {PLAN_FIELDS.filter(f => f.visibility === 'private').map(f => (
           <div key={f.key} className={f.key === 'training_plan' ? 'md:col-span-2' : ''}>
-            <label className="font-oswald tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
+            <label className="font-display tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
             <Textarea
               value={draft[f.key] || ''}
               onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
@@ -222,12 +222,12 @@ function CoachingPlan({ sessions, onSaved }) {
       {/* Shared — visible to client */}
       <div className="flex items-center gap-2 mb-2">
         <Eye className="w-3 h-3 text-accent" />
-        <p className="text-[10px] font-oswald tracking-widest uppercase text-accent">Shared — visible on client dashboard</p>
+        <p className="text-[10px] font-display tracking-widest uppercase text-accent">Shared — visible on client dashboard</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {PLAN_FIELDS.filter(f => f.visibility === 'shared').map(f => (
           <div key={f.key}>
-            <label className="font-oswald tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
+            <label className="font-display tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
             <Textarea
               value={draft[f.key] || ''}
               onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
@@ -243,7 +243,7 @@ function CoachingPlan({ sessions, onSaved }) {
           <button
             type="button"
             onClick={() => setDraft(snapshot)}
-            className="text-[11px] font-oswald tracking-widest uppercase text-muted-foreground hover:text-foreground"
+            className="text-[11px] font-display tracking-widest uppercase text-muted-foreground hover:text-foreground"
           >
             Revert
           </button>
@@ -252,7 +252,7 @@ function CoachingPlan({ sessions, onSaved }) {
           size="sm"
           onClick={save}
           disabled={!dirty || saving}
-          className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
+          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
         >
           <Save className="w-3 h-3 mr-1" /> {saving ? 'Saving…' : 'Save Plan'}
         </Button>
@@ -364,7 +364,7 @@ export default function CoachClientDetail() {
         </Link>
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <h2 className="font-oswald text-lg tracking-wider text-foreground uppercase">No record for {clientEmail}</h2>
+          <h2 className="font-display text-lg tracking-wider text-foreground uppercase">No record for {clientEmail}</h2>
           <p className="text-sm text-muted-foreground mt-1">You haven't coached this client, and no user account matches.</p>
         </div>
       </div>
@@ -385,7 +385,7 @@ export default function CoachClientDetail() {
               <UserIcon className="w-6 h-6 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-oswald text-2xl font-bold tracking-wider text-foreground truncate">{clientName}</h1>
+              <h1 className="font-display text-2xl font-bold tracking-wider text-foreground truncate">{clientName}</h1>
               <div className="flex items-center gap-3 mt-1 flex-wrap text-sm text-muted-foreground">
                 {age != null && <span>Age {age}{isMinor && <span className="ml-1 text-accent">· minor</span>}</span>}
                 {county && (
@@ -401,7 +401,7 @@ export default function CoachClientDetail() {
               <Button
                 onClick={handleStartConversation}
                 disabled={creatingConvo}
-                className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90"
+                className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
               >
                 <MessageSquare className="w-3 h-3 mr-1" />
                 {existingConvo ? 'Open Chat' : (creatingConvo ? 'Starting...' : 'Start Chat')}
@@ -419,8 +419,8 @@ export default function CoachClientDetail() {
             { label: 'Credits', value: credits.reduce((sum, c) => sum + Math.max(0, (c.total_credits || 0) - (c.used_credits || 0)), 0) },
           ].map(s => (
             <div key={s.label} className="bg-secondary/40 border border-border rounded p-3 text-center">
-              <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">{s.label}</p>
-              <p className="font-oswald text-lg font-bold text-foreground">{s.value}</p>
+              <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</p>
+              <p className="font-display text-lg font-bold text-foreground">{s.value}</p>
             </div>
           ))}
         </div>
@@ -429,7 +429,7 @@ export default function CoachClientDetail() {
       {/* Parent / guardian (minors only) */}
       {isMinor && clientUser && (clientUser.parent_email || clientUser.parent_phone || clientUser.parent_first_name) && (
         <div className="bg-card border border-border rounded-lg p-5">
-          <h2 className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-3">Parent / Guardian</h2>
+          <h2 className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-3">Parent / Guardian</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {(clientUser.parent_first_name || clientUser.parent_last_name) && (
               <div>
@@ -456,7 +456,7 @@ export default function CoachClientDetail() {
       {/* Credits */}
       {credits.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-5">
-          <h2 className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-3">Active Credits</h2>
+          <h2 className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-3">Active Credits</h2>
           <div className="space-y-2">
             {credits.map(c => {
               const remaining = Math.max(0, (c.total_credits || 0) - (c.used_credits || 0));
@@ -472,7 +472,7 @@ export default function CoachClientDetail() {
                       </p>
                     </div>
                   </div>
-                  <span className={`font-oswald text-lg flex-shrink-0 ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{remaining}</span>
+                  <span className={`font-display text-lg flex-shrink-0 ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{remaining}</span>
                 </div>
               );
             })}
@@ -490,7 +490,7 @@ export default function CoachClientDetail() {
 
       {/* Session history */}
       <div>
-        <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-3">Session History</h2>
+        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Session History</h2>
         {sessions.length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
             No sessions with this client yet.
@@ -504,28 +504,28 @@ export default function CoachClientDetail() {
                 <div key={s.id} className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0">
-                      <p className="font-oswald tracking-wider text-foreground">{formatLongDateET(s.date)}</p>
+                      <p className="font-display tracking-wider text-foreground">{formatLongDateET(s.date)}</p>
                       <p className="text-sm text-muted-foreground">
                         {formatTimeET(s.date, s.start_time)} · {s.duration_minutes} min · {s.county}
                       </p>
                       {s.session_goals && (
                         <p className="text-sm text-muted-foreground mt-2">
-                          <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Goals: </span>
+                          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
                           {s.session_goals}
                         </p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                      <Badge className={`${sc.color} border text-[10px] font-oswald tracking-widest uppercase`}>
+                      <Badge className={`${sc.color} border text-[10px] font-display tracking-widest uppercase`}>
                         <Icon className="w-3 h-3 mr-1" /> {sc.label}
                       </Badge>
                       {s.payment_method === 'cash' && s.payment_status === 'unpaid' && s.status !== 'cancelled' && (
-                        <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px] font-oswald tracking-widest uppercase">
+                        <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20 border text-[10px] font-display tracking-widest uppercase">
                           Unpaid · ${s.total_price || 0}
                         </Badge>
                       )}
                       {s.payment_status === 'paid' && (
-                        <Badge className="bg-green-500/10 text-green-400 border-green-500/20 border text-[10px] font-oswald tracking-widest uppercase">
+                        <Badge className="bg-green-500/10 text-green-400 border-green-500/20 border text-[10px] font-display tracking-widest uppercase">
                           <Check className="w-3 h-3 mr-1" /> Paid
                         </Badge>
                       )}

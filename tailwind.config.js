@@ -5,8 +5,10 @@ module.exports = {
   theme: {
   	extend: {
       fontFamily: {
-        oswald: ['var(--font-oswald)'],
-        'dm-sans': ['var(--font-dm-sans)'],
+        sans: ['var(--font-sans)'],
+        display: ['var(--font-display)'],
+        oswald: ['var(--font-display)'],
+        'dm-sans': ['var(--font-sans)'],
       },
   		borderRadius: {
   			lg: 'var(--radius)',
@@ -15,11 +17,12 @@ module.exports = {
   		},
   		colors: {
   			brand: {
-  				black:     'var(--color-brand-black)',
-  				charcoal:  'var(--color-brand-charcoal)',
-  				white:     'var(--color-brand-white)',
-  				gold:      'var(--color-brand-gold)',
-  				'gold-soft': 'var(--color-brand-gold-soft)'
+  				navy: 'var(--color-brand-navy)',
+  				blue: 'var(--color-brand-blue)',
+  				'blue-dark': 'var(--color-brand-blue-dark)',
+  				sky: 'var(--color-brand-sky)',
+  				slate: 'var(--color-brand-slate)',
+  				surface: 'var(--color-brand-surface)'
   			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

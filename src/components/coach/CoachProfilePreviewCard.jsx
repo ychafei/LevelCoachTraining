@@ -41,7 +41,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="font-oswald text-6xl font-bold text-muted-foreground/20">
+            <span className="font-display text-6xl font-bold text-muted-foreground/20">
               {initials}
             </span>
           </div>
@@ -51,7 +51,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
         {/* Top-right badges */}
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
           {c.is_head_coach && (
-            <Badge className="bg-accent text-accent-foreground border-0 text-[10px] font-oswald tracking-widest uppercase">
+            <Badge className="bg-accent text-accent-foreground border-0 text-[10px] font-display tracking-widest uppercase">
               <Star className="w-3 h-3 mr-1" /> Head Coach
             </Badge>
           )}
@@ -62,13 +62,13 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
       <div className="p-6 -mt-16 relative">
         <div className="flex items-center gap-2 mb-2">
           <MapPin className="w-3.5 h-3.5 text-accent" />
-          <span className="text-xs font-oswald tracking-wider uppercase text-accent">
+          <span className="text-xs font-display tracking-wider uppercase text-accent">
             {c.county ? `${c.county} County` : 'Set your county'}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <h3 className="font-oswald text-xl font-bold tracking-wider text-foreground">
+          <h3 className="font-display text-xl font-bold tracking-wider text-foreground">
             {fullName}
           </h3>
           {c.email_verified_at && (
@@ -88,7 +88,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
               <Badge
                 key={spec}
                 variant="secondary"
-                className="text-xs font-oswald tracking-wide uppercase bg-secondary text-muted-foreground"
+                className="text-xs font-display tracking-wide uppercase bg-secondary text-muted-foreground"
               >
                 {spec}
               </Badge>
@@ -114,7 +114,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
 
         {payments.length > 0 && (
           <div className="mt-5 pt-4 border-t border-border">
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mb-1.5">Accepts</p>
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1.5">Accepts</p>
             <p className="text-xs text-foreground">{payments.join(' · ')}</p>
           </div>
         )}

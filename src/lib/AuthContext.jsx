@@ -7,7 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  // Kept for API compatibility with the previous Base44 flow which loaded
+  // Kept for API compatibility with the previous legacy flow which loaded
   // public app settings before auth. Appwrite has no equivalent boot step,
   // so this stays `false` after the first render.
   const [isLoadingPublicSettings] = useState(false);

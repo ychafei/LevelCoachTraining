@@ -28,16 +28,16 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-md bg-[#F7F5EF] text-[#0B0B0B] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-6">
+      <div className="w-full max-w-md bg-[#FFFFFF] text-[#0F172A] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-6">
         <Link
           to="/login"
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-[#0B0B0B]"
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-[#0F172A]"
         >
           <ArrowLeft className="h-4 w-4" /> Back to sign in
         </Link>
 
         <div>
-          <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-wide text-center">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide text-center">
             Reset your password
           </h1>
           <p className="text-sm text-neutral-500 mt-1 text-center">
@@ -55,7 +55,7 @@ export default function ForgotPassword() {
               <button
                 type="button"
                 onClick={() => setSent(false)}
-                className="underline underline-offset-4 hover:text-[#0B0B0B]"
+                className="underline underline-offset-4 hover:text-[#0F172A]"
               >
                 try again
               </button>.
@@ -76,7 +76,7 @@ export default function ForgotPassword() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={submitting}
                   required
-                  className="pl-9 bg-white text-[#0B0B0B] placeholder:text-neutral-400 border-neutral-300"
+                  className="pl-9 bg-white text-[#0F172A] placeholder:text-neutral-400 border-neutral-300"
                 />
               </div>
             </div>
@@ -86,7 +86,7 @@ export default function ForgotPassword() {
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full bg-[#0B0B0B] hover:bg-black text-white py-2.5 rounded-md"
+              className="w-full bg-[#0F172A] hover:bg-black text-white py-2.5 rounded-md"
             >
               Send reset link
             </Button>

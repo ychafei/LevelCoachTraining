@@ -103,45 +103,45 @@ export default function AdminPricing() {
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="font-oswald text-3xl font-bold tracking-tight text-foreground">PRICING PACKAGES</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">PRICING PACKAGES</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditing({ ...empty, includes: [] }); setIncludeInput(''); }} className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase text-xs hover:bg-accent/90">
+              <Button onClick={() => { setEditing({ ...empty, includes: [] }); setIncludeInput(''); }} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
                 <Plus className="w-4 h-4 mr-2" /> Add Package
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg bg-card border-border max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle className="font-oswald tracking-wider">{editing?.id ? 'EDIT' : 'ADD'} PACKAGE</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="font-display tracking-wider">{editing?.id ? 'EDIT' : 'ADD'} PACKAGE</DialogTitle></DialogHeader>
               {editing && (
                 <div className="space-y-4 mt-4">
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Name</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Name</Label>
                     <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Sessions</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Sessions</Label>
                       <Input type="number" value={editing.sessions} onChange={e => setEditing({ ...editing, sessions: e.target.value })} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Price ($)</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Price ($)</Label>
                       <Input type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: e.target.value })} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-oswald tracking-wider uppercase text-xs">Order</Label>
+                      <Label className="font-display tracking-wider uppercase text-xs">Order</Label>
                       <Input type="number" value={editing.display_order} onChange={e => setEditing({ ...editing, display_order: e.target.value })} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Badge (e.g. Most Popular)</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Badge (e.g. Most Popular)</Label>
                     <Input value={editing.badge || ''} onChange={e => setEditing({ ...editing, badge: e.target.value })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Description</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Description</Label>
                     <Textarea value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} className="bg-secondary border-border mt-1" rows={2} />
                   </div>
                   <div>
-                    <Label className="font-oswald tracking-wider uppercase text-xs">Includes</Label>
+                    <Label className="font-display tracking-wider uppercase text-xs">Includes</Label>
                     <div className="flex gap-2 mt-1">
                       <Input value={includeInput} onChange={e => setIncludeInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), includeInput.trim() && (setEditing({ ...editing, includes: [...(editing.includes || []), includeInput.trim()] }), setIncludeInput('')))} placeholder="Add item" className="bg-secondary border-border" />
                       <Button type="button" variant="outline" size="sm" onClick={() => { if (includeInput.trim()) { setEditing({ ...editing, includes: [...(editing.includes || []), includeInput.trim()] }); setIncludeInput(''); } }}>Add</Button>
@@ -159,7 +159,7 @@ export default function AdminPricing() {
                     <Switch checked={editing.is_visible} onCheckedChange={v => setEditing({ ...editing, is_visible: v })} />
                     <Label className="text-sm">Visible on site</Label>
                   </div>
-                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90">Save Package</Button>
+                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">Save Package</Button>
                 </div>
               )}
             </DialogContent>
@@ -171,7 +171,7 @@ export default function AdminPricing() {
             <div key={pkg.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-oswald tracking-wider text-foreground">{pkg.name}</p>
+                  <p className="font-display tracking-wider text-foreground">{pkg.name}</p>
                   {pkg.badge && <Badge className="bg-accent/10 text-accent border-accent/20 text-xs">{pkg.badge}</Badge>}
                   {!pkg.is_visible && <Badge variant="secondary" className="text-xs">Hidden</Badge>}
                 </div>

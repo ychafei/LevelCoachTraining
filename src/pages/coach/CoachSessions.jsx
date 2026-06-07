@@ -366,7 +366,7 @@ export default function CoachSessions() {
           subject: `Session rescheduled — ${formatLongDateET(newDate)}`,
           body: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #B89A45;">Session Rescheduled</h2>
+              <h2 style="color: #2563EB;">Session Rescheduled</h2>
               <p>Hi ${rescheduleSession.client_name || 'there'},</p>
               <p>Your session with <strong>${coachName}</strong> has been rescheduled.</p>
               <p><strong>Previous:</strong> <span style="text-decoration:line-through; color:#888;">${oldWhen}</span></p>
@@ -400,7 +400,7 @@ export default function CoachSessions() {
   if (!user?.coach_id && isAdmin) {
     return (
       <div className="bg-card border border-accent/30 rounded-lg p-6">
-        <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase mb-2">Sessions</h2>
+        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-2">Sessions</h2>
         <p className="text-sm text-muted-foreground">
           Your admin account isn't linked to a coach profile, so there are no sessions to show.
         </p>
@@ -413,7 +413,7 @@ export default function CoachSessions() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-oswald tracking-wider text-foreground uppercase text-sm">Coach Profile Not Linked</p>
+          <p className="font-display tracking-wider text-foreground uppercase text-sm">Coach Profile Not Linked</p>
           <p className="text-sm text-muted-foreground mt-1">Ask an admin to link your account to a coach record.</p>
         </div>
       </div>
@@ -424,7 +424,7 @@ export default function CoachSessions() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Sessions</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Sessions</h1>
           <p className="text-sm text-muted-foreground mt-1">Run your day — mark completed, take payment, handle no-shows.</p>
         </div>
       </div>
@@ -436,7 +436,7 @@ export default function CoachSessions() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2.5 text-xs font-oswald tracking-wider uppercase border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-xs font-display tracking-wider uppercase border-b-2 transition-colors ${
                 tab === t.key
                   ? 'text-accent border-accent'
                   : 'text-muted-foreground border-transparent hover:text-foreground'
@@ -464,7 +464,7 @@ export default function CoachSessions() {
         </div>
 
         <div>
-          <label className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground block mb-1">Payment</label>
+          <label className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">Payment</label>
           <Select value={paymentFilter} onValueChange={setPaymentFilter}>
             <SelectTrigger className="w-44 bg-secondary border-border h-9">
               <SelectValue />
@@ -479,7 +479,7 @@ export default function CoachSessions() {
         </div>
 
         <div>
-          <label className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground block mb-1">County</label>
+          <label className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">County</label>
           <Select value={countyFilter} onValueChange={setCountyFilter}>
             <SelectTrigger className="w-36 bg-secondary border-border h-9">
               <SelectValue />
@@ -494,7 +494,7 @@ export default function CoachSessions() {
         </div>
 
         <div>
-          <label className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground block mb-1">From</label>
+          <label className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">From</label>
           <Input
             type="date"
             value={fromDate}
@@ -503,7 +503,7 @@ export default function CoachSessions() {
           />
         </div>
         <div>
-          <label className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground block mb-1">To</label>
+          <label className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">To</label>
           <Input
             type="date"
             value={toDate}
@@ -516,7 +516,7 @@ export default function CoachSessions() {
           <Button
             variant="ghost"
             onClick={() => { setSearch(''); setPaymentFilter('all'); setCountyFilter('all'); setFromDate(''); setToDate(''); }}
-            className="text-xs font-oswald tracking-wider uppercase"
+            className="text-xs font-display tracking-wider uppercase"
           >
             <Filter className="w-3 h-3 mr-1" /> Reset
           </Button>
@@ -553,7 +553,7 @@ export default function CoachSessions() {
       >
         <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-oswald text-2xl font-bold tracking-tight uppercase">Reschedule Session</DialogTitle>
+            <DialogTitle className="font-display text-2xl font-bold tracking-tight uppercase">Reschedule Session</DialogTitle>
             {rescheduleSession && (
               <DialogDescription>
                 Pick a new date and time for {rescheduleSession.client_name}. All times shown in ET.
@@ -564,7 +564,7 @@ export default function CoachSessions() {
           {rescheduleSession && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
                 <Calendar
                   mode="single"
                   selected={rescheduleDate}
@@ -575,7 +575,7 @@ export default function CoachSessions() {
               </div>
               {rescheduleDate && (
                 <div>
-                  <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">Pick a Time (ET)</p>
+                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Time (ET)</p>
                   <div className="grid grid-cols-3 gap-2">
                     {TIME_SLOTS.map((time) => {
                       const taken = isRescheduleTimeSlotTaken(time);
@@ -586,7 +586,7 @@ export default function CoachSessions() {
                           key={time}
                           onClick={() => !disabled && setRescheduleTime(time)}
                           disabled={disabled}
-                          className={`p-2 rounded-md border text-xs font-oswald tracking-wide transition-all ${
+                          className={`p-2 rounded-md border text-xs font-display tracking-wide transition-all ${
                             disabled
                               ? 'border-border bg-secondary/50 text-muted-foreground/40 line-through cursor-not-allowed'
                               : rescheduleTime === time
@@ -605,13 +605,13 @@ export default function CoachSessions() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRescheduleSession(null)} className="font-oswald tracking-wider uppercase">
+            <Button variant="outline" onClick={() => setRescheduleSession(null)} className="font-display tracking-wider uppercase">
               Cancel
             </Button>
             <Button
               onClick={confirmReschedule}
               disabled={!rescheduleDate || !rescheduleTime || rescheduling}
-              className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
             >
               {rescheduling ? 'Rescheduling…' : 'Confirm Reschedule'}
             </Button>
@@ -649,27 +649,27 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
         {/* Left side: when + client + meta */}
         <div className="flex items-start gap-4 min-w-0 flex-1">
           <div className="text-center flex-shrink-0 w-16">
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">
               {new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', weekday: 'short' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
-            <p className="font-oswald text-2xl font-bold text-foreground leading-none">
+            <p className="font-display text-2xl font-bold text-foreground leading-none">
               {new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', day: 'numeric' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
-            <p className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground mt-1">
+            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mt-1">
               {new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', month: 'short' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-oswald tracking-wider text-foreground text-base">
+              <p className="font-display tracking-wider text-foreground text-base">
                 {formatTimeET(s.date, s.start_time).replace(' ET', '')}
                 <span className="text-muted-foreground"> · {s.duration_minutes} min</span>
               </p>
-              <Badge className={`${sm.color} border text-[10px] font-oswald tracking-widest uppercase`}>
+              <Badge className={`${sm.color} border text-[10px] font-display tracking-widest uppercase`}>
                 <StatusIcon className="w-3 h-3 mr-1" />{sm.label}
               </Badge>
-              <Badge className={`${paymentTone} border text-[10px] font-oswald tracking-widest uppercase`}>
+              <Badge className={`${paymentTone} border text-[10px] font-display tracking-widest uppercase`}>
                 {pm.label}
               </Badge>
             </div>
@@ -691,7 +691,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             </div>
             {s.session_goals && (
               <p className="text-xs text-muted-foreground mt-2">
-                <span className="text-[10px] font-oswald tracking-widest uppercase text-muted-foreground">Goals: </span>
+                <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
                 {s.session_goals}
               </p>
             )}
@@ -708,7 +708,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
           <Button
             size="sm"
             onClick={() => onMarkCompleted(s)}
-            className="bg-green-600 text-white font-oswald tracking-wider uppercase text-xs hover:bg-green-700"
+            className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
           >
             <CheckCircle2 className="w-3 h-3 mr-1" /> Mark Completed
           </Button>
@@ -718,7 +718,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             size="sm"
             variant="outline"
             onClick={() => onMarkNoShow(s)}
-            className="font-oswald tracking-wider uppercase text-xs text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-300"
+            className="font-display tracking-wider uppercase text-xs text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-300"
           >
             <UserCheck className="w-3 h-3 mr-1" /> No-show
           </Button>
@@ -728,7 +728,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             size="sm"
             variant="outline"
             onClick={() => onMarkPaid(s)}
-            className="font-oswald tracking-wider uppercase text-xs"
+            className="font-display tracking-wider uppercase text-xs"
           >
             <DollarSign className="w-3 h-3 mr-1" /> Mark Paid
           </Button>
@@ -738,7 +738,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             size="sm"
             variant="outline"
             onClick={() => onReschedule(s)}
-            className="font-oswald tracking-wider uppercase text-xs"
+            className="font-display tracking-wider uppercase text-xs"
           >
             <CalendarClock className="w-3 h-3 mr-1" /> Reschedule
           </Button>
@@ -748,7 +748,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
             size="sm"
             variant="outline"
             onClick={() => onCancel(s)}
-            className="font-oswald tracking-wider uppercase text-xs text-destructive hover:text-destructive"
+            className="font-display tracking-wider uppercase text-xs text-destructive hover:text-destructive"
           >
             <XCircle className="w-3 h-3 mr-1" /> Cancel
           </Button>
@@ -758,7 +758,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
           size="sm"
           variant="ghost"
           onClick={onMessage}
-          className="font-oswald tracking-wider uppercase text-xs"
+          className="font-display tracking-wider uppercase text-xs"
         >
           <MessageSquare className="w-3 h-3 mr-1" /> Message
         </Button>
@@ -766,7 +766,7 @@ function SessionCard({ s, onMarkCompleted, onMarkNoShow, onMarkPaid, onCancel, o
           <Button
             size="sm"
             variant="ghost"
-            className="font-oswald tracking-wider uppercase text-xs"
+            className="font-display tracking-wider uppercase text-xs"
           >
             <ExternalLink className="w-3 h-3 mr-1" /> Client
           </Button>

@@ -11,14 +11,14 @@ export default function CoachPlaceholder({ title, blurb, phase, fallbackHref = '
       <div className="w-12 h-12 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4">
         <Sparkles className="w-5 h-5 text-accent" />
       </div>
-      <h2 className="font-oswald text-2xl font-bold tracking-wider text-foreground uppercase mb-2">{title}</h2>
+      <h2 className="font-display text-2xl font-bold tracking-wider text-foreground uppercase mb-2">{title}</h2>
       <p className="text-muted-foreground text-sm max-w-md mx-auto mb-1">{blurb}</p>
       {phase && (
-        <p className="text-[10px] font-oswald tracking-[0.3em] uppercase text-accent mt-3">{phase}</p>
+        <p className="text-[10px] font-display tracking-[0.3em] uppercase text-accent mt-3">{phase}</p>
       )}
       <div className="mt-6">
         <Link to={fallbackHref}>
-          <Button variant="outline" className="font-oswald tracking-wider uppercase text-xs">{fallbackLabel}</Button>
+          <Button variant="outline" className="font-display tracking-wider uppercase text-xs">{fallbackLabel}</Button>
         </Link>
       </div>
     </div>

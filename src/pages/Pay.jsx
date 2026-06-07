@@ -33,7 +33,7 @@ export default function Pay() {
   return (
     <div className="py-24">
       <div className="max-w-2xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-4xl font-bold tracking-tight text-foreground mb-2">PAYMENT</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight text-foreground mb-2">PAYMENT</h1>
         <p className="text-muted-foreground mb-10">Complete payment directly with your coach using the methods below.</p>
 
         {sessions.length === 0 ? (
@@ -49,7 +49,7 @@ export default function Pay() {
                 <div key={session.id} className="bg-card border border-border rounded-lg p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="font-oswald text-lg font-bold tracking-wider">{format(new Date(session.date + 'T00:00:00'), 'EEEE, MMMM d')}</h3>
+                      <h3 className="font-display text-lg font-bold tracking-wider">{format(new Date(session.date + 'T00:00:00'), 'EEEE, MMMM d')}</h3>
                       <p className="text-sm text-muted-foreground">{session.start_time} · {session.duration_minutes} min · {session.county}</p>
                     </div>
                     <Badge className="bg-accent/10 text-accent border-accent/20">Unpaid</Badge>
@@ -57,7 +57,7 @@ export default function Pay() {
                   {/* Payment method the client chose when booking */}
                   {session.payment_method && (
                     <div className="mt-3 mb-1">
-                      <span className={`inline-block text-xs px-2 py-0.5 rounded font-oswald tracking-wide uppercase border ${
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded font-display tracking-wide uppercase border ${
                         session.payment_method === 'cash' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
                         session.payment_method === 'credits' ? 'bg-primary/10 text-primary border-primary/20' :
                         'bg-green-500/10 text-green-400 border-green-500/20'
@@ -68,7 +68,7 @@ export default function Pay() {
                   )}
                   {coach && (
                     <div className="border-t border-border pt-4 mt-4">
-                      <p className="text-xs font-oswald tracking-widest uppercase text-muted-foreground mb-3">
+                      <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">
                         Pay {coach.first_name} {coach.last_name} via:
                       </p>
                       <div className="space-y-2 text-sm">

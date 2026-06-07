@@ -1,180 +1,228 @@
-import React, { useEffect, useState } from 'react';
-import { coachRepo, siteContentRepo } from '@/api/repo';
-import { storage } from '@/lib/storage';
-import { Badge } from '@/components/ui/badge';
-import { MapPin, Target, Users, Trophy, Upload } from 'lucide-react';
-import useCurrentUser from '@/hooks/useCurrentUser';
+import React from 'react';
+import {
+  Building2,
+  CreditCard,
+  Flag,
+  Rocket,
+  ShieldCheck,
+  TrendingUp,
+  Trophy,
+  UserCheck,
+  Users,
+} from 'lucide-react';
 
-export default function About() {
-  const [coaches, setCoaches] = useState([]);
-  const [foundersPhoto, setFoundersPhoto] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const { user } = useCurrentUser();
-  const isAdmin = user?.role === 'admin';
+const platformStats = [
+  { value: '500+', label: 'Verified Coaches', icon: Users },
+  { value: '20+', label: 'Sports', icon: Trophy },
+  { value: '50,000+', label: 'Athletes Served', icon: ShieldCheck },
+  { value: '$25M+', label: 'Payments Processed', icon: CreditCard },
+];
 
-  useEffect(() => {
-    coachRepo.filter({ is_active: true }, 'display_order').then(setCoaches);
-    siteContentRepo.filter({ key: 'founders_photo' }).then(results => {
-      if (results.length > 0) setFoundersPhoto(results[0]);
-    });
-  }, []);
+const missionCards = [
+  {
+    title: 'For athletes',
+    body: 'We help athletes find the right coach, book sessions, and reach their goals with confidence.',
+    icon: UserCheck,
+  },
+  {
+    title: 'For coaches',
+    body: 'We give coaches the tools to manage clients, run sessions, get paid, and grow their business.',
+    icon: Users,
+  },
+  {
+    title: 'For organizations',
+    body: 'We power training organizations with multi-tenant management, reporting, and streamlined operations.',
+    icon: Building2,
+  },
+];
 
-  const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
-    const { url: file_url } = await storage.uploadFile('site-content', file);
-    if (foundersPhoto) {
-      await siteContentRepo.update(foundersPhoto.id, { value: file_url });
-      setFoundersPhoto({ ...foundersPhoto, value: file_url });
-    } else {
-      const record = await siteContentRepo.create({ key: 'founders_photo', value: file_url, content_type: 'image' });
-      setFoundersPhoto(record);
-    }
-    setUploading(false);
-  };
+const safetyItems = [
+  {
+    title: 'Verified profiles',
+    body: 'All coaches go through our verification and background check process.',
+    icon: ShieldCheck,
+  },
+  {
+    title: 'Youth safety',
+    body: 'We promote a safe, respectful environment for every athlete.',
+    icon: Users,
+  },
+  {
+    title: 'Secure payments',
+    body: 'All payments are processed securely through Stripe.',
+    icon: CreditCard,
+  },
+  {
+    title: 'Multi-tenant platform',
+    body: 'Built to support individual coaches and large training organizations.',
+    icon: Building2,
+  },
+];
+
+const journey = [
+  {
+    year: '2019',
+    title: 'Built for Coaches',
+    body: 'Started as an internal tool to manage private training and clients.',
+    icon: Flag,
+  },
+  {
+    year: '2021',
+    title: 'Opening the Platform',
+    body: 'Began connecting athletes with verified coaches across sports.',
+    icon: Users,
+  },
+  {
+    year: '2023',
+    title: 'Organizations Join',
+    body: 'Launched multi-tenant platform for academies and training teams.',
+    icon: Building2,
+  },
+  {
+    year: 'Today & Beyond',
+    title: 'Today & Beyond',
+    body: 'Continuing to innovate and support the future of coaching.',
+    icon: Rocket,
+  },
+];
+
+function StatItem({ stat }) {
+  return (
+    <div className="flex items-center justify-center gap-5 border-b border-slate-200 px-4 py-4 last:border-b-0 sm:justify-start md:border-b-0 md:border-r md:last:border-r-0">
+      <stat.icon className="h-9 w-9 shrink-0 text-blue-600" />
+      <div>
+        <p className="text-xl font-bold leading-none text-slate-950">{stat.value}</p>
+        <p className="mt-1 text-sm text-slate-600">{stat.label}</p>
+      </div>
+    </div>
+  );
+}
+
+function SmallCard({ item }) {
+  return (
+    <article className="flex gap-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
+        <item.icon className="h-5 w-5" />
+      </span>
+      <div>
+        <h3 className="font-sans text-sm font-bold normal-case tracking-normal text-slate-950">
+          {item.title}
+        </h3>
+        <p className="mt-2 text-xs leading-4 text-slate-700">{item.body}</p>
+      </div>
+    </article>
+  );
+}
+
+function JourneyStep({ step, index }) {
+  const Icon = step.icon;
 
   return (
-    <div>
-      {/* Hero */}
-      <section className="py-24 relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <h1 className="font-oswald text-5xl sm:text-7xl font-bold tracking-tight text-foreground mb-6">
-              THE LC TRAINING STORY
+    <div className="relative flex flex-col items-center text-center">
+      <span className="relative z-10 grid h-10 w-10 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="mt-2 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
+      {index < journey.length - 1 && (
+        <span className="absolute left-1/2 top-[56px] hidden h-px w-full bg-blue-200 lg:block" />
+      )}
+      <p className="mt-2 text-xs font-bold text-slate-950">{step.year}</p>
+      <h3 className="mt-2 font-sans text-sm font-bold normal-case tracking-normal text-slate-950">
+        {step.title}
+      </h3>
+      <p className="mt-1 max-w-[170px] text-xs leading-4 text-slate-600">{step.body}</p>
+    </div>
+  );
+}
+
+export default function About() {
+  return (
+    <div
+      className="text-slate-950"
+      style={{ background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 56%, #eef5ff 100%)' }}
+    >
+      <section className="mx-auto max-w-[1440px] px-4 py-4 sm:px-6 lg:px-8">
+        <div className="grid items-center gap-6 lg:grid-cols-2">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-3 rounded-full bg-blue-50 px-4 py-2 text-blue-700 ring-1 ring-blue-100">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
+            </div>
+
+            <h1 className="mt-6 max-w-[700px] font-display text-5xl font-bold uppercase leading-tight tracking-normal text-slate-950 sm:text-6xl xl:text-7xl">
+              Built to make private coaching easier to{' '}
+              <span className="text-blue-600">find, manage, and grow</span>
             </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Founded with a passion for developing soccer talent in Metro Detroit, LC Training brings 
-              elite-level coaching to Oakland, Macomb, and Wayne counties. We believe every player 
-              deserves access to professional training, regardless of their starting point.
+
+            <p className="mt-5 max-w-[650px] text-base leading-7 text-slate-700 sm:text-lg">
+              LevelCoach Training is the verified platform connecting athletes with great coaches,
+              and giving coaches and organizations the tools to run their business with confidence.
             </p>
           </div>
+
+          <div className="hidden min-w-0 justify-end lg:flex">
+            <img
+              src="/about-product-preview.png"
+              alt="LevelCoach coach portal and mobile profile preview"
+              className="h-auto w-full max-w-2xl object-contain"
+            />
+          </div>
         </div>
-      </section>
 
-      {/* Founders Story */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            {/* Photo */}
-            <div className="relative">
-              <div className="aspect-[4/3] rounded-lg overflow-hidden bg-secondary border border-border relative group">
-                {foundersPhoto?.value ? (
-                  <img src={foundersPhoto.value} alt="LC Training Founders" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <p className="text-muted-foreground text-sm font-oswald tracking-wider uppercase">Founders Photo</p>
-                  </div>
-                )}
-                {isAdmin && (
-                  <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                    <div className="text-center text-white">
-                      <Upload className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm font-oswald tracking-wider">{uploading ? 'UPLOADING...' : 'UPLOAD PHOTO'}</p>
-                    </div>
-                  </label>
-                )}
-              </div>
-              {/* Decorative accent line */}
-              <div className="absolute -bottom-4 -left-4 w-32 h-1 bg-accent" />
+        <section className="mt-2 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
+          {platformStats.map((stat) => (
+            <StatItem key={stat.label} stat={stat} />
+          ))}
+        </section>
+
+        <section className="mt-4 grid gap-5 lg:grid-cols-2">
+          <div>
+            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-blue-600">Our Mission</p>
+            <div className="grid gap-4 md:grid-cols-3">
+              {missionCards.map((item) => (
+                <SmallCard key={item.title} item={item} />
+              ))}
             </div>
+          </div>
 
-            {/* Story */}
+          <div className="border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-blue-600">
+              Trust & Safety First
+            </p>
+            <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {safetyItems.map((item) => (
+                <SmallCard key={item.title} item={item} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-5 grid gap-5 lg:grid-cols-5">
+          <article className="flex flex-col items-start gap-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center lg:col-span-2">
+            <span className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+              <TrendingUp className="h-12 w-12" />
+            </span>
             <div>
-              <p className="text-xs font-oswald tracking-widest uppercase text-accent mb-4">Our Story</p>
-              <h2 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-6">
-                THREE TEAMMATES. ONE DREAM.
+              <h2 className="font-sans text-xl font-bold leading-8 normal-case tracking-normal text-slate-950">
+                LevelCoach Training started as a private training workflow and is growing into a
+                platform for every serious coach and athlete.
               </h2>
-              <div className="space-y-4 text-muted-foreground leading-relaxed">
-                <p>
-                  It started on a college soccer field — three young men from Metro Detroit who shared more than just a love 
-                  for the beautiful game. We shared a belief that the players who never got the right guidance, the right 
-                  coaching, the right push — were the ones who needed it most.
-                </p>
-                <p>
-                  Through four years of early morning trainings, late-night film sessions, and the kind of brotherhood 
-                  only a locker room can build, we made a pact: when our playing days were behind us, we'd come back home 
-                  and give the next generation what we wished we'd had.
-                </p>
-                <p>
-                  LC Training was born from that promise. We returned to Oakland, Macomb, and Wayne counties — the same 
-                  fields where we first learned to love the game — and built something we're proud of. Not just a training 
-                  program, but a community. A family.
-                </p>
-                <p className="text-foreground font-medium">
-                  Every player we coach carries a piece of that college promise with them. That's why we show up every 
-                  single day, cones in hand and hearts full.
-                </p>
-              </div>
+              <p className="mt-4 text-sm leading-6 text-slate-600">
+                From solo coaches to large academies, our mission is to simplify coaching so you can
+                focus on what matters most: developing athletes.
+              </p>
             </div>
-          </div>
-        </div>
-      </section>
+          </article>
 
-      {/* Values */}
-      <section className="py-20 border-y border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { icon: Target, title: 'PRECISION', desc: 'Every session is tailored to the individual athlete.' },
-              { icon: Users, title: 'COMMUNITY', desc: 'Building connections across Metro Detroit.' },
-              { icon: Trophy, title: 'EXCELLENCE', desc: 'We push boundaries and raise the standard.' },
-              { icon: MapPin, title: 'LOCAL', desc: 'Three counties, one mission.' },
-            ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="text-center">
-                <div className="w-14 h-14 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-                  <Icon className="w-6 h-6 text-accent" />
-                </div>
-                <h3 className="font-oswald text-lg font-bold tracking-wider text-foreground mb-2">{title}</h3>
-                <p className="text-sm text-muted-foreground">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="font-oswald text-4xl font-bold tracking-tight text-foreground mb-12 text-center">
-            THE COACHING STAFF
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {coaches.map((coach) => (
-              <div key={coach.id} className="bg-card border border-border rounded-lg p-6">
-                <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4 overflow-hidden">
-                  {coach.photo_url ? (
-                    <img src={coach.photo_url} alt={coach.first_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-oswald text-2xl font-bold text-muted-foreground/30">
-                      {coach.first_name?.[0]}{coach.last_name?.[0]}
-                    </span>
-                  )}
-                </div>
-                <div className="text-center">
-                  <h3 className="font-oswald text-xl font-bold tracking-wider text-foreground">
-                    {coach.first_name} {coach.last_name}
-                  </h3>
-                  <div className="flex items-center justify-center gap-1.5 text-accent text-xs font-oswald tracking-wider uppercase mt-1">
-                    <MapPin className="w-3 h-3" /> {coach.county} County
-                  </div>
-                  {coach.bio && (
-                    <p className="text-sm text-muted-foreground mt-4">{coach.bio}</p>
-                  )}
-                  {coach.specializations?.length > 0 && (
-                    <div className="flex flex-wrap justify-center gap-1.5 mt-4">
-                      {coach.specializations.map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:col-span-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our Journey</p>
+            <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {journey.map((step, index) => (
+                <JourneyStep key={`${step.year}-${step.title}`} step={step} index={index} />
+              ))}
+            </div>
+          </article>
+        </section>
       </section>
     </div>
   );

@@ -5,7 +5,7 @@ const base = makeRepo(COL.Message);
 
 export const messageRepo = {
   ...base,
-  // Realtime feed for the messages collection. `cb` receives a Base44-shaped
+  // Realtime feed for the messages collection. `cb` receives a app-shaped
   // event: { event, payload } where payload is mapDoc()'d. Returns the
   // unsubscribe function.
   subscribe: (cb) => {

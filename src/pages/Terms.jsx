@@ -4,13 +4,13 @@ export default function Terms() {
   return (
     <div className="py-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <h1 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">TERMS OF SERVICE</h1>
+        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">TERMS OF SERVICE</h1>
         <div className="prose prose-invert prose-sm max-w-none space-y-6 text-muted-foreground">
           <p>Last updated: January 1, 2025</p>
 
           <h2 className="text-foreground">1. Agreement to Terms</h2>
           <p>
-            By accessing or using the LC Training website and services (collectively, the "Services"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not access or use the Services. These Terms constitute a legally binding agreement between you and LC Training ("Company," "we," "us," or "our").
+            By accessing or using the LevelCoach Training website and services (collectively, the "Services"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not access or use the Services. These Terms constitute a legally binding agreement between you and LevelCoach Training ("Company," "we," "us," or "our").
           </p>
           <p>
             We reserve the right to update or modify these Terms at any time. Your continued use of the Services after any changes constitutes acceptance of the revised Terms.
@@ -18,7 +18,7 @@ export default function Terms() {
 
           <h2 className="text-foreground">2. Description of Services</h2>
           <p>
-            LC Training provides private and group soccer coaching services in Oakland, Macomb, and Wayne counties in Metro Detroit, Michigan. Our Services include:
+            LevelCoach Training provides private and group soccer coaching services in Oakland, Macomb, and Wayne counties in Metro Detroit, Michigan. Our Services include:
           </p>
           <ul className="list-disc pl-6 space-y-1">
             <li>One-on-one and small-group soccer training sessions</li>
@@ -39,7 +39,7 @@ export default function Terms() {
 
           <h2 className="text-foreground">4. Booking & Scheduling</h2>
           <p>
-            Sessions are booked through the LC Training platform. When booking, you select a county, coach, package, session duration, and preferred date and time. Bookings are subject to coach availability.
+            Sessions are booked through the LevelCoach Training platform. When booking, you select a county, coach, package, session duration, and preferred date and time. Bookings are subject to coach availability.
           </p>
           <p>
             Session packages grant credits (1 credit = 1 hour of training). Credits can be used to schedule sessions at any time and do not expire unless otherwise stated. Unused credits remain on your account.
@@ -58,7 +58,7 @@ export default function Terms() {
 
           <h2 className="text-foreground">6. Payment Terms</h2>
           <p>
-            LC Training accepts payment via PayPal (electronic payment) and cash at session. All prices are listed in US Dollars.
+            LevelCoach Training accepts payment via PayPal (electronic payment) and cash at session. All prices are listed in US Dollars.
           </p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong className="text-foreground">Electronic payment:</strong> Processed securely through PayPal. Payment is confirmed immediately and credits are activated upon successful processing.</li>
@@ -66,15 +66,15 @@ export default function Terms() {
             <li><strong className="text-foreground">Credits:</strong> Previously purchased credits may be applied to new sessions. Credits are deducted at the time of booking.</li>
           </ul>
           <p>
-            Refunds for electronic payments are handled on a case-by-case basis. Please contact <a href="mailto:support@lctrainings.com" className="text-accent underline">support@lctrainings.com</a> for refund requests.
+            Refunds for electronic payments are handled on a case-by-case basis. Please contact <a href="mailto:support@levelcoach.com" className="text-accent underline">support@levelcoach.com</a> for refund requests.
           </p>
 
           <h2 className="text-foreground">7. Assumption of Risk</h2>
           <p>
-            Soccer training involves inherent physical risks including, but not limited to, muscle strains, sprains, fractures, concussions, and other injuries. By participating in LC Training sessions, you acknowledge and voluntarily assume all risks associated with such physical activities.
+            Soccer training involves inherent physical risks including, but not limited to, muscle strains, sprains, fractures, concussions, and other injuries. By participating in LevelCoach Training sessions, you acknowledge and voluntarily assume all risks associated with such physical activities.
           </p>
           <p>
-            You represent that you (or your child, if applicable) are in adequate physical condition to participate in training sessions. LC Training, its coaches, and affiliates shall not be liable for any injuries, damages, or losses arising from participation in training sessions, to the fullest extent permitted by law.
+            You represent that you (or your child, if applicable) are in adequate physical condition to participate in training sessions. LevelCoach Training, its coaches, and affiliates shall not be liable for any injuries, damages, or losses arising from participation in training sessions, to the fullest extent permitted by law.
           </p>
 
           <h2 className="text-foreground">8. Minors & Parental Consent</h2>
@@ -93,12 +93,12 @@ export default function Terms() {
             <li>Only your first name and age are visible to other players before a match is accepted.</li>
             <li>Match requests can be sent, accepted, or declined at any time.</li>
             <li>Upon mutual acceptance, a messaging conversation is created between matched players.</li>
-            <li>LC Training reserves the right to remove any user from the matching feature for any reason.</li>
+            <li>LevelCoach Training reserves the right to remove any user from the matching feature for any reason.</li>
           </ul>
 
           <h2 className="text-foreground">10. Communication & Monitoring</h2>
           <p>
-            All messages sent through the LC Training platform — including coach-client messages and player-to-player messages — are monitored for safety and quality purposes. By using our messaging features, you consent to this monitoring.
+            All messages sent through the LevelCoach Training platform — including coach-client messages and player-to-player messages — are monitored for safety and quality purposes. By using our messaging features, you consent to this monitoring.
           </p>
           <p>
             You agree not to use the messaging system to send inappropriate, offensive, threatening, or harassing content. Violations may result in immediate suspension or permanent ban from the platform.
@@ -119,15 +119,15 @@ export default function Terms() {
 
           <h2 className="text-foreground">12. Intellectual Property</h2>
           <p>
-            All content on the LC Training platform — including text, graphics, logos, images, and software — is the property of LC Training or its licensors and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works from any content without our prior written consent.
+            All content on the LevelCoach Training platform — including text, graphics, logos, images, and software — is the property of LevelCoach Training or its licensors and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works from any content without our prior written consent.
           </p>
 
           <h2 className="text-foreground">13. Limitation of Liability</h2>
           <p>
-            To the fullest extent permitted by law, LC Training and its coaches, employees, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or related to your use of the Services, including but not limited to physical injuries during training, loss of data, or service interruptions.
+            To the fullest extent permitted by law, LevelCoach Training and its coaches, employees, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or related to your use of the Services, including but not limited to physical injuries during training, loss of data, or service interruptions.
           </p>
           <p>
-            Our total liability for any claim arising from the Services shall not exceed the amount you paid to LC Training in the 12 months preceding the claim.
+            Our total liability for any claim arising from the Services shall not exceed the amount you paid to LevelCoach Training in the 12 months preceding the claim.
           </p>
 
           <h2 className="text-foreground">14. Privacy</h2>
@@ -150,8 +150,8 @@ export default function Terms() {
             If you have any questions about these Terms of Service, please contact us at:
           </p>
           <p>
-            <strong className="text-foreground">LC Training</strong><br />
-            Email: <a href="mailto:support@lctrainings.com" className="text-accent underline">support@lctrainings.com</a>
+            <strong className="text-foreground">LevelCoach Training</strong><br />
+            Email: <a href="mailto:support@levelcoach.com" className="text-accent underline">support@levelcoach.com</a>
           </p>
         </div>
       </div>

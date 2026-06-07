@@ -31,8 +31,8 @@ export default function VerifyEmail() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-md bg-[#F7F5EF] text-[#0B0B0B] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-5 text-center">
-        <h1 className="font-oswald text-2xl sm:text-3xl font-bold tracking-wide">
+      <div className="w-full max-w-md bg-[#FFFFFF] text-[#0F172A] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-5 text-center">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide">
           Email verification
         </h1>
 
@@ -57,7 +57,7 @@ export default function VerifyEmail() {
             </p>
             <Link
               to="/login"
-              className="inline-block text-sm text-[#0B0B0B] underline underline-offset-4 hover:opacity-80"
+              className="inline-block text-sm text-[#0F172A] underline underline-offset-4 hover:opacity-80"
             >
               Go to sign in
             </Link>

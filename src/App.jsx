@@ -26,31 +26,18 @@ import PublicLayout from '@/components/layout/PublicLayout';
 
 // Public pages
 import Landing from '@/pages/Landing';
+import HowItWorks from '@/pages/HowItWorks';
+import ForCoaches from '@/pages/ForCoaches';
+import Resources from '@/pages/Resources';
 import About from '@/pages/About';
-import Team from '@/pages/Team';
-import Lcfc from '@/pages/Lcfc';
 import VerifyCoachLink from '@/pages/VerifyCoachLink';
 import VerifyEmail from '@/pages/VerifyEmail';
-import LcfcRoster from '@/pages/lcfc/LcfcRoster';
-import LcfcSchedule from '@/pages/lcfc/LcfcSchedule';
-import LcfcTryouts from '@/pages/lcfc/LcfcTryouts';
-import LcfcStaff from '@/pages/lcfc/LcfcStaff';
-import LcfcSponsors from '@/pages/lcfc/LcfcSponsors';
-import LcfcNews from '@/pages/lcfc/LcfcNews';
-import LcfcLearnMore from '@/pages/lcfc/LcfcLearnMore';
-import TeamUPSL from '@/pages/team/TeamUPSL';
-import TeamRoster from '@/pages/team/TeamRoster';
-import TeamSchedule from '@/pages/team/TeamSchedule';
-import TeamTryouts from '@/pages/team/TeamTryouts';
-import TeamCoaches from '@/pages/team/TeamCoaches';
-import TeamGallery from '@/pages/team/TeamGallery';
 import Book from '@/pages/Book';
+import CoachSearch from '@/pages/CoachSearch';
 import CoachDetail from '@/pages/CoachDetail';
 import Blog from '@/pages/Blog';
 import BlogPostPage from '@/pages/BlogPost';
 import Apply from '@/pages/Apply';
-import ApplyTeamPlayer from '@/pages/apply/ApplyTeamPlayer';
-import ApplyTeamCoach from '@/pages/apply/ApplyTeamCoach';
 import ApplyPrivateTrainingCoach from '@/pages/apply/ApplyPrivateTrainingCoach';
 import Terms from '@/pages/Terms';
 import Privacy from '@/pages/Privacy';
@@ -59,6 +46,9 @@ import Pay from '@/pages/Pay';
 import ParentConsent from '@/pages/ParentConsent';
 import Login from '@/pages/Login';
 import Signup from '@/pages/Signup';
+import SignIn from '@/pages/SignIn';
+import CreateAccount, { AthleteSignup } from '@/pages/CreateAccount';
+import CreateOrganization from '@/pages/CreateOrganization';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 
@@ -72,8 +62,6 @@ import CoachSchedule from '@/pages/CoachSchedule';
 // Admin pages
 import AdminPanel from '@/pages/admin/AdminPanel';
 import AdminCoaches from '@/pages/admin/AdminCoaches';
-import AdminTeam from '@/pages/admin/AdminTeam';
-import AdminLcfc from '@/pages/admin/AdminLcfc';
 import AdminBookings from '@/pages/admin/AdminBookings';
 import AdminContent from '@/pages/admin/AdminContent';
 import AdminPricing from '@/pages/admin/AdminPricing';
@@ -115,32 +103,18 @@ const AuthenticatedApp = () => {
       <Route element={<PublicLayout />}>
         {/* Public routes */}
         <Route path="/" element={<RootRoute />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/for-coaches" element={<ForCoaches />} />
+        <Route path="/resources" element={<Resources />} />
         <Route path="/about" element={<About />} />
-        <Route path="/team" element={<Team />} />
-        <Route path="/lcfc" element={<Lcfc />} />
         <Route path="/verify-coach-link" element={<VerifyCoachLink />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/lcfc/roster" element={<LcfcRoster />} />
-        <Route path="/lcfc/schedule" element={<LcfcSchedule />} />
-        <Route path="/lcfc/tryouts" element={<LcfcTryouts />} />
-        <Route path="/lcfc/staff" element={<LcfcStaff />} />
-        <Route path="/lcfc/sponsors" element={<LcfcSponsors />} />
-        <Route path="/lcfc/news" element={<LcfcNews />} />
-        <Route path="/lcfc/learn-more" element={<LcfcLearnMore />} />
-        <Route path="/team/upsl" element={<TeamUPSL />} />
-        <Route path="/team/roster" element={<TeamRoster />} />
-        <Route path="/team/schedule" element={<TeamSchedule />} />
-        <Route path="/team/tryouts" element={<TeamTryouts />} />
-        <Route path="/team/coaches" element={<TeamCoaches />} />
-        <Route path="/team/gallery" element={<TeamGallery />} />
         <Route path="/book" element={<Book />} />
+        <Route path="/coaches" element={<CoachSearch />} />
         <Route path="/coaches/:coachId" element={<CoachDetail />} />
         <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<BlogPostPage />} />
         <Route path="/apply" element={<Apply />} />
-        <Route path="/apply/team-player" element={<ApplyTeamPlayer />} />
-        <Route path="/apply/team-coach" element={<ApplyTeamCoach />} />
-        <Route path="/apply/private-training-coach" element={<ApplyPrivateTrainingCoach />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/unsubscribe" element={<Unsubscribe />} />
@@ -182,8 +156,6 @@ const AuthenticatedApp = () => {
         <Route element={<RequireAdmin />}>
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/admin/coaches" element={<AdminCoaches />} />
-          <Route path="/admin/team" element={<AdminTeam />} />
-          <Route path="/admin/lcfc" element={<AdminLcfc />} />
           <Route path="/admin/bookings" element={<AdminBookings />} />
           <Route path="/admin/credits" element={<AdminCredits />} />
           <Route path="/admin/content" element={<AdminContent />} />
@@ -198,6 +170,13 @@ const AuthenticatedApp = () => {
 
       <Route path="/login"           element={<Login />} />
       <Route path="/signup"          element={<Signup />} />
+      <Route path="/sign-in"         element={<SignIn />} />
+      <Route path="/create-account"  element={<CreateAccount />} />
+      <Route path="/create-account/athlete" element={<AthleteSignup />} />
+      <Route path="/create-organization" element={<CreateOrganization />} />
+      <Route path="/apply/private-training-coach" element={<ApplyPrivateTrainingCoach />} />
+      <Route path="/apply/training-organization" element={<CreateOrganization />} />
+      <Route path="/apply/organization" element={<CreateOrganization />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password"  element={<ResetPassword />} />
       <Route path="*" element={<PageNotFound />} />

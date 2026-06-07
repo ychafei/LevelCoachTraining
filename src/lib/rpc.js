@@ -1,6 +1,6 @@
 import { functions } from '@/api/appwriteClient';
 
-// Thin wrapper that mimics Base44's rpc.invoke shape. Existing callers do
+// Thin wrapper that mimics legacy's rpc.invoke shape. Existing callers do
 // `const res = await rpc.invoke('foo', payload)` and then read `res.data` —
 // preserve that contract.
 //

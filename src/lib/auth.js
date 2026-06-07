@@ -2,7 +2,7 @@ import { account, databases, functions, DB_ID, COL, Query, ID } from '@/api/appw
 import { OAuthProvider } from 'appwrite';
 
 // Hydrate the matching `profiles` document for an Appwrite account, then
-// merge into a single Base44-shaped user object. The app reads `.email`,
+// merge into a single app-shaped user object. The app reads `.email`,
 // `.role`, `.is_super_admin`, `.first_name`, `.last_name`, `.id` etc., so
 // the merge keeps those keys stable.
 async function hydrateProfile(acc) {
@@ -189,7 +189,7 @@ export const auth = {
   },
 
   // Drop the current Appwrite session. `returnUrl` is accepted for API
-  // compatibility with the old Base44 wrapper but isn't needed — callers
+  // compatibility with the old legacy wrapper but isn't needed — callers
   // navigate themselves.
   signOut: async () => {
     try { await account.deleteSession('current'); } catch { /* already gone */ }

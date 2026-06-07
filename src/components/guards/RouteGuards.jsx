@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogIn, ShieldAlert, LockKeyhole } from 'lucide-react';
+import { LogIn, ShieldAlert } from 'lucide-react';
 
 // Shared spinner — short-lived; never sits forever because guards resolve
 // after isLoadingAuth/isLoadingPublicSettings flip.
@@ -24,21 +24,21 @@ function SignInRequired({ reason }) {
         <div className="w-14 h-14 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto">
           <LogIn className="w-6 h-6 text-accent" />
         </div>
-        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground uppercase">Sign In Required</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground uppercase">Sign In Required</h1>
         <p className="text-muted-foreground text-sm">
           {reason || 'You need to be signed in to view this page.'}
         </p>
         <div className="flex gap-3 justify-center">
           <Button
             onClick={() => navigateToLogin(returnUrl)}
-            className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
           >
             Sign In
           </Button>
           <Button
             variant="outline"
             onClick={() => { window.location.href = '/'; }}
-            className="font-oswald tracking-wider uppercase"
+            className="font-display tracking-wider uppercase"
           >
             Go Home
           </Button>
@@ -55,19 +55,19 @@ function AccessDenied({ title = 'Access Denied', message, cta }) {
         <div className="w-14 h-14 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto">
           <ShieldAlert className="w-6 h-6 text-destructive" />
         </div>
-        <h1 className="font-oswald text-2xl font-bold tracking-tight text-foreground uppercase">{title}</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground uppercase">{title}</h1>
         <p className="text-muted-foreground text-sm">{message || "You don't have permission to view this page."}</p>
         <div className="flex gap-3 justify-center">
           <Button
             onClick={() => { window.location.href = '/dashboard'; }}
-            className="bg-accent text-accent-foreground font-oswald tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
           >
             Dashboard
           </Button>
           <Button
             variant="outline"
             onClick={() => { window.location.href = '/'; }}
-            className="font-oswald tracking-wider uppercase"
+            className="font-display tracking-wider uppercase"
           >
             Go Home
           </Button>
@@ -168,7 +168,7 @@ export function RequireClient() {
             <Button
               variant="ghost"
               onClick={() => { window.location.href = '/dashboard'; }}
-              className="font-oswald tracking-wider uppercase text-xs"
+              className="font-display tracking-wider uppercase text-xs"
             >
               Go to Dashboard
             </Button>

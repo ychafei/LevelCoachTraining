@@ -1,26 +1,20 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Users, Shield, Briefcase, FileText } from 'lucide-react';
+import { Building2, ChevronRight, Briefcase, FileText } from 'lucide-react';
 import { ApplicationForm } from '@/components/apply/ApplicationForm';
 
 const PATHS = [
   {
-    to: '/apply/team-player',
-    icon: Users,
-    title: 'Apply as Team Player',
-    desc: 'Compete for LCFC — UPSL squad and age-group teams.',
-  },
-  {
-    to: '/apply/team-coach',
-    icon: Shield,
-    title: 'Apply as Team Coach',
-    desc: 'Coach the club side — UPSL, age groups, GK roles.',
-  },
-  {
     to: '/apply/private-training-coach',
     icon: Briefcase,
-    title: 'Apply as Private Training Coach',
-    desc: '1-on-1 and small-group LC Training sessions.',
+    title: 'Create Coach Account',
+    desc: 'Set up a free private coach profile.',
+  },
+  {
+    to: '/apply/training-organization',
+    icon: Building2,
+    title: 'Create Organization Account',
+    desc: 'Set up a free training organization profile.',
   },
 ];
 
@@ -30,15 +24,15 @@ export default function Apply() {
       <section className="py-16 border-b border-border">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h1 className="font-oswald text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-4">
-              JOIN THE FAMILY
+            <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-4">
+              Build on LevelCoach
             </h1>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Pick the path that fits. Whether you're chasing a roster spot, a coaching badge, or a private-training role — we're listening.
+              Pick the path that fits your coaching business. Coaches and organizations can start with a free LevelCoach setup.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {PATHS.map(({ to, icon: Icon, title, desc }) => (
               <Link
                 key={to}
@@ -51,7 +45,7 @@ export default function Apply() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-accent" />
                 </div>
-                <h3 className="font-oswald text-lg tracking-wider text-foreground mb-2">{title}</h3>
+                <h3 className="font-display text-lg tracking-wider text-foreground mb-2">{title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
               </Link>
             ))}
@@ -63,23 +57,23 @@ export default function Apply() {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
             <FileText className="w-4 h-4 text-accent" />
-            <span className="text-xs font-oswald tracking-widest uppercase text-accent">General Application</span>
+            <span className="text-xs font-display tracking-widest uppercase text-accent">General Application</span>
           </div>
-          <h2 className="font-oswald text-2xl sm:text-3xl tracking-tight text-foreground mb-2">
+          <h2 className="font-display text-2xl sm:text-3xl tracking-tight text-foreground mb-2">
             NOT SURE WHICH PATH?
           </h2>
           <p className="text-sm text-muted-foreground">
-            Use the form below to introduce yourself. We'll route you to the right team.
+            Use the form below to introduce yourself. We'll route you to the right setup path.
           </p>
         </div>
       </section>
 
       <ApplicationForm
         type="general"
-        title="GENERAL APPLICATION"
-        subtitle="Tell us who you are and what you're looking to do. We read everything."
+        title="General Application"
+        subtitle="Tell us who you are and what you want to build with LevelCoach. We read everything."
         promptLabel="What's on your mind? *"
-        promptPlaceholder="Coaching, playing, partnerships, sponsorship — let us know."
+        promptPlaceholder="Coaching, organization setup, partnerships, integrations — let us know."
         fields={{ resume: true, backgroundCheck: false }}
       />
     </div>

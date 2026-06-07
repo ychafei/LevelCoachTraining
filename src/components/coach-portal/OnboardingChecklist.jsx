@@ -84,14 +84,14 @@ export default function OnboardingChecklist({ user, coach, compact = false }) {
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-oswald tracking-widest uppercase text-accent">Profile Setup</p>
+            <p className="text-xs font-display tracking-widest uppercase text-accent">Profile Setup</p>
             <p className="text-sm text-foreground mt-1">
               {totalDone}/{total} complete
               {hasBlocking && <span className="ml-2 text-destructive">· Action needed</span>}
             </p>
           </div>
           <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-            <span className="font-oswald text-sm font-bold text-accent">{pct}%</span>
+            <span className="font-display text-sm font-bold text-accent">{pct}%</span>
           </div>
         </div>
       </Link>
@@ -102,10 +102,10 @@ export default function OnboardingChecklist({ user, coach, compact = false }) {
     <div className="bg-card border border-border rounded-lg p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="font-oswald text-lg font-bold tracking-wider text-foreground uppercase">Finish Your Profile</h2>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Finish Your Profile</h2>
           <p className="text-xs text-muted-foreground">{totalDone} of {total} complete</p>
         </div>
-        <span className="font-oswald text-xl font-bold text-accent">{pct}%</span>
+        <span className="font-display text-xl font-bold text-accent">{pct}%</span>
       </div>
 
       {/* Progress bar */}
