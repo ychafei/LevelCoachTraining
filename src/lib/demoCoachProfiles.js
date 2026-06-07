@@ -13,13 +13,13 @@ const demoAvailability = (start = '16:00', end = '20:00', days = ['Monday', 'Tue
 const counties = ['Oakland', 'Macomb', 'Wayne'];
 
 const demoRows = [
-  ['Soccer', 'Lisa', 'Rodriguez', 'LevelCoach Training', 'Rochester Hills', '/homepage-coach-lisa.png', 75, ['1-on-1', 'College Prep', 'Finishing', 'Ball Control']],
-  ['Soccer', 'Marcus', 'Thompson', 'Next Level Soccer Academy', 'Sterling Heights', '/homepage-coach-marcus.png', 65, ['Speed & Agility', 'First Touch', 'Game IQ', 'Small Group']],
+  ['Soccer', 'Lisa', 'Rodriguez', 'LevelCoach Training', 'Rochester Hills', '/homepage-coach-lisa-avatar.png', 75, ['1-on-1', 'College Prep', 'Finishing', 'Ball Control']],
+  ['Soccer', 'Marcus', 'Thompson', 'Next Level Soccer Academy', 'Sterling Heights', '/homepage-coach-marcus-avatar.png', 65, ['Speed & Agility', 'First Touch', 'Game IQ', 'Small Group']],
   ['Soccer', 'Ava', 'Bennett', 'Metro Skills Lab', 'Royal Oak', '', 70, ['Goalkeeper Training', 'Footwork', 'Confidence', 'Youth Athletes']],
   ['Soccer', 'Diego', 'Santos', 'Santos Player Development', 'Detroit', '', 80, ['Striker Training', 'College Prep', '1v1 Attacking', 'Film Review']],
   ['Soccer', 'Nia', 'Carter', 'Blue Line Performance', 'Troy', '', 68, ['Defending', 'Passing', 'Game IQ', 'Team Prep']],
 
-  ['Basketball', 'Jordan', 'Williams', 'Elite Hoops Training', 'Detroit', '/homepage-coach-jordan.png', 60, ['Shooting', 'Ball Handling', 'Strength Training', 'Finishing']],
+  ['Basketball', 'Jordan', 'Williams', 'Elite Hoops Training', 'Detroit', '/homepage-coach-jordan-avatar.png', 60, ['Shooting', 'Ball Handling', 'Strength Training', 'Finishing']],
   ['Basketball', 'Maya', 'Chen', 'Court IQ Academy', 'Novi', '', 72, ['Footwork', 'Shooting Form', 'College Prep', 'Guard Skills']],
   ['Basketball', 'Andre', 'Miller', 'Motor City Hoops Lab', 'Southfield', '', 78, ['Explosiveness', 'Game IQ', '1-on-1', 'Small Group']],
   ['Basketball', 'Serena', 'Brooks', 'Next Shot Performance', 'Farmington Hills', '', 64, ['Shooting', 'Confidence', 'Youth Athletes', 'Conditioning']],

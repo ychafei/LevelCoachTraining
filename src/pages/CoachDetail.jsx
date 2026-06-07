@@ -102,7 +102,7 @@ export default function CoachDetail() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                <CoachAvatar coach={coach} className="sm:mt-1" />
+                <CoachAvatar coach={coach} size="xl" className="sm:mt-1" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {model.verified && (

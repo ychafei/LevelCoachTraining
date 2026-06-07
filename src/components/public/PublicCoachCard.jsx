@@ -13,22 +13,28 @@ import { publicCoachDisplay } from '@/lib/publicCoach';
 
 export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const model = publicCoachDisplay(coach);
-  const sizeClass = size === 'sm' ? 'h-12 w-12 text-sm' : 'h-[76px] w-[76px] text-lg';
+  const sizeClass = {
+    sm: 'h-10 w-10 text-xs',
+    md: 'h-12 w-12 text-sm',
+    lg: 'h-14 w-14 text-base',
+    xl: 'h-20 w-20 text-xl',
+  }[size] || 'h-14 w-14 text-base';
+  const dotClass = size === 'xl' ? 'h-4 w-4 border-[3px]' : 'h-3.5 w-3.5 border-[2.5px]';
 
   return (
-    <div className={`relative shrink-0 ${className}`}>
+    <div className={`relative inline-grid shrink-0 self-start rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200 ${className}`}>
       {model.photoUrl ? (
         <img
           src={model.photoUrl}
           alt={model.displayName}
-          className={`${sizeClass} rounded-full object-cover ring-1 ring-slate-200`}
+          className={`${sizeClass} rounded-full object-cover object-center`}
         />
       ) : (
-        <div className={`${sizeClass} grid place-items-center rounded-full bg-gradient-to-br from-blue-50 via-white to-emerald-50 font-extrabold text-blue-900 ring-1 ring-slate-200`}>
+        <div className={`${sizeClass} grid place-items-center rounded-full bg-gradient-to-br from-blue-50 via-white to-emerald-50 font-extrabold text-blue-900`}>
           {model.initials}
         </div>
       )}
-      <span className="absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
+      <span className={`absolute bottom-0 right-0 rounded-full border-white bg-emerald-500 ${dotClass}`} />
     </div>
   );
 }
@@ -43,7 +49,7 @@ export default function PublicCoachCard({ coach, packages = [], compact = false,
     <article className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4 ${className}`}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
         <div className="flex min-w-0 gap-3 sm:gap-4">
-          <CoachAvatar coach={coach} size={compact ? 'sm' : 'lg'} />
+          <CoachAvatar coach={coach} size={compact ? 'md' : 'lg'} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Link

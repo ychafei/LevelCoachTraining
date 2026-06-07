@@ -48,7 +48,7 @@ const coaches = [
     next: 'Tomorrow 4:00 PM',
     tags: ['Soccer', '1-on-1', 'College Prep'],
     initials: 'LR',
-    avatarSrc: '/homepage-coach-lisa.png',
+    avatarSrc: '/homepage-coach-lisa-avatar.png',
     avatarClass: 'from-sky-100 via-blue-50 to-emerald-100 text-blue-900',
   },
   {
@@ -62,7 +62,7 @@ const coaches = [
     next: 'Today 6:30 PM',
     tags: ['Soccer', 'Speed & Agility'],
     initials: 'MT',
-    avatarSrc: '/homepage-coach-marcus.png',
+    avatarSrc: '/homepage-coach-marcus-avatar.png',
     avatarClass: 'from-slate-200 via-blue-100 to-slate-50 text-slate-900',
   },
   {
@@ -76,7 +76,7 @@ const coaches = [
     next: 'Tomorrow 10:00 AM',
     tags: ['Basketball', 'Strength Training'],
     initials: 'JW',
-    avatarSrc: '/homepage-coach-jordan.png',
+    avatarSrc: '/homepage-coach-jordan-avatar.png',
     avatarClass: 'from-amber-100 via-white to-blue-100 text-slate-900',
   },
 ];
@@ -153,24 +153,25 @@ function SearchField({ label, value, icon: Icon }) {
 }
 
 function AvatarBadge({ initials, avatarClass, avatarSrc, size = 'lg' }) {
-  const sizeClass = size === 'sm' ? 'h-9 w-9 text-xs' : 'h-[72px] w-[72px] text-xl';
+  const sizeClass = size === 'sm' ? 'h-8 w-8 text-xs' : 'h-12 w-12 text-base';
+  const dotClass = size === 'sm' ? 'h-2.5 w-2.5 border-2' : 'h-3 w-3 border-[2.5px]';
 
   return (
-    <div className="relative shrink-0">
+    <div className="relative inline-grid shrink-0 self-start rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
       {avatarSrc ? (
         <img
           src={avatarSrc}
           alt=""
-          className={`${sizeClass} rounded-full object-cover ring-1 ring-slate-200`}
+          className={`${sizeClass} rounded-full object-cover object-center`}
         />
       ) : (
         <div
-          className={`grid ${sizeClass} place-items-center rounded-full bg-gradient-to-br ${avatarClass} font-display font-bold tracking-normal ring-1 ring-slate-200`}
+          className={`grid ${sizeClass} place-items-center rounded-full bg-gradient-to-br ${avatarClass} font-display font-bold tracking-normal`}
         >
           {initials}
         </div>
       )}
-      <span className="absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+      <span className={`absolute bottom-0 right-0 rounded-full border-white bg-emerald-500 ${dotClass}`} />
     </div>
   );
 }
