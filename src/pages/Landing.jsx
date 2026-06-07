@@ -48,7 +48,7 @@ const coaches = [
     next: 'Tomorrow 4:00 PM',
     tags: ['Soccer', '1-on-1', 'College Prep'],
     initials: 'LR',
-    avatarSrc: '/homepage-coach-lisa-avatar.png',
+    avatarSrc: '/homepage-coach-lisa.png',
     avatarClass: 'from-sky-100 via-blue-50 to-emerald-100 text-blue-900',
   },
   {
@@ -62,7 +62,7 @@ const coaches = [
     next: 'Today 6:30 PM',
     tags: ['Soccer', 'Speed & Agility'],
     initials: 'MT',
-    avatarSrc: '/homepage-coach-marcus-avatar.png',
+    avatarSrc: '/homepage-coach-marcus.png',
     avatarClass: 'from-slate-200 via-blue-100 to-slate-50 text-slate-900',
   },
   {
@@ -76,7 +76,7 @@ const coaches = [
     next: 'Tomorrow 10:00 AM',
     tags: ['Basketball', 'Strength Training'],
     initials: 'JW',
-    avatarSrc: '/homepage-coach-jordan-avatar.png',
+    avatarSrc: '/homepage-coach-jordan.png',
     avatarClass: 'from-amber-100 via-white to-blue-100 text-slate-900',
   },
 ];
