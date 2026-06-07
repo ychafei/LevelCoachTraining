@@ -42,26 +42,31 @@ const ENDPOINT = process.env.VITE_APPWRITE_ENDPOINT;
 const PROJECT  = process.env.VITE_APPWRITE_PROJECT_ID;
 const API_KEY  = process.env.APPWRITE_API_KEY;
 
-if (!ENDPOINT || !PROJECT || !API_KEY) {
-  console.error('Missing VITE_APPWRITE_ENDPOINT / VITE_APPWRITE_PROJECT_ID / APPWRITE_API_KEY');
+const DATABASE_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID;
+
+if (!ENDPOINT || !PROJECT || !API_KEY || !DATABASE_ID) {
+  console.error('Missing VITE_APPWRITE_ENDPOINT / VITE_APPWRITE_PROJECT_ID / APPWRITE_API_KEY / APPWRITE_DATABASE_ID');
   process.exit(1);
 }
+process.env.APPWRITE_DATABASE_ID = DATABASE_ID;
+
+const DB_KEYS = ['APPWRITE_API_KEY', 'APPWRITE_DATABASE_ID'];
 
 const VAR_MATRIX = {
-  getPublicCoaches:     ['APPWRITE_API_KEY'],
-  getCoachAvailability: ['APPWRITE_API_KEY'],
-  getCoachClients:      ['APPWRITE_API_KEY'],
-  getMatchingPlayers:   ['APPWRITE_API_KEY'],
-  createStripeCheckout: ['APPWRITE_API_KEY', 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
-  stripeWebhook:        ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
-  createStripeConnectAccount: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
-  createStripeConnectOnboarding: ['APPWRITE_API_KEY', 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
-  refreshStripeConnectAccount: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
-  refundStripePayment: ['APPWRITE_API_KEY', 'STRIPE_SECRET_KEY'],
-  bootstrapMasterAdmin: ['APPWRITE_API_KEY'],
-  grantAdminRole:       ['APPWRITE_API_KEY'],
-  signLegalAgreement:   ['APPWRITE_API_KEY', 'APP_BASE_URL'],
-  generateLegalAgreementPdf: ['APPWRITE_API_KEY', 'APP_BASE_URL'],
+  getPublicCoaches:     DB_KEYS,
+  getCoachAvailability: DB_KEYS,
+  getCoachClients:      DB_KEYS,
+  getMatchingPlayers:   DB_KEYS,
+  createStripeCheckout: [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
+  stripeWebhook:        [...DB_KEYS, 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+  createStripeConnectAccount: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
+  createStripeConnectOnboarding: [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
+  refreshStripeConnectAccount: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
+  refundStripePayment: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
+  bootstrapMasterAdmin: DB_KEYS,
+  grantAdminRole:       DB_KEYS,
+  signLegalAgreement:   [...DB_KEYS, 'APP_BASE_URL'],
+  generateLegalAgreementPdf: [...DB_KEYS, 'APP_BASE_URL'],
   'send-email':              ['RESEND_API_KEY'],
   sendBookingEmails:         ['RESEND_API_KEY'],
   sendCoachEmailVerification:['RESEND_API_KEY'],

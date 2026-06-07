@@ -1,7 +1,7 @@
 import { Client, Databases, ID, Query } from 'node-appwrite';
 import Stripe from 'stripe';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
 
 const DURATIONS = new Map([

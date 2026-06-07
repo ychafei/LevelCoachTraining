@@ -3,7 +3,7 @@ import { InputFile } from 'node-appwrite/file';
 import { createHash } from 'node:crypto';
 import { jsPDF } from 'jspdf';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const LEGAL_BUCKET_ID = process.env.LEGAL_DOCUMENTS_BUCKET_ID || 'legal-documents';
 
 const SIGNER_TO_TEMPLATE_ROLE = {

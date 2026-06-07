@@ -14,7 +14,7 @@ export const storage   = new Storage(client);
 export const functions = new Functions(client);
 export { Query, ID };
 
-export const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID || 'levelcoach';
+export const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID || 'lctraining';
 
 // Logical entity name → Appwrite collection id. Names match the legacy entity
 // names so legacy callers keep working.

@@ -1,6 +1,6 @@
 import { Client, Databases, ID, Query, Users } from 'node-appwrite';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 
 function db() {
   const client = new Client()
@@ -23,9 +23,9 @@ async function syncAccountLabels(users, accountId, role) {
   if (!accountId) return;
   const account = await users.get(accountId).catch(() => null);
   if (!account) return;
-  const labels = new Set((account.labels || []).filter((label) => label !== 'admin' && label !== 'super_admin'));
+  const labels = new Set((account.labels || []).filter((label) => label !== 'admin' && label !== 'super_admin' && label !== 'superadmin'));
   if (role === 'admin') labels.add('admin');
-  if (role === 'super_admin') labels.add('admin').add('super_admin');
+  if (role === 'super_admin') labels.add('admin').add('superadmin');
   await users.updateLabels(accountId, [...labels]);
 }
 

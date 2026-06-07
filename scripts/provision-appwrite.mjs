@@ -12,7 +12,7 @@
 //   VITE_APPWRITE_ENDPOINT    e.g. https://nyc.cloud.appwrite.io/v1
 //   VITE_APPWRITE_PROJECT_ID  e.g. 69efb263000fe1c34344
 //   APPWRITE_API_KEY          server-side key (no VITE_ prefix)
-//   APPWRITE_DATABASE_ID      optional, defaults to "levelcoach"
+//   APPWRITE_DATABASE_ID      optional, defaults to "lctraining"
 
 import { Client, Databases, Storage, Permission, Role } from 'node-appwrite';
 import { readFileSync } from 'node:fs';
@@ -55,7 +55,7 @@ const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT).setKey(API
 const databases = new Databases(client);
 const storage   = new Storage(client);
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'lctraining';
 
 // --- Idempotent helpers -----------------------------------------------------
 

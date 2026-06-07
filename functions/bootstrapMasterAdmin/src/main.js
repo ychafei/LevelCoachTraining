@@ -1,6 +1,6 @@
 import { Client, Databases, Users, ID, Query } from 'node-appwrite';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const MASTER_EMAIL = (process.env.MASTER_ADMIN_EMAIL || 'yousef.elchafei@gmail.com').trim().toLowerCase();
 
 function services() {
@@ -45,7 +45,7 @@ export default async ({ req, res, error }) => {
     const profile = rows.documents[0]
       ? await databases.updateDocument(DB_ID, 'profiles', rows.documents[0].$id, data)
       : await databases.createDocument(DB_ID, 'profiles', ID.unique(), data);
-    await users.updateLabels(accountId, [...new Set([...(account.labels || []), 'admin', 'super_admin'])]).catch(() => {});
+    await users.updateLabels(accountId, [...new Set([...(account.labels || []), 'admin', 'superadmin'])]).catch(() => {});
 
     const assignmentRows = await databases.listDocuments(DB_ID, 'admin_assignments', [
       Query.equal('profile_id', profile.$id),

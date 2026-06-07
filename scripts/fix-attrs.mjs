@@ -34,7 +34,7 @@ const client = new Client()
   .setProject(process.env.VITE_APPWRITE_PROJECT_ID)
   .setKey(process.env.APPWRITE_API_KEY);
 const databases = new Databases(client);
-const DB = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'levelcoach';
+const DB = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'lctraining';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function listAttrs(coll) {

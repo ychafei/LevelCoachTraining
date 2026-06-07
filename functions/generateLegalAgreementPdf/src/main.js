@@ -2,7 +2,7 @@ import { Client, Databases, Storage, ID, Permission, Query, Role } from 'node-ap
 import { InputFile } from 'node-appwrite/file';
 import { jsPDF } from 'jspdf';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const LEGAL_BUCKET_ID = process.env.LEGAL_DOCUMENTS_BUCKET_ID || 'legal-documents';
 
 function services() {

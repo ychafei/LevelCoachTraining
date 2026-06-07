@@ -1,6 +1,6 @@
 import { Client, Databases, Query } from 'node-appwrite';
 
-const DB_ID = process.env.APPWRITE_DATABASE_ID || 'levelcoach';
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 
 function db() {
   const client = new Client()
