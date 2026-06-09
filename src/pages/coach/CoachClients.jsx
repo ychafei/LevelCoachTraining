@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { rpc } from '@/lib/rpc';
 import { useAuth } from '@/lib/AuthContext';
+import { sessionRepo } from '@/api/repo/sessionRepo';
+import { sessionCreditRepo } from '@/api/repo/sessionCreditRepo';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/ui/data-table';
 import { Users, ChevronRight, Zap, AlertTriangle } from 'lucide-react';
@@ -21,6 +23,79 @@ function statusForClient(c) {
   return { label: 'Paused', tone: 'muted' };
 }
 
+function buildClientsFromSessions(sessions = [], credits = []) {
+  const creditsByEmail = new Map();
+  for (const credit of credits) {
+    const email = credit.client_email;
+    if (!email) continue;
+    const remaining = Math.max(
+      0,
+      Number(credit.total_credits || 0) - Number(credit.used_credits || 0),
+    );
+    if (!remaining) continue;
+    creditsByEmail.set(email, (creditsByEmail.get(email) || 0) + remaining);
+  }
+
+  const byClient = new Map();
+  const today = new Date().toISOString().slice(0, 10);
+  for (const session of sessions) {
+    const email = session.client_email;
+    if (!email) continue;
+
+    const current = byClient.get(email) || {
+      client_email: email,
+      client_name: session.client_name || email,
+      age: session.client_age || null,
+      total_sessions: 0,
+      upcoming_sessions: 0,
+      last_session_date: '',
+      next_session_date: '',
+      next_session_time: '',
+      credits_remaining: creditsByEmail.get(email) || 0,
+    };
+
+    current.total_sessions += 1;
+    if (!current.client_name || current.client_name === email) {
+      current.client_name = session.client_name || email;
+    }
+    if (!current.age && session.client_age) {
+      current.age = session.client_age;
+    }
+
+    if (session.date >= today && session.status !== 'cancelled') {
+      current.upcoming_sessions += 1;
+      if (!current.next_session_date || session.date < current.next_session_date) {
+        current.next_session_date = session.date;
+        current.next_session_time = session.start_time || '';
+      }
+    }
+
+    if (session.date < today && (!current.last_session_date || session.date > current.last_session_date)) {
+      current.last_session_date = session.date;
+    }
+
+    byClient.set(email, current);
+  }
+
+  return [...byClient.values()];
+}
+
+async function loadCoachClients(user) {
+  try {
+    const res = await rpc.invoke('getCoachClients', {});
+    const payload = res?.data ?? res;
+    if (payload?.error) throw new Error(payload.error);
+    return payload?.clients || [];
+  } catch (functionErr) {
+    console.warn('getCoachClients function unavailable, using direct Appwrite fallback', functionErr);
+    const [sessions, credits] = await Promise.all([
+      sessionRepo.filter({ coach_id: user.coach_id }, '-date'),
+      sessionCreditRepo.list(),
+    ]);
+    return buildClientsFromSessions(sessions, credits);
+  }
+}
+
 export default function CoachClients() {
   const { user, isAdmin } = useAuth();
   const [clients, setClients] = useState([]);
@@ -28,17 +103,17 @@ export default function CoachClients() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
+    if (!user?.coach_id) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
       try {
-        const res = await rpc.invoke('getCoachClients', {});
+        setLoading(true);
+        setError(null);
+        const nextClients = await loadCoachClients(user);
         if (cancelled) return;
-        const payload = res?.data ?? res;
-        if (payload?.error) throw new Error(payload.error);
-        setClients(payload?.clients || []);
+        setClients(nextClients);
       } catch (err) {
-        console.error('getCoachClients failed', err);
+        console.error('CoachClients load failed', err);
         if (!cancelled) setError(err?.message || 'Failed to load clients.');
       } finally {
         if (!cancelled) setLoading(false);

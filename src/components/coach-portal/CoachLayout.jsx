@@ -100,11 +100,11 @@ function SidebarNav({ onSelect }) {
 function SidebarContent({ onSelect }) {
   return (
     <div className="flex min-h-full flex-col px-4 py-5">
-      <Link to="/coach" onClick={onSelect} className="mb-7 inline-flex w-full items-center">
+      <Link to="/coach" onClick={onSelect} className="mb-7 flex h-[54px] w-full items-center">
         <img
           src="/levelcoach-wordmark-white.png"
           alt="LevelCoach Training"
-          className="h-[54px] w-auto object-contain"
+          className="h-12 w-auto max-w-full object-contain"
         />
       </Link>
 
