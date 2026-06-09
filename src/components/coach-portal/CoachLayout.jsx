@@ -20,6 +20,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { cn } from '@/lib/utils';
+import { coachRepo } from '@/api/repo';
+
+const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 
 const sidebarTrend = [
   { value: 12 },
@@ -100,11 +103,15 @@ function SidebarNav({ onSelect }) {
 function SidebarContent({ onSelect }) {
   return (
     <div className="flex min-h-full flex-col px-4 py-5">
-      <Link to="/coach" onClick={onSelect} className="mb-7 flex h-[54px] w-full items-center">
+      <Link
+        to="/coach"
+        onClick={onSelect}
+        className="mb-7 flex h-[64px] w-full items-center rounded-lg bg-white px-3 shadow-sm"
+      >
         <img
-          src="/levelcoach-wordmark-white.png"
+          src="/levelcoach-wordmark.png"
           alt="LevelCoach Training"
-          className="h-12 w-auto max-w-full object-contain"
+          className="h-[42px] w-auto max-w-full object-contain"
         />
       </Link>
 
@@ -146,11 +153,49 @@ function SidebarContent({ onSelect }) {
 
 function Topbar({ mobileOpen, setMobileOpen }) {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [coachProfile, setCoachProfile] = useState(null);
   const displayName = useMemo(() => getDisplayName(user), [user]);
   const initials = getInitials(displayName);
+  const avatarUrl = coachProfile?.photo_url || user?.photo_url || '';
+
+  useEffect(() => {
+    if (!user?.coach_id) {
+      setCoachProfile(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const row = await coachRepo.get(user.coach_id);
+        if (!cancelled) setCoachProfile(row);
+      } catch (err) {
+        console.warn('Coach topbar profile load failed', err?.message || err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.coach_id, location.pathname]);
+
+  useEffect(() => {
+    if (!user?.coach_id) return undefined;
+
+    const handleCoachProfileUpdated = (event) => {
+      const nextCoach = event.detail?.coach;
+      if (!nextCoach) return;
+      const nextId = nextCoach.id || nextCoach.$id;
+      if (nextId === user.coach_id) {
+        setCoachProfile((prev) => ({ ...(prev || {}), ...nextCoach }));
+      }
+    };
+
+    window.addEventListener(COACH_PROFILE_UPDATED_EVENT, handleCoachProfileUpdated);
+    return () => window.removeEventListener(COACH_PROFILE_UPDATED_EVENT, handleCoachProfileUpdated);
+  }, [user?.coach_id]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06142c] text-white">
@@ -225,11 +270,17 @@ function Topbar({ mobileOpen, setMobileOpen }) {
               className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10"
               aria-label="Open coach account menu"
             >
-              <img
-                src="/homepage-coach-marcus.png"
-                alt=""
-                className="h-10 w-10 rounded-full border border-white/20 object-cover"
-              />
+              <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-sm font-bold text-white">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  initials
+                )}
+              </span>
               <span className="hidden text-left sm:block">
                 <span className="block text-sm font-bold leading-5">{displayName}</span>
                 <span className="block text-xs text-slate-300">Coach</span>

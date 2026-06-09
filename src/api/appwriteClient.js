@@ -26,6 +26,8 @@ export const functions = new Functions(client);
 export { Query, ID };
 
 export const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID || 'lctraining';
+export const APPWRITE_PROJECT_ID = PROJECT;
+export const APPWRITE_PUBLIC_ENDPOINT = CONFIGURED_ENDPOINT;
 
 // Logical entity name → Appwrite collection id. Names match the legacy entity
 // names so legacy callers keep working.

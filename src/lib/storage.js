@@ -1,4 +1,9 @@
-import { storage as appwriteStorage, ID } from '@/api/appwriteClient';
+import {
+  storage as appwriteStorage,
+  ID,
+  APPWRITE_PROJECT_ID,
+  APPWRITE_PUBLIC_ENDPOINT,
+} from '@/api/appwriteClient';
 
 // Maps a logical bucket name (used at every call site today) to the actual
 // Appwrite bucket id. Provisioner created these six buckets — keep this in
@@ -16,6 +21,12 @@ const BUCKETS = {
   'generated-receipts':  'generated-receipts',
 };
 
+function canonicalFileViewUrl(bucketId, fileId) {
+  const url = new URL(`${APPWRITE_PUBLIC_ENDPOINT}/storage/buckets/${bucketId}/files/${fileId}/view`);
+  url.searchParams.set('project', APPWRITE_PROJECT_ID);
+  return url.toString();
+}
+
 export const storage = {
   // Returns { url, id } where url is a public file-view URL. Components
   // currently destructure `url` only.
@@ -25,7 +36,7 @@ export const storage = {
       throw new Error(`Unknown storage bucket: ${bucket}`);
     }
     const created = await appwriteStorage.createFile(bucketId, ID.unique(), file);
-    const url = appwriteStorage.getFileView(bucketId, created.$id).toString();
+    const url = canonicalFileViewUrl(bucketId, created.$id);
     return { url, id: created.$id };
   },
 
@@ -35,6 +46,6 @@ export const storage = {
       throw new Error(`Unknown storage bucket: ${bucket}`);
     }
     if (!fileId) return '';
-    return appwriteStorage.getFileView(bucketId, fileId).toString();
+    return canonicalFileViewUrl(bucketId, fileId);
   },
 };

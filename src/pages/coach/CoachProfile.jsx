@@ -16,6 +16,8 @@ import {
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
 
+const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
+
 // Editable sections of the Coach record. Photo and email are saved out-of-band
 // (photo on upload, email after verification); Stripe payout setup lives in
 // /coach/earnings; everything else lives in `draft` and saves together.
@@ -117,7 +119,11 @@ export default function CoachProfile() {
     try {
       const { url: file_url } = await storage.uploadFile('coach-photos', file);
       await coachRepo.update(coach.id, { photo_url: file_url });
-      setCoach(prev => prev ? { ...prev, photo_url: file_url } : prev);
+      const updatedCoach = { ...coach, photo_url: file_url };
+      setCoach(updatedCoach);
+      window.dispatchEvent(new CustomEvent(COACH_PROFILE_UPDATED_EVENT, {
+        detail: { coach: updatedCoach },
+      }));
       toast.success('Photo updated');
     } catch (err) {
       console.error(err);
