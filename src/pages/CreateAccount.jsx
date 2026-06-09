@@ -11,19 +11,37 @@ import {
   EyeOff,
   Lock,
   Mail,
+  MapPin,
   Phone,
   ShieldCheck,
   Target,
+  Trophy,
   User,
   Users,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
+import { athleteProfileRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
+import {
+  CITY_OPTIONS,
+  EMAIL_RE,
+  RELATIONSHIP_OPTIONS,
+  SPORT_OPTIONS,
+  citySuggestions,
+  normalizePhoneForStorage,
+  normalizeSport,
+  requiresGuardian,
+  resolveCityPlace,
+  validateCity,
+  validateDob,
+  validateEmail,
+  validatePersonName,
+  validatePhone,
+  validateSport,
+} from '@/lib/athleteOnboardingFields';
 import { homePathForRole, onboardingPath, postAuthRedirectPath } from '@/lib/roleHome';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const PASSWORD_RULES = [
   { id: 'length', label: '8+ characters', test: (value) => value.length >= 8 },
@@ -139,7 +157,9 @@ export function AthleteSignup() {
     email: '',
     phone: '',
     dob: '',
-    trainingDetails: '',
+    sport: '',
+    location: '',
+    trainingGoal: '',
     password: '',
     confirmPassword: '',
     parentFirstName: '',
@@ -157,8 +177,8 @@ export function AthleteSignup() {
   const [submitting, setSubmitting] = useState(false);
 
   const explicitNext = params.get('next');
-  const age = useMemo(() => calculateAge(form.dob), [form.dob]);
-  const needsGuardian = age !== null && age < 18;
+  const needsGuardian = requiresGuardian(form.dob);
+  const locationSuggestions = useMemo(() => citySuggestions(form.location, 10), [form.location]);
 
   useEffect(() => {
     if (!isLoadingAuth && isAuthenticated && user) {
@@ -182,15 +202,21 @@ export function AthleteSignup() {
   const validate = () => {
     const next = {};
 
-    if (!form.firstName.trim()) next.firstName = 'First name is required.';
-    if (!form.lastName.trim()) next.lastName = 'Last name is required.';
+    const firstNameError = validatePersonName(form.firstName, 'First name');
+    const lastNameError = validatePersonName(form.lastName, 'Last name');
+    const phoneError = validatePhone(form.phone, 'Phone number');
+    const dobError = validateDob(form.dob);
+    const sportError = validateSport(form.sport);
+    const cityError = validateCity(form.location);
+
+    if (firstNameError) next.firstName = firstNameError;
+    if (lastNameError) next.lastName = lastNameError;
     if (!form.email.trim()) next.email = 'Email address is required.';
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
-    if (!form.phone.trim()) next.phone = 'Phone number is required.';
-    if (!form.dob) next.dob = 'Date of birth is required.';
-    else if (age === null) next.dob = 'Enter a valid date of birth.';
-    else if (age < 13) next.dob = 'Athletes must be at least 13 to create an account.';
-    if (!form.trainingDetails.trim()) next.trainingDetails = 'Sport, goal, and location are required.';
+    if (phoneError) next.phone = phoneError;
+    if (dobError) next.dob = dobError;
+    if (sportError) next.sport = sportError;
+    if (cityError) next.location = cityError;
     if (!form.password) next.password = 'Password is required.';
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
@@ -198,11 +224,14 @@ export function AthleteSignup() {
     if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
 
     if (needsGuardian) {
-      if (!form.parentFirstName.trim()) next.parentFirstName = 'Parent/guardian first name is required.';
-      if (!form.parentLastName.trim()) next.parentLastName = 'Parent/guardian last name is required.';
-      if (!form.parentEmail.trim()) next.parentEmail = 'Parent/guardian email is required.';
-      else if (!EMAIL_RE.test(form.parentEmail.trim())) next.parentEmail = 'Enter a valid email address.';
-      if (!form.parentPhone.trim()) next.parentPhone = 'Parent/guardian phone is required.';
+      const parentFirstError = validatePersonName(form.parentFirstName, 'Parent/guardian first name');
+      const parentLastError = validatePersonName(form.parentLastName, 'Parent/guardian last name');
+      const parentEmailError = validateEmail(form.parentEmail, 'Parent/guardian email');
+      const parentPhoneError = validatePhone(form.parentPhone, 'Parent/guardian phone');
+      if (parentFirstError) next.parentFirstName = parentFirstError;
+      if (parentLastError) next.parentLastName = parentLastError;
+      if (parentEmailError) next.parentEmail = parentEmailError;
+      if (parentPhoneError) next.parentPhone = parentPhoneError;
       if (!form.parentRelationship.trim()) next.parentRelationship = 'Relationship is required.';
     }
 
@@ -217,28 +246,47 @@ export function AthleteSignup() {
 
     try {
       setSubmitting(true);
+      const primarySport = normalizeSport(form.sport);
+      const cityPlace = resolveCityPlace(form.location);
       await auth.signOut();
       await auth.signUp(form.email.trim(), form.password);
       await auth.updateCurrentUser({
         role: 'user',
+        onboarding_role: 'athlete',
+        onboarding_status: 'complete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
-        phone: form.phone.trim(),
+        phone: normalizePhoneForStorage(form.phone),
         dob: form.dob,
         is_minor: needsGuardian,
         parent_first_name: needsGuardian ? form.parentFirstName.trim() : '',
         parent_last_name: needsGuardian ? form.parentLastName.trim() : '',
         parent_email: needsGuardian ? form.parentEmail.trim() : '',
-        parent_phone: needsGuardian ? form.parentPhone.trim() : '',
+        parent_phone: needsGuardian ? normalizePhoneForStorage(form.parentPhone) : '',
         parent_relationship: needsGuardian ? form.parentRelationship.trim() : '',
         terms_accepted: true,
         profile_setup_complete: true,
+        updates_opt_in: form.marketing,
         bio: [
-          `Sport, goal, and location: ${form.trainingDetails.trim()}`,
-        ].join('\n'),
+          `Primary sport: ${primarySport}`,
+          `Preferred city: ${cityPlace?.label || ''}`,
+          form.trainingGoal.trim() ? `Training goal: ${form.trainingGoal.trim()}` : '',
+        ].filter(Boolean).join('\n'),
       });
 
       const fresh = await refetchUser();
+      await athleteProfileRepo.create({
+        profile_id: fresh.id,
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        dob: form.dob,
+        sports: [primarySport],
+        skill_level: '',
+        location_label: cityPlace?.label || '',
+        location_lat: cityPlace?.lat,
+        location_lng: cityPlace?.lng,
+        health_notes: form.trainingGoal.trim(),
+      }).catch(() => {});
       navigate(getSafeNextPath(explicitNext) || homePathForRole(fresh), { replace: true });
     } catch (err) {
       setFormError(err?.message || 'Could not create your account. Please try again.');
@@ -279,6 +327,14 @@ export function AthleteSignup() {
                 </p>
 
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
+                  <datalist id="athlete-signup-primary-sports">
+                    {SPORT_OPTIONS.map((sport) => <option key={sport} value={sport} />)}
+                  </datalist>
+                  <datalist id="athlete-signup-city-options">
+                    {(form.location.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
+                      <option key={place.label} value={place.label} />
+                    ))}
+                  </datalist>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="firstName"
@@ -343,16 +399,50 @@ export function AthleteSignup() {
                     />
                   </div>
 
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <AuthField
+                      id="sport"
+                      label="Primary sport"
+                      icon={Trophy}
+                      placeholder="Select a sport"
+                      list="athlete-signup-primary-sports"
+                      value={form.sport}
+                      onChange={(event) => updateForm('sport', event.target.value)}
+                      onBlur={() => {
+                        const sport = normalizeSport(form.sport);
+                        if (sport) updateForm('sport', sport);
+                      }}
+                      disabled={submitting}
+                      error={errors.sport}
+                      trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
+                    />
+                    <AuthField
+                      id="location"
+                      label="Preferred training city"
+                      icon={MapPin}
+                      placeholder="Select a city"
+                      list="athlete-signup-city-options"
+                      value={form.location}
+                      onChange={(event) => updateForm('location', event.target.value)}
+                      onBlur={() => {
+                        const city = resolveCityPlace(form.location);
+                        if (city) updateForm('location', city.label);
+                      }}
+                      disabled={submitting}
+                      error={errors.location}
+                      trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
+                    />
+                  </div>
+
                   <AuthField
-                    id="trainingDetails"
-                    label="Sport, goal, and location"
+                    id="trainingGoal"
+                    label="Training goal"
                     icon={Target}
-                    placeholder="e.g., Soccer, speed and agility, Detroit, MI"
-                    value={form.trainingDetails}
-                    onChange={(event) => updateForm('trainingDetails', event.target.value)}
+                    placeholder="Optional, e.g., speed, strength, confidence"
+                    value={form.trainingGoal}
+                    onChange={(event) => updateForm('trainingGoal', event.target.value)}
                     disabled={submitting}
-                    error={errors.trainingDetails}
-                    trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
+                    error={errors.trainingGoal}
                   />
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -545,11 +635,14 @@ export function ParentSignup() {
 
   const validate = () => {
     const next = {};
-    if (!form.firstName.trim()) next.firstName = 'First name is required.';
-    if (!form.lastName.trim()) next.lastName = 'Last name is required.';
+    const firstNameError = validatePersonName(form.firstName, 'First name');
+    const lastNameError = validatePersonName(form.lastName, 'Last name');
+    const phoneError = validatePhone(form.phone, 'Phone number');
+    if (firstNameError) next.firstName = firstNameError;
+    if (lastNameError) next.lastName = lastNameError;
     if (!form.email.trim()) next.email = 'Email address is required.';
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
-    if (!form.phone.trim()) next.phone = 'Phone number is required.';
+    if (phoneError) next.phone = phoneError;
     if (!form.password) next.password = 'Password is required.';
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
@@ -574,7 +667,7 @@ export function ParentSignup() {
         onboarding_status: 'complete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
-        phone: form.phone.trim(),
+        phone: normalizePhoneForStorage(form.phone),
         terms_accepted: true,
         profile_setup_complete: true,
         updates_opt_in: form.marketing,
@@ -844,6 +937,9 @@ function AccountTypeCard({ type, href }) {
 function GuardianFields({ form, errors, submitting, updateForm }) {
   return (
     <section className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+      <datalist id="athlete-signup-guardian-relationships">
+        {RELATIONSHIP_OPTIONS.map((relationship) => <option key={relationship} value={relationship} />)}
+      </datalist>
       <div className="mb-3 flex items-start gap-3">
         <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-blue-700 shadow-sm">
           <ShieldCheck className="h-5 w-5" />
@@ -907,6 +1003,7 @@ function GuardianFields({ form, errors, submitting, updateForm }) {
           label="Relationship"
           icon={Users}
           placeholder="Parent, guardian, family member"
+          list="athlete-signup-guardian-relationships"
           value={form.parentRelationship}
           onChange={(event) => updateForm('parentRelationship', event.target.value)}
           disabled={submitting}
@@ -999,20 +1096,6 @@ function AuthFooter() {
       </div>
     </footer>
   );
-}
-
-function calculateAge(dob) {
-  if (!dob) return null;
-  const birth = new Date(`${dob}T00:00:00`);
-  if (Number.isNaN(birth.getTime())) return null;
-
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
-    age -= 1;
-  }
-  return age;
 }
 
 function withNext(path, next) {
