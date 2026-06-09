@@ -1324,62 +1324,90 @@ export default function CoachSettings() {
               <Card title="Session Types" icon={UserRound}>
                 <div className="space-y-4">
                   {sessionTypes.map((type) => (
-                    <div key={type.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_112px_92px]">
-                        <Field label="Session name">
+                    <div key={type.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-600">Coach Service</p>
+                          <p className="mt-1 truncate text-sm font-bold text-slate-500">
+                            {type.name || 'Unnamed session type'}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className={`shrink-0 rounded-md px-2 py-1 text-xs font-black ${
+                            type.available
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {type.available ? 'Live' : 'Hidden'}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Field label="Name athletes see">
                           <Input
                             value={type.name}
                             onChange={(event) => updateSessionType(type.id, { name: event.target.value })}
                             placeholder="e.g. Shooting clinic"
-                            className="h-10 border-slate-200 bg-white text-sm font-semibold"
+                            className="h-11 border-slate-200 bg-white text-base font-bold"
                           />
                         </Field>
-                        <Field label="Duration">
-                          <Select
-                            value={type.duration}
-                            onValueChange={(value) => updateSessionType(type.id, { duration: value })}
-                          >
-                            <SelectTrigger className="h-10 border-slate-200 bg-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="30">30 min</SelectItem>
-                              <SelectItem value="45">45 min</SelectItem>
-                              <SelectItem value="60">60 min</SelectItem>
-                              <SelectItem value="75">75 min</SelectItem>
-                              <SelectItem value="90">90 min</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                        <Field label="Price">
-                          <div className="flex h-10 items-center rounded-md border border-slate-200 bg-white px-3">
-                            <span className="text-sm font-bold text-slate-500">$</span>
-                            <input
-                              value={type.price || ''}
-                              onChange={(event) => updateSessionType(type.id, { price: event.target.value.replace(/[^\d]/g, '') })}
-                              className="min-w-0 flex-1 bg-transparent pl-1 text-sm font-semibold text-slate-950 outline-none"
-                              placeholder="79"
-                              aria-label={`${type.name || 'Session'} price`}
-                            />
-                          </div>
-                        </Field>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="Duration">
+                            <Select
+                              value={type.duration}
+                              onValueChange={(value) => updateSessionType(type.id, { duration: value })}
+                            >
+                              <SelectTrigger className="h-11 border-slate-200 bg-white text-base font-bold">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="30">30 min</SelectItem>
+                                <SelectItem value="45">45 min</SelectItem>
+                                <SelectItem value="60">60 min</SelectItem>
+                                <SelectItem value="75">75 min</SelectItem>
+                                <SelectItem value="90">90 min</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Price">
+                            <div className="flex h-11 items-center rounded-md border border-slate-200 bg-white px-3">
+                              <span className="text-base font-black text-slate-500">$</span>
+                              <input
+                                value={type.price || ''}
+                                onChange={(event) => updateSessionType(type.id, { price: event.target.value.replace(/[^\d]/g, '') })}
+                                className="min-w-0 flex-1 bg-transparent pl-1 text-base font-black text-slate-950 outline-none"
+                                placeholder="79"
+                                aria-label={`${type.name || 'Session'} price`}
+                              />
+                            </div>
+                          </Field>
+                        </div>
                       </div>
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <label className="flex items-center gap-3">
+
+                      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label className="flex items-center gap-3 rounded-md">
                           <Switch
                             checked={type.available}
                             onCheckedChange={(value) => updateSessionType(type.id, { available: value })}
                             className="data-[state=checked]:bg-blue-600"
                           />
-                          <span className="text-sm font-bold text-slate-700">
-                            {type.available ? 'Available for booking' : 'Hidden from booking'}
+                          <span>
+                            <span className="block text-sm font-extrabold text-slate-950">
+                              {type.available ? 'Available for booking' : 'Hidden from booking'}
+                            </span>
+                            <span className="block text-xs font-medium text-slate-500">
+                              {type.available ? 'Athletes can select this service.' : 'Keep this service private.'}
+                            </span>
                           </span>
                         </label>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           onClick={() => removeSessionType(type.id)}
-                          className="h-9 text-slate-500 hover:text-red-600"
+                          className="h-10 shrink-0 border-slate-200 text-slate-600 hover:text-red-600"
                         >
                           <Trash2 className="h-4 w-4" />
                           Remove
@@ -1391,7 +1419,7 @@ export default function CoachSettings() {
                     type="button"
                     variant="outline"
                     onClick={addSessionType}
-                    className="mt-2 h-10 w-full border-slate-200 font-bold text-blue-700 hover:text-blue-700"
+                    className="mt-2 h-12 w-full border-blue-200 bg-blue-50/40 font-black text-blue-700 hover:bg-blue-50 hover:text-blue-700"
                   >
                     <Plus className="h-4 w-4" />
                     Add session type
