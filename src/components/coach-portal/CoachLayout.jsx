@@ -54,7 +54,7 @@ const navItems = [
   { label: 'Messages', to: '/coach/messages', icon: MessageSquare, isActive: ({ pathname }) => pathname === '/coach/messages' },
   { label: 'Payments', to: '/coach/earnings', icon: DollarSign, isActive: ({ pathname }) => pathname === '/coach/earnings' },
   { label: 'Reviews', to: '/coach#reviews', icon: Star, isActive: ({ pathname, hash }) => pathname === '/coach' && hash === '#reviews' },
-  { label: 'Settings', to: '/settings', icon: Settings, isActive: ({ pathname }) => pathname === '/settings' },
+  { label: 'Settings', to: '/coach/settings', icon: Settings, isActive: ({ pathname }) => pathname === '/coach/settings' },
 ];
 
 function getDisplayName(user) {
@@ -296,7 +296,7 @@ function Topbar({ mobileOpen, setMobileOpen }) {
                 <Link to="/coach/profile" className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
                   Profile Builder
                 </Link>
-                <Link to="/settings" className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                <Link to="/coach/settings" className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
                   Account Settings
                 </Link>
                 <button

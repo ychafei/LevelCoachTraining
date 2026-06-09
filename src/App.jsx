@@ -26,6 +26,7 @@ import CoachClients from '@/pages/coach/CoachClients';
 import CoachClientDetail from '@/pages/coach/CoachClientDetail';
 import CoachEarnings from '@/pages/coach/CoachEarnings';
 import CoachProfile from '@/pages/coach/CoachProfile';
+import CoachSettings from '@/pages/coach/CoachSettings';
 
 // Layouts
 import PublicLayout from '@/components/layout/PublicLayout';
@@ -178,6 +179,7 @@ const AuthenticatedApp = () => {
               <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
               <Route path="/coach/earnings" element={<CoachEarnings />} />
               <Route path="/coach/profile" element={<CoachProfile />} />
+              <Route path="/coach/settings" element={<CoachSettings />} />
             </Route>
           </Route>
 

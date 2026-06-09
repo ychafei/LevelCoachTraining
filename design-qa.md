@@ -1,3 +1,37 @@
+## Coach Settings Image-To-Code QA
+
+**Source Visual Truth**
+- `/Users/yousef/.codex/generated_images/019ea3aa-90ef-7781-bd5c-2d825a502cdb/ig_0ea5ae5c2da6d6b4016a2844341b208194a62ff7a1bb08fc2b.png`
+
+**Implementation Evidence**
+- Route captured: `http://127.0.0.1:5174/coach/settings`
+- Desktop screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-final.png`
+- Mobile screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-mobile.png`
+- Desktop viewport used for comparison: `2048 x 1152`
+- Mobile viewport used for responsive check: `390 x 844`
+- State: signed in as existing `Demo Coach` account through the app's login-return flow.
+
+**Focused Region Comparison Evidence**
+- Sidebar/logo: the official LevelCoach wordmark is shown in the white logo plate and the Settings nav item points to `/coach/settings`.
+- Top bar/profile: the coach avatar comes from the uploaded coach profile photo and is reused in the top-right account menu.
+- Settings structure: account rail, Account Identity, Profile Photo, Notification Preferences, Booking Preferences, Calendar Sync, Stripe Payout Status, and Security cards match the supplied layout.
+- Interactions: profile upload button, save changes, notification switches, booking selects, approval checkbox, calendar menu buttons, payout settings link, and security buttons are functional UI controls.
+- Responsive behavior: mobile stacks the settings rail and cards without text or control overlap.
+
+**Findings**
+- No actionable P0/P1/P2 visual or route issues remain.
+- Intentional data difference: Stripe status shows the real local Appwrite demo account state (`Setup needed`) when no connected account is provisioned.
+
+**Implementation Checklist**
+- `npm run lint` passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+- Browser QA captured authenticated desktop and mobile states.
+
+final result: passed
+
+---
+
 **Source Visual Truth**
 - `/Users/yousef/.codex/generated_images/019ea3aa-90ef-7781-bd5c-2d825a502cdb/ig_0b2cdcb129903fd6016a282d1d79088193851bc8e5d39b9bb1.png`
 
