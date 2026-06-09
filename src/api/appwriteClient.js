@@ -4,8 +4,19 @@ import { Client, Account, Databases, Storage, Functions, Query, ID } from 'appwr
 // ship in every browser request anyway), so embedding them protects against
 // the exact failure mode where a Vercel build runs without env vars and bakes
 // `setProject(undefined)` into the bundle.
-const ENDPOINT = import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1';
-const PROJECT  = import.meta.env.VITE_APPWRITE_PROJECT_ID || '69efb263000fe1c34344';
+const CONFIGURED_ENDPOINT = import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1';
+const PROJECT = import.meta.env.VITE_APPWRITE_PROJECT_ID || '69efb263000fe1c34344';
+
+const LOCAL_DEV_HOSTS = new Set(['127.0.0.1', 'localhost']);
+const USE_LOCAL_APPWRITE_PROXY =
+  import.meta.env.DEV
+  && typeof window !== 'undefined'
+  && LOCAL_DEV_HOSTS.has(window.location.hostname)
+  && import.meta.env.VITE_APPWRITE_DISABLE_DEV_PROXY !== 'true';
+
+const ENDPOINT = USE_LOCAL_APPWRITE_PROXY
+  ? `${window.location.origin}/appwrite/v1`
+  : CONFIGURED_ENDPOINT;
 
 export const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT);
 export const account   = new Account(client);

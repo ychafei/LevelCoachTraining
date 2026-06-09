@@ -11,4 +11,20 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/appwrite/v1': {
+        target: 'https://nyc.cloud.appwrite.io',
+        changeOrigin: true,
+        secure: true,
+        ws: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/appwrite/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('origin');
+          });
+        },
+      },
+    },
+  },
 });
