@@ -24,7 +24,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
-  CreditCard,
   DollarSign,
   Eye,
   Lock,
@@ -44,13 +43,55 @@ import { toast } from 'sonner';
 const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 
 const settingsSections = [
-  { id: 'account', label: 'Account', sub: 'Manage your personal info', icon: UserRound },
-  { id: 'profile', label: 'Coach Profile', sub: 'Edit your public profile', icon: UserRound },
-  { id: 'notifications', label: 'Notifications', sub: 'Control your alerts', icon: Bell },
-  { id: 'calendar', label: 'Calendar & Availability', sub: 'Set your availability', icon: CalendarDays },
-  { id: 'payments', label: 'Payments', sub: 'Payment methods & payouts', icon: CreditCard },
-  { id: 'privacy', label: 'Privacy & Safety', sub: 'Control your privacy', icon: ShieldCheck },
-  { id: 'security', label: 'Security', sub: 'Password & 2FA', icon: Lock },
+  {
+    id: 'account',
+    label: 'Account',
+    sub: 'Identity and photo',
+    description: 'Identity, contact information, and account photo.',
+    icon: UserRound,
+  },
+  {
+    id: 'profile',
+    label: 'Public Profile Settings',
+    sub: 'Visibility and profile defaults',
+    description: 'Public-facing coach details athletes see before booking.',
+    icon: UserRound,
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    sub: 'Alerts and reminders',
+    description: 'Booking, session, message, and payment alerts.',
+    icon: Bell,
+  },
+  {
+    id: 'calendar',
+    label: 'Availability Rules',
+    sub: 'Booking windows and buffers',
+    description: 'Bookable windows, blocked dates, and session spacing.',
+    icon: Clock,
+  },
+  {
+    id: 'payments',
+    label: 'Payout Setup',
+    sub: 'Stripe and receipts',
+    description: 'Stripe status, payout account, and payment notifications.',
+    icon: WalletCards,
+  },
+  {
+    id: 'privacy',
+    label: 'Privacy & Safety',
+    sub: 'Discovery and trust',
+    description: 'Public discovery, athlete contact, and account safety preferences.',
+    icon: ShieldCheck,
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    sub: 'Password and 2FA',
+    description: 'Password, two-factor authentication, and active sessions.',
+    icon: Lock,
+  },
 ];
 
 const DEFAULT_SPECIALIZATIONS = [
@@ -369,7 +410,7 @@ function CoachAvatar({ src, initials, size = 'md', alt = 'Coach profile' }) {
 export default function CoachSettings() {
   const { user, refetchUser } = useAuth();
   const fileInputRef = useRef(null);
-  const [activeSection, setActiveSection] = useState('calendar');
+  const [activeSection, setActiveSection] = useState('account');
   const [coach, setCoach] = useState(null);
   const [stripeAccount, setStripeAccount] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -416,6 +457,7 @@ export default function CoachSettings() {
   const previewName = profileDraft.displayName || displayName;
   const previewInitials = initialsFor(previewName);
   const previewTags = (profileDraft.specializations || []).slice(0, 3);
+  const activeSectionMeta = settingsSections.find((section) => section.id === activeSection) || settingsSections[0];
 
   useEffect(() => {
     setIdentity({
@@ -689,14 +731,20 @@ export default function CoachSettings() {
         <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
             {settingsSections.map((section) => (
-                <SectionButton
-                  key={section.id}
-                  section={section}
-                  active={activeSection === section.id}
-                  onClick={() => setActiveSection(section.id)}
-                />
-              ))}
+              <SectionButton
+                key={section.id}
+                section={section}
+                active={activeSection === section.id}
+                onClick={() => setActiveSection(section.id)}
+              />
+            ))}
           </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Settings Area</p>
+          <h2 className="mt-1 text-xl font-extrabold text-slate-950">{activeSectionMeta.label}</h2>
+          <p className="mt-1 text-sm text-slate-600">{activeSectionMeta.description}</p>
         </section>
 
         {activeSection === 'calendar' ? (
@@ -1258,8 +1306,7 @@ export default function CoachSettings() {
               <p className="px-1 text-xs font-semibold text-slate-500">Saving coach profile...</p>
             )}
           </div>
-        ) : (
-        <div className="space-y-4">
+        ) : activeSection === 'account' ? (
           <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             <Card title="Account Identity" icon={UserRound}>
               <div className="space-y-4">
@@ -1313,7 +1360,7 @@ export default function CoachSettings() {
               </div>
             </Card>
 
-            <Card title="Profile Photo">
+            <Card title="Account Photo">
               <div className="flex flex-col items-center text-center">
                 <CoachAvatar src={avatarUrl} initials={initials} />
                 <input
@@ -1337,6 +1384,29 @@ export default function CoachSettings() {
               </div>
             </Card>
 
+            <Card title="Coach Account" icon={CheckCircle2}>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Role</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">Coach</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Profile Link</p>
+                  <p className="mt-1 truncate text-sm font-bold text-slate-950">{coach?.id || user?.coach_id || 'Pending'}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveSection('profile')}
+                  className="h-10 w-full border-slate-200 font-semibold"
+                >
+                  Public profile settings
+                </Button>
+              </div>
+            </Card>
+          </div>
+        ) : activeSection === 'notifications' ? (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <Card title="Notification Preferences" icon={Bell}>
               <PreferenceRow
                 title="New Booking Requests"
@@ -1357,115 +1427,44 @@ export default function CoachSettings() {
                 onCheckedChange={(value) => setNotifications((current) => ({ ...current, newMessages: value }))}
               />
               <PreferenceRow
-                title="Payments & Payouts"
-                subtitle="Payouts, transfers, and receipts"
+                title="Payout Alerts"
+                subtitle="Transfers, receipts, and account updates"
                 checked={notifications.payments}
                 onCheckedChange={(value) => setNotifications((current) => ({ ...current, payments: value }))}
               />
               <PreferenceRow
-                title="Marketing Updates"
-                subtitle="Product updates and tips"
+                title="Product Updates"
+                subtitle="Platform tips and release notes"
                 checked={notifications.marketing}
                 onCheckedChange={(value) => setNotifications((current) => ({ ...current, marketing: value }))}
               />
             </Card>
-          </div>
 
-          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-            <Card title="Booking Preferences">
+            <Card title="Alert Routing" icon={Bell}>
               <div className="space-y-3">
-                <Field label="Intro Session Duration">
-                  <Select
-                    value={bookingPrefs.introDuration}
-                    onValueChange={(value) => setBookingPrefs((current) => ({ ...current, introDuration: value }))}
-                  >
-                    <SelectTrigger className="h-10 border-slate-200 bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                      <SelectItem value="45">45 minutes</SelectItem>
-                      <SelectItem value="60">60 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field label="Buffer Before Sessions">
-                  <Select
-                    value={bookingPrefs.bufferBefore}
-                    onValueChange={(value) => setBookingPrefs((current) => ({ ...current, bufferBefore: value }))}
-                  >
-                    <SelectTrigger className="h-10 border-slate-200 bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">No buffer</SelectItem>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field label="Buffer After Sessions">
-                  <Select
-                    value={bookingPrefs.bufferAfter}
-                    onValueChange={(value) => setBookingPrefs((current) => ({ ...current, bufferAfter: value }))}
-                  >
-                    <SelectTrigger className="h-10 border-slate-200 bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">No buffer</SelectItem>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <label className="flex items-start gap-3 rounded-lg pt-1">
-                  <Checkbox
-                    checked={bookingPrefs.requireApproval}
-                    onCheckedChange={(value) => setBookingPrefs((current) => ({ ...current, requireApproval: value === true }))}
-                    className="mt-0.5 border-blue-600 data-[state=checked]:bg-blue-600"
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-slate-950">Require approval for all booking requests</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">You approve or decline each new request</span>
-                  </span>
-                </label>
-              </div>
-            </Card>
-
-            <Card title="Calendar Sync" icon={CalendarDays}>
-              <div className="space-y-3">
-                <CalendarConnection
-                  icon={CalendarDays}
-                  name="Google Calendar"
-                  email={coachEmail}
-                  connected
-                  onMenu={() => toast.info('Google Calendar connection options')}
-                />
-                <CalendarConnection
-                  icon={CalendarDays}
-                  name="Outlook Calendar"
-                  email={coachEmail.replace('@', '+calendar@')}
-                  connected
-                  onMenu={() => toast.info('Outlook Calendar connection options')}
-                />
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Primary Email</p>
+                  <p className="mt-1 truncate text-sm font-bold text-slate-950">{coachEmail}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Phone</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{identity.phone || '+1 (313) 555-0198'}</p>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => toast.info('Calendar connection management coming soon')}
-                  className="h-11 w-full border-slate-200 font-semibold"
+                  onClick={() => setActiveSection('account')}
+                  className="h-10 w-full border-slate-200 font-semibold"
                 >
-                  Manage Calendar Connections
+                  Edit account contact
                 </Button>
               </div>
             </Card>
-
+          </div>
+        ) : activeSection === 'payments' ? (
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             <Card title="Stripe Payout Status" icon={WalletCards}>
-              <div className="flex min-h-[190px] flex-col justify-between">
+              <div className="flex min-h-[210px] flex-col justify-between">
                 <div>
                   <p className="text-sm text-slate-600">Manage your payout account and view status.</p>
                   <div className="mt-6 flex items-center gap-4">
@@ -1484,60 +1483,169 @@ export default function CoachSettings() {
                   </div>
                 </div>
                 <Button asChild variant="outline" className="h-11 w-full border-slate-200 font-semibold">
-                  <Link to="/coach/earnings">Manage Payout Settings</Link>
+                  <Link to="/coach/earnings">Open earnings dashboard</Link>
+                </Button>
+              </div>
+            </Card>
+
+            <Card title="Payout Destination" icon={DollarSign}>
+              <div className="space-y-4">
+                <Field label="Statement Email">
+                  <Input value={coachEmail} readOnly className="h-10 border-slate-200 bg-white text-slate-700" />
+                </Field>
+                <Field label="Payout Schedule">
+                  <Select defaultValue="weekly">
+                    <SelectTrigger className="h-10 border-slate-200 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => toast.info('Stripe payout schedule changes are managed in Stripe.')}
+                  className="h-10 w-full border-slate-200 font-semibold"
+                >
+                  Manage in Stripe
+                </Button>
+              </div>
+            </Card>
+
+            <Card title="Payout Alerts" icon={Bell}>
+              <PreferenceRow
+                title="Transfer Updates"
+                subtitle="Notify me when a payout starts or completes"
+                checked={notifications.payments}
+                onCheckedChange={(value) => setNotifications((current) => ({ ...current, payments: value }))}
+              />
+              <PreferenceRow
+                title="Booking Receipts"
+                subtitle="Send receipts for paid coaching sessions"
+                checked={notifications.bookingRequests}
+                onCheckedChange={(value) => setNotifications((current) => ({ ...current, bookingRequests: value }))}
+              />
+            </Card>
+          </div>
+        ) : activeSection === 'privacy' ? (
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+            <Card title="Public Discovery" icon={Eye}>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-950">Public Profile Visibility</p>
+                    <p className="mt-1 text-xs text-slate-500">Allow athletes to find this coach profile.</p>
+                  </div>
+                  <Switch
+                    checked={profileDraft.is_active !== false}
+                    onCheckedChange={(value) => {
+                      const nextDraft = { ...profileDraft, is_active: value };
+                      setProfileDraft(nextDraft);
+                      void saveProfile(nextDraft, { silent: true });
+                    }}
+                    className="data-[state=checked]:bg-blue-600"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveSection('profile')}
+                  className="h-10 w-full border-slate-200 font-semibold"
+                >
+                  Edit public profile settings
+                </Button>
+              </div>
+            </Card>
+
+            <Card title="Booking Safety" icon={ShieldCheck}>
+              <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <Checkbox
+                  checked={bookingPrefs.requireApproval}
+                  onCheckedChange={(value) => setBookingPrefs((current) => ({ ...current, requireApproval: value === true }))}
+                  className="mt-0.5 border-blue-600 data-[state=checked]:bg-blue-600"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-950">Require booking approval</span>
+                  <span className="mt-1 block text-xs text-slate-500">Review new booking requests before they are confirmed.</span>
+                </span>
+              </label>
+            </Card>
+
+            <Card title="Data Controls" icon={ShieldCheck}>
+              <div className="space-y-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => toast.info('Account data export queued.')}
+                  className="h-10 w-full border-slate-200 font-semibold"
+                >
+                  Export account data
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => toast.info('Privacy request workflow coming soon.')}
+                  className="h-10 w-full border-slate-200 font-semibold"
+                >
+                  Contact privacy support
                 </Button>
               </div>
             </Card>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <Card title="Security" icon={Lock}>
+              <div className="grid gap-5 lg:grid-cols-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-950">Password</p>
+                  <p className="mt-1 text-xs text-slate-500">Last changed 45 days ago</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => toast.info('Password change flow opens from account security')}
+                    className="mt-4 h-10 border-slate-200 font-semibold"
+                  >
+                    Change password
+                  </Button>
+                </div>
 
-          <Card title="Security" icon={Lock}>
-            <div className="grid gap-5 lg:grid-cols-3">
-              <div>
-                <p className="text-sm font-bold text-slate-950">Password</p>
-                <p className="mt-1 text-xs text-slate-500">Last changed 45 days ago</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => toast.info('Password change flow opens from account security')}
-                  className="mt-4 h-10 border-slate-200 font-semibold"
-                >
-                  Change password
-                </Button>
-              </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-950">Two-Factor Authentication</p>
+                  <p className="mt-1 text-xs text-slate-500">Add an extra layer of security</p>
+                  <button
+                    type="button"
+                    onClick={() => setSecurityPrefs((current) => ({ ...current, twoFactorEnabled: !current.twoFactorEnabled }))}
+                    className="mt-4 inline-flex h-8 items-center gap-2 rounded-full bg-emerald-50 px-3 text-xs font-bold text-emerald-700"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    {securityPrefs.twoFactorEnabled ? 'Enabled' : 'Enable'}
+                  </button>
+                </div>
 
-              <div>
-                <p className="text-sm font-bold text-slate-950">Two-Factor Authentication</p>
-                <p className="mt-1 text-xs text-slate-500">Add an extra layer of security</p>
-                <button
-                  type="button"
-                  onClick={() => setSecurityPrefs((current) => ({ ...current, twoFactorEnabled: !current.twoFactorEnabled }))}
-                  className="mt-4 inline-flex h-8 items-center gap-2 rounded-full bg-emerald-50 px-3 text-xs font-bold text-emerald-700"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  {securityPrefs.twoFactorEnabled ? 'Enabled' : 'Enable'}
-                </button>
+                <div>
+                  <p className="text-sm font-bold text-slate-950">Active Sessions</p>
+                  <p className="mt-1 text-xs text-slate-500">Manage where you're logged in</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => toast.info('Active session management coming soon')}
+                    className="mt-4 h-10 border-slate-200 font-semibold"
+                  >
+                    View active sessions
+                  </Button>
+                </div>
               </div>
+            </Card>
 
-              <div>
-                <p className="text-sm font-bold text-slate-950">Active Sessions</p>
-                <p className="mt-1 text-xs text-slate-500">Manage where you're logged in</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => toast.info('Active session management coming soon')}
-                  className="mt-4 h-10 border-slate-200 font-semibold"
-                >
-                  View active sessions
-                </Button>
-              </div>
+            <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
+              <ShieldCheck className="h-5 w-5 text-emerald-600" />
+              <span>Your account is secure. We use industry-standard encryption to protect your data.</span>
             </div>
-          </Card>
-
-          <div className="flex items-center gap-3 px-4 py-3 text-sm text-slate-600">
-            <ShieldCheck className="h-5 w-5 text-emerald-600" />
-            <span>Your account is secure. We use industry-standard encryption to protect your data.</span>
           </div>
-        </div>
         )}
       </div>
     </div>
