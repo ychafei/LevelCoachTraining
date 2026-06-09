@@ -91,6 +91,23 @@ function onboardingErrors(form, role) {
   return next;
 }
 
+function firstSport(profile) {
+  if (Array.isArray(profile?.sports) && profile.sports[0]) return profile.sports[0];
+  if (typeof profile?.sports === 'string') return profile.sports.split(',')[0]?.trim() || '';
+  return '';
+}
+
+async function upsertAthleteProfile(existingProfile, payload) {
+  if (existingProfile?.id) {
+    try {
+      return await athleteProfileRepo.update(existingProfile.id, payload);
+    } catch {
+      return athleteProfileRepo.create(payload);
+    }
+  }
+  return athleteProfileRepo.create(payload);
+}
+
 export default function OnboardingCompletion() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -123,6 +140,8 @@ export default function OnboardingCompletion() {
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [touched, setTouched] = useState({});
+  const [existingAthleteProfile, setExistingAthleteProfile] = useState(null);
+  const [loadingAthleteProfile, setLoadingAthleteProfile] = useState(false);
 
   const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const markTouched = (key) => setTouched((current) => ({ ...current, [key]: true }));
@@ -152,6 +171,37 @@ export default function OnboardingCompletion() {
     }));
   }, [user]);
 
+  useEffect(() => {
+    if (!user?.id || selectedRole !== 'athlete') return;
+    let cancelled = false;
+    setLoadingAthleteProfile(true);
+    athleteProfileRepo.filter({ profile_id: user.id })
+      .then((profiles) => {
+        if (cancelled) return;
+        const profile = profiles?.[0] || null;
+        setExistingAthleteProfile(profile);
+        if (!profile) return;
+        setForm((current) => ({
+          ...current,
+          first_name: current.first_name || profile.first_name || '',
+          last_name: current.last_name || profile.last_name || '',
+          dob: current.dob || profile.dob || '',
+          sport: current.sport || firstSport(profile),
+          location: current.location || profile.location_label || '',
+          notes: current.notes || profile.health_notes || '',
+        }));
+      })
+      .catch(() => {
+        if (!cancelled) setExistingAthleteProfile(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAthleteProfile(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRole, user?.id]);
+
   const validationErrors = useMemo(
     () => onboardingErrors(form, selectedRole),
     [form, selectedRole],
@@ -161,7 +211,23 @@ export default function OnboardingCompletion() {
   const selectedRoleCard = ROLE_CARDS.find((role) => role.id === selectedRole);
   const SelectedRoleIcon = selectedRoleCard?.icon || UserRound;
   const roleLocked = Boolean(selectedRole && (requestedRole || normalizeRequestedRole(user?.onboarding_role)));
+  const fromCreateAccount = params.get('from') === 'create-account';
+  const reviewingSavedAthleteInfo = selectedRole === 'athlete'
+    && (fromCreateAccount || !!existingAthleteProfile);
+  const heading = reviewingSavedAthleteInfo ? 'Review your LevelCoach athlete account' : 'Finish your LevelCoach account';
+  const introCopy = reviewingSavedAthleteInfo
+    ? 'We carried over the details from account creation. Review them, fix anything that looks off, then confirm setup before legal documents and protected booking unlock.'
+    : 'Choose the role for this account before entering any dashboard. This keeps OAuth and password signups on the right production path.';
+  const profileStepBody = selectedRole === 'coach_applicant'
+    ? 'Complete coach application'
+    : selectedRole === 'organization'
+      ? 'Complete organization form'
+      : reviewingSavedAthleteInfo
+        ? 'Review saved details'
+        : 'Required fields below';
+  const submitLabel = reviewingSavedAthleteInfo ? 'Confirm setup' : 'Complete setup';
   const canSave = (selectedRole === 'athlete' || selectedRole === 'parent')
+    && !loadingAthleteProfile
     && Object.keys(validationErrors).length === 0;
   const fieldError = (key) => {
     const value = String(form[key] || '').trim();
@@ -247,7 +313,7 @@ export default function OnboardingCompletion() {
       };
       await auth.updateCurrentUser(patch);
       if (selectedRole === 'athlete') {
-        await athleteProfileRepo.create({
+        const athleteProfilePayload = {
           profile_id: user.id,
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),
@@ -258,7 +324,9 @@ export default function OnboardingCompletion() {
           location_lat: cityPlace?.lat,
           location_lng: cityPlace?.lng,
           health_notes: form.notes.trim(),
-        }).catch(() => {});
+        };
+        const savedAthleteProfile = await upsertAthleteProfile(existingAthleteProfile, athleteProfilePayload);
+        setExistingAthleteProfile(savedAthleteProfile);
       }
       const fresh = await refetchUser();
       navigate(safeNext(params.get('next')) || homePathForRole(fresh), { replace: true });
@@ -277,9 +345,9 @@ export default function OnboardingCompletion() {
             <ShieldCheck className="h-4 w-4" />
             Required Setup
           </div>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-normal sm:text-4xl">Finish your LevelCoach account</h1>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-normal sm:text-4xl">{heading}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Choose the role for this account before entering any dashboard. This keeps OAuth and password signups on the right production path.
+            {introCopy}
           </p>
         </div>
 
@@ -293,7 +361,7 @@ export default function OnboardingCompletion() {
           <SetupStepCard
             icon={UserRound}
             title="Profile"
-            body={selectedRole === 'coach_applicant' ? 'Complete coach application' : selectedRole === 'organization' ? 'Complete organization form' : 'Required fields below'}
+            body={profileStepBody}
             complete={false}
           />
           <SetupStepCard
@@ -367,6 +435,26 @@ export default function OnboardingCompletion() {
             <datalist id="levelcoach-guardian-relationships">
               {RELATIONSHIP_OPTIONS.map((relationship) => <option key={relationship} value={relationship} />)}
             </datalist>
+            {reviewingSavedAthleteInfo && (
+              <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Saved from account creation</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-700">
+                      Your details are already filled in. Edit any field below if something is wrong, then confirm setup.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('first-name')?.focus()}
+                    className="border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50"
+                  >
+                    Edit details
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="First name"
@@ -521,7 +609,7 @@ export default function OnboardingCompletion() {
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-slate-500">After setup, the required legal packet appears before protected booking and portal actions.</p>
               <Button type="submit" disabled={!canSave || saving} className="bg-blue-600 text-white hover:bg-blue-700">
-                {saving ? 'Saving...' : 'Complete setup'}
+                {saving ? 'Saving...' : submitLabel}
               </Button>
             </div>
             {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}

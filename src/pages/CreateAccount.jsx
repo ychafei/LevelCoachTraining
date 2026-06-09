@@ -253,7 +253,7 @@ export function AthleteSignup() {
       await auth.updateCurrentUser({
         role: 'user',
         onboarding_role: 'athlete',
-        onboarding_status: 'complete',
+        onboarding_status: 'incomplete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         phone: normalizePhoneForStorage(form.phone),
@@ -265,7 +265,7 @@ export function AthleteSignup() {
         parent_phone: needsGuardian ? normalizePhoneForStorage(form.parentPhone) : '',
         parent_relationship: needsGuardian ? form.parentRelationship.trim() : '',
         terms_accepted: true,
-        profile_setup_complete: true,
+        profile_setup_complete: false,
         updates_opt_in: form.marketing,
         bio: [
           `Primary sport: ${primarySport}`,
@@ -287,7 +287,8 @@ export function AthleteSignup() {
         location_lng: cityPlace?.lng,
         health_notes: form.trainingGoal.trim(),
       }).catch(() => {});
-      navigate(getSafeNextPath(explicitNext) || homePathForRole(fresh), { replace: true });
+      const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'athlete');
+      navigate(`${onboardingNext}${onboardingNext.includes('?') ? '&' : '?'}from=create-account`, { replace: true });
     } catch (err) {
       setFormError(err?.message || 'Could not create your account. Please try again.');
     } finally {
@@ -554,7 +555,7 @@ export function AthleteSignup() {
                     disabled={submitting}
                     className="flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Creating account...' : 'Create Free Account'}
+                    {submitting ? 'Creating account...' : 'Create Account & Review Setup'}
                   </button>
                 </form>
 
