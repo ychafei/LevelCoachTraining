@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
-import { coachRepo, stripeConnectedAccountRepo } from '@/api/repo';
+import { coachBlockRepo, coachRepo, stripeConnectedAccountRepo } from '@/api/repo';
 import { storage } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,13 +109,13 @@ const DEFAULT_PROGRAMS = [
 ];
 
 const WEEK_DAYS = [
-  { key: 'Monday', short: 'Mon', date: 'Mon 6/8' },
-  { key: 'Tuesday', short: 'Tue', date: 'Tue 6/9' },
-  { key: 'Wednesday', short: 'Wed', date: 'Wed 6/10' },
-  { key: 'Thursday', short: 'Thu', date: 'Thu 6/11' },
-  { key: 'Friday', short: 'Fri', date: 'Fri 6/12' },
-  { key: 'Saturday', short: 'Sat', date: 'Sat 6/13' },
-  { key: 'Sunday', short: 'Sun', date: 'Sun 6/14' },
+  { key: 'Monday', short: 'Mon', date: 'Mon 6/8', dateIso: '2026-06-08' },
+  { key: 'Tuesday', short: 'Tue', date: 'Tue 6/9', dateIso: '2026-06-09' },
+  { key: 'Wednesday', short: 'Wed', date: 'Wed 6/10', dateIso: '2026-06-10' },
+  { key: 'Thursday', short: 'Thu', date: 'Thu 6/11', dateIso: '2026-06-11' },
+  { key: 'Friday', short: 'Fri', date: 'Fri 6/12', dateIso: '2026-06-12' },
+  { key: 'Saturday', short: 'Sat', date: 'Sat 6/13', dateIso: '2026-06-13' },
+  { key: 'Sunday', short: 'Sun', date: 'Sun 6/14', dateIso: '2026-06-14' },
 ];
 
 const DEFAULT_AVAILABILITY = {
@@ -129,14 +129,30 @@ const DEFAULT_AVAILABILITY = {
 };
 
 const DEFAULT_BLACKOUTS = [
-  { id: 'family-event', date: 'Jun 12, 2026', label: 'Family event' },
-  { id: 'tournament-travel', date: 'Jun 19 - Jun 21, 2026', label: 'Tournament travel' },
+  {
+    id: 'family-event',
+    start_date: '2026-06-12',
+    end_date: '2026-06-12',
+    block_all_day: true,
+    blocked_start_time: '',
+    blocked_end_time: '',
+    label: 'Family event',
+  },
+  {
+    id: 'tournament-travel',
+    start_date: '2026-06-19',
+    end_date: '2026-06-21',
+    block_all_day: true,
+    blocked_start_time: '',
+    blocked_end_time: '',
+    label: 'Tournament travel',
+  },
 ];
 
 const DEFAULT_SESSION_TYPES = [
-  { id: 'intro-session', name: 'Intro Session', duration: '30', available: true },
-  { id: 'private-session', name: 'Private Session', duration: '60', available: true },
-  { id: 'small-group-training', name: 'Small Group Training', duration: '60', available: true },
+  { id: 'intro-session', name: 'Intro Session', duration: '30', price: '49', available: true },
+  { id: 'private-session', name: 'Private Session', duration: '60', price: '99', available: true },
+  { id: 'small-group-training', name: 'Small Group Training', duration: '60', price: '69', available: true },
 ];
 
 const BOOKING_RULE_OPTIONS = {
@@ -183,6 +199,23 @@ const TIME_OPTIONS = [
   '20:00',
   '21:00',
 ];
+
+const EMPTY_BLACKOUT_FORM = {
+  label: '',
+  start_date: '',
+  end_date: '',
+  block_all_day: true,
+  blocked_start_time: '09:00',
+  blocked_end_time: '17:00',
+};
+
+const DEFAULT_BULK_AVAILABILITY = {
+  days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+  start: '09:00',
+  end: '17:00',
+};
+
+const VALID_SETTINGS_SECTIONS = new Set(settingsSections.map((section) => section.id));
 
 function splitName(name = '') {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -256,7 +289,7 @@ function normalizeAvailability(raw = {}) {
         ? [{ start: source.start, end: source.end }]
         : fallback.windows;
     const windows = enabled
-      ? sourceWindows.slice(0, 2).map((window) => ({
+      ? sourceWindows.slice(0, 4).map((window) => ({
         start: window.start || '',
         end: window.end || '',
       }))
@@ -295,6 +328,33 @@ function timeToHeight(start, end) {
   const [endHour, endMin = '0'] = end.split(':').map(Number);
   const duration = (endHour + endMin / 60) - (startHour + startMin / 60);
   return Math.max(14, Math.min(42, (duration / 15) * 100));
+}
+
+function formatDateLabel(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatBlockRange(block) {
+  if (!block?.start_date || !block?.end_date) return 'Date not set';
+  const start = formatDateLabel(block.start_date);
+  const end = formatDateLabel(block.end_date);
+  const dateText = block.start_date === block.end_date ? start : `${start} - ${end}`;
+  if (block.block_all_day) return `${dateText} · All day`;
+  return `${dateText} · ${formatTime(block.blocked_start_time)} - ${formatTime(block.blocked_end_time)}`;
+}
+
+function sortBlocks(blocks = []) {
+  return [...blocks].sort((a, b) => `${a.start_date || ''}`.localeCompare(`${b.start_date || ''}`));
+}
+
+function blockIncludesDate(block, dateIso) {
+  if (!block?.start_date || !block?.end_date || !dateIso) return false;
+  return block.start_date <= dateIso && block.end_date >= dateIso;
 }
 
 function Card({ title, icon: Icon, children, className = '' }) {
@@ -409,8 +469,12 @@ function CoachAvatar({ src, initials, size = 'md', alt = 'Coach profile' }) {
 
 export default function CoachSettings() {
   const { user, refetchUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef(null);
-  const [activeSection, setActiveSection] = useState('account');
+  const requestedSection = searchParams.get('section');
+  const [activeSection, setActiveSection] = useState(() => (
+    VALID_SETTINGS_SECTIONS.has(requestedSection) ? requestedSection : 'account'
+  ));
   const [coach, setCoach] = useState(null);
   const [stripeAccount, setStripeAccount] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -428,7 +492,10 @@ export default function CoachSettings() {
   const [programs, setPrograms] = useState(DEFAULT_PROGRAMS);
   const [availability, setAvailability] = useState(() => normalizeAvailability(DEFAULT_AVAILABILITY));
   const [blackouts, setBlackouts] = useState(DEFAULT_BLACKOUTS);
+  const [blackoutForm, setBlackoutForm] = useState(EMPTY_BLACKOUT_FORM);
+  const [savingBlackout, setSavingBlackout] = useState(false);
   const [sessionTypes, setSessionTypes] = useState(DEFAULT_SESSION_TYPES);
+  const [bulkAvailability, setBulkAvailability] = useState(DEFAULT_BULK_AVAILABILITY);
   const [lastSavedAvailability, setLastSavedAvailability] = useState('Last saved 2 minutes ago');
   const [notifications, setNotifications] = useState({
     bookingRequests: true,
@@ -460,6 +527,21 @@ export default function CoachSettings() {
   const activeSectionMeta = settingsSections.find((section) => section.id === activeSection) || settingsSections[0];
 
   useEffect(() => {
+    if (VALID_SETTINGS_SECTIONS.has(requestedSection) && requestedSection !== activeSection) {
+      setActiveSection(requestedSection);
+    }
+  }, [requestedSection, activeSection]);
+
+  const switchSection = (sectionId) => {
+    setActiveSection(sectionId);
+    if (sectionId === 'account') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ section: sectionId }, { replace: true });
+    }
+  };
+
+  useEffect(() => {
     setIdentity({
       fullName: displayNameFor(user),
       email: user?.email || '',
@@ -483,16 +565,20 @@ export default function CoachSettings() {
     let cancelled = false;
     (async () => {
       try {
-        const [coachRow, stripeRows] = await Promise.all([
+        const [coachRow, stripeRows, blockRows] = await Promise.all([
           coachRepo.get(user.coach_id).catch(() => null),
           stripeConnectedAccountRepo
             .filter({ owner_type: 'coach', owner_id: user.coach_id })
             .catch(() => []),
+          coachBlockRepo
+            .filter({ coach_id: user.coach_id, is_active: true }, 'start_date')
+            .catch(() => DEFAULT_BLACKOUTS),
         ]);
         if (cancelled) return;
         setCoach(coachRow);
         setProfileDraft(toProfileDraft(coachRow, user?.email || ''));
         setAvailability(normalizeAvailability(coachRow?.availability || DEFAULT_AVAILABILITY));
+        setBlackouts(sortBlocks(blockRows || []));
         setStripeAccount(stripeRows?.[0] || null);
       } catch (err) {
         console.error('CoachSettings load failed', err);
@@ -626,8 +712,8 @@ export default function CoachSettings() {
   const addAvailabilityWindow = (day) => {
     const currentDay = availability[day] || { enabled: false, windows: [] };
     const windows = currentDay.windows || [];
-    if (windows.length >= 2) {
-      toast.info('Two windows are shown in this settings view.');
+    if (windows.length >= 4) {
+      toast.info('Four windows per day keeps booking rules readable.');
       return;
     }
     const nextWindow = windows.length === 0
@@ -639,9 +725,76 @@ export default function CoachSettings() {
     });
   };
 
+  const removeAvailabilityWindow = (day, index) => {
+    const currentDay = availability[day] || { enabled: false, windows: [] };
+    const windows = (currentDay.windows || []).filter((_, windowIndex) => windowIndex !== index);
+    updateAvailabilityDay(day, {
+      enabled: windows.length > 0,
+      windows,
+    });
+  };
+
+  const toggleBulkAvailabilityDay = (day) => {
+    setBulkAvailability((current) => {
+      const days = current.days.includes(day)
+        ? current.days.filter((item) => item !== day)
+        : [...current.days, day];
+      return { ...current, days };
+    });
+  };
+
+  const applyBulkAvailability = () => {
+    if (!bulkAvailability.days.length) {
+      toast.error('Select at least one day to update.');
+      return;
+    }
+    if (!bulkAvailability.start || !bulkAvailability.end || bulkAvailability.start >= bulkAvailability.end) {
+      toast.error('Bulk availability needs a valid start and end time.');
+      return;
+    }
+    setAvailability((current) => {
+      const next = { ...current };
+      bulkAvailability.days.forEach((day) => {
+        next[day] = {
+          enabled: true,
+          start: bulkAvailability.start,
+          end: bulkAvailability.end,
+          windows: [{ start: bulkAvailability.start, end: bulkAvailability.end }],
+        };
+      });
+      return next;
+    });
+    toast.success('Availability applied to selected days');
+  };
+
+  const clearBulkAvailability = () => {
+    if (!bulkAvailability.days.length) {
+      toast.error('Select at least one day to clear.');
+      return;
+    }
+    setAvailability((current) => {
+      const next = { ...current };
+      bulkAvailability.days.forEach((day) => {
+        next[day] = { enabled: false, start: '', end: '', windows: [] };
+      });
+      return next;
+    });
+    toast.success('Selected days marked unavailable');
+  };
+
   const saveAvailability = async () => {
     if (!coach?.id) {
       toast.error('Coach profile is still loading.');
+      return;
+    }
+    const invalidDay = WEEK_DAYS.find(({ key }) => {
+      const day = availability[key];
+      if (!day?.enabled) return false;
+      const windows = day.windows || [];
+      return windows.length === 0 || windows.some((window) => !window.start || !window.end || window.start >= window.end);
+    });
+    if (invalidDay) {
+      toast.error(`Fix ${invalidDay.key}'s availability windows before saving.`);
       return;
     }
     setSavingAvailability(true);
@@ -660,15 +813,62 @@ export default function CoachSettings() {
     }
   };
 
-  const addBlackout = () => {
-    setBlackouts((current) => [
-      ...current,
-      { id: `blackout-${Date.now()}`, date: 'Jun 26, 2026', label: 'Unavailable' },
-    ]);
+  const addBlackout = async () => {
+    if (!user?.coach_id) {
+      toast.error('Coach account is still loading.');
+      return;
+    }
+    if (!blackoutForm.start_date || !blackoutForm.end_date) {
+      toast.error('Select start and end dates.');
+      return;
+    }
+    if (blackoutForm.end_date < blackoutForm.start_date) {
+      toast.error('End date must be on or after the start date.');
+      return;
+    }
+    if (!blackoutForm.block_all_day) {
+      if (!blackoutForm.blocked_start_time || !blackoutForm.blocked_end_time) {
+        toast.error('Set both start and end times, or mark it all day.');
+        return;
+      }
+      if (blackoutForm.blocked_start_time >= blackoutForm.blocked_end_time) {
+        toast.error('Unavailable end time must be after start time.');
+        return;
+      }
+    }
+    setSavingBlackout(true);
+    try {
+      const payload = {
+        ...blackoutForm,
+        label: blackoutForm.label.trim() || 'Unavailable',
+        coach_id: user.coach_id,
+        is_active: true,
+        blocked_start_time: blackoutForm.block_all_day ? '' : blackoutForm.blocked_start_time,
+        blocked_end_time: blackoutForm.block_all_day ? '' : blackoutForm.blocked_end_time,
+      };
+      const created = await coachBlockRepo.create(payload);
+      setBlackouts((current) => sortBlocks([...current, created]));
+      setBlackoutForm(EMPTY_BLACKOUT_FORM);
+      toast.success('Unavailable time added');
+    } catch (err) {
+      console.error('CoachSettings add blackout failed', err);
+      toast.error(err?.message || 'Could not add unavailable time.');
+    } finally {
+      setSavingBlackout(false);
+    }
   };
 
-  const removeBlackout = (id) => {
-    setBlackouts((current) => current.filter((block) => block.id !== id));
+  const removeBlackout = async (block) => {
+    setBlackouts((current) => current.filter((item) => item.id !== block.id));
+    try {
+      if (block.coach_id) {
+        await coachBlockRepo.update(block.id, { is_active: false });
+      }
+      toast.success('Unavailable time removed');
+    } catch (err) {
+      console.error('CoachSettings remove blackout failed', err);
+      toast.error('Removed locally, but Appwrite did not confirm the update.');
+    }
   };
 
   const updateSessionType = (id, patch) => {
@@ -680,7 +880,7 @@ export default function CoachSettings() {
   const addSessionType = () => {
     setSessionTypes((current) => [
       ...current,
-      { id: `session-${Date.now()}`, name: 'New Session Type', duration: '60', available: true },
+      { id: `session-${Date.now()}`, name: '', duration: '60', price: '79', available: true },
     ]);
   };
 
@@ -735,7 +935,7 @@ export default function CoachSettings() {
                 key={section.id}
                 section={section}
                 active={activeSection === section.id}
-                onClick={() => setActiveSection(section.id)}
+                onClick={() => switchSection(section.id)}
               />
             ))}
           </div>
@@ -762,37 +962,126 @@ export default function CoachSettings() {
             </div>
 
             <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)_minmax(0,1fr)]">
-              <Card title="Weekly Availability" icon={Clock} className="2xl:row-span-2">
-                <div className="overflow-x-auto">
-                  <div className="min-w-[670px]">
-                    <div className="grid grid-cols-[48px_78px_174px_174px_118px] gap-3 pb-3 text-xs font-bold text-slate-500">
-                      <span>Day</span>
-                      <span>Available</span>
-                      <span>Window 1</span>
-                      <span>Window 2</span>
-                      <span>Actions</span>
+              <Card title="Weekly Availability" icon={Clock} className="2xl:row-span-3">
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-extrabold text-slate-950">Bulk set bookable hours</p>
+                      <p className="mt-1 text-xs text-slate-600">Pick days, set one clean window, then apply it all at once.</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {WEEK_DAYS.map(({ key, short }) => {
+                          const selected = bulkAvailability.days.includes(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => toggleBulkAvailabilityDay(key)}
+                              className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                                selected
+                                  ? 'border-blue-600 bg-blue-600 text-white'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-700'
+                              }`}
+                            >
+                              {short}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="space-y-3">
-                      {WEEK_DAYS.map(({ key, short }) => {
-                        const day = availability[key] || { enabled: false, windows: [] };
-                        const windows = day.enabled ? day.windows || [] : [];
-                        return (
-                          <div key={key} className="grid grid-cols-[48px_78px_174px_174px_118px] items-center gap-3">
-                            <p className="text-sm font-bold text-slate-700">{short}</p>
+                    <div className="grid gap-3 sm:grid-cols-[120px_120px_auto_auto]">
+                      <Field label="Start">
+                        <Select
+                          value={bulkAvailability.start}
+                          onValueChange={(value) => setBulkAvailability((current) => ({ ...current, start: value }))}
+                        >
+                          <SelectTrigger className="h-10 border-slate-200 bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="End">
+                        <Select
+                          value={bulkAvailability.end}
+                          onValueChange={(value) => setBulkAvailability((current) => ({ ...current, end: value }))}
+                        >
+                          <SelectTrigger className="h-10 border-slate-200 bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Button
+                        type="button"
+                        onClick={applyBulkAvailability}
+                        className="h-10 self-end bg-blue-600 px-4 font-bold text-white hover:bg-blue-700"
+                      >
+                        Apply
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={clearBulkAvailability}
+                        className="h-10 self-end border-slate-200 font-bold"
+                      >
+                        Clear days
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {WEEK_DAYS.map(({ key, short }) => {
+                    const day = availability[key] || { enabled: false, windows: [] };
+                    const windows = day.enabled ? day.windows || [] : [];
+                    return (
+                      <section key={key} className="rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="grid h-10 w-10 place-items-center rounded-md bg-slate-100 text-sm font-black text-slate-700">
+                              {short}
+                            </span>
+                            <div>
+                              <p className="text-sm font-extrabold text-slate-950">{key}</p>
+                              <p className="text-xs font-medium text-slate-500">
+                                {day.enabled ? `${windows.length} bookable window${windows.length === 1 ? '' : 's'}` : 'Not bookable'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs font-black ${day.enabled ? 'text-blue-700' : 'text-slate-500'}`}>
+                              {day.enabled ? 'Available' : 'Off'}
+                            </span>
                             <Switch
                               checked={day.enabled}
                               onCheckedChange={(value) => updateAvailabilityDay(key, { enabled: value })}
                               className="data-[state=checked]:bg-blue-600"
                             />
-                            {[0, 1].map((index) => {
-                              const window = windows[index];
-                              return window ? (
-                                <div key={index} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-3">
+                          {windows.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm font-medium text-slate-500">
+                              No bookable hours. Turn the day on or add a window.
+                            </div>
+                          ) : (
+                            windows.map((window, index) => (
+                              <div key={`${key}-${index}`} className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                                <Field label={`Window ${index + 1} start`}>
                                   <Select
                                     value={window.start}
                                     onValueChange={(value) => updateAvailabilityWindow(key, index, 'start', value)}
                                   >
-                                    <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                                    <SelectTrigger className="h-10 border-slate-200 bg-white">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -801,12 +1090,13 @@ export default function CoachSettings() {
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  <span className="text-slate-400">-</span>
+                                </Field>
+                                <Field label={`Window ${index + 1} end`}>
                                   <Select
                                     value={window.end}
                                     onValueChange={(value) => updateAvailabilityWindow(key, index, 'end', value)}
                                   >
-                                    <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                                    <SelectTrigger className="h-10 border-slate-200 bg-white">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -815,26 +1105,33 @@ export default function CoachSettings() {
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                </div>
-                              ) : (
-                                <div key={index} className="flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400">
-                                  -
-                                </div>
-                              );
-                            })}
-                            <button
-                              type="button"
-                              onClick={() => addAvailabilityWindow(key)}
-                              className="inline-flex items-center justify-start gap-1 text-sm font-bold text-blue-700 hover:text-blue-800"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Add window
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                                </Field>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => removeAvailabilityWindow(key, index)}
+                                  className="h-10 border-slate-200 text-slate-700 hover:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Remove
+                                </Button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => addAvailabilityWindow(key)}
+                          className="mt-3 h-10 border-blue-200 font-bold text-blue-700 hover:text-blue-700"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add window
+                        </Button>
+                      </section>
+                    );
+                  })}
                 </div>
               </Card>
 
@@ -906,78 +1203,188 @@ export default function CoachSettings() {
               </Card>
 
               <Card title="Time Off & Blackouts" icon={Ban}>
-                <div className="space-y-3">
-                  {blackouts.map((block) => (
-                    <div key={block.id} className="flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-3">
-                      <CalendarDays className="h-5 w-5 shrink-0 text-amber-600" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-slate-950">{block.date}</p>
-                        <p className="truncate text-xs text-slate-500">{block.label}</p>
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="space-y-3">
+                      <Field label="Reason">
+                        <Input
+                          value={blackoutForm.label}
+                          onChange={(event) => setBlackoutForm((current) => ({ ...current, label: event.target.value }))}
+                          placeholder="Vacation, tournament travel, family event"
+                          className="h-10 border-slate-200 bg-white"
+                        />
+                      </Field>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Start date">
+                          <Input
+                            type="date"
+                            value={blackoutForm.start_date}
+                            onChange={(event) => setBlackoutForm((current) => ({
+                              ...current,
+                              start_date: event.target.value,
+                              end_date: current.end_date || event.target.value,
+                            }))}
+                            className="h-10 border-slate-200 bg-white"
+                          />
+                        </Field>
+                        <Field label="End date">
+                          <Input
+                            type="date"
+                            value={blackoutForm.end_date}
+                            onChange={(event) => setBlackoutForm((current) => ({ ...current, end_date: event.target.value }))}
+                            className="h-10 border-slate-200 bg-white"
+                          />
+                        </Field>
                       </div>
-                      <button
+                      <div className="flex items-center justify-between gap-4 rounded-md border border-slate-200 bg-white px-3 py-2">
+                        <div>
+                          <p className="text-sm font-bold text-slate-950">Block all day</p>
+                          <p className="text-xs text-slate-500">Turn off to block a specific time range.</p>
+                        </div>
+                        <Switch
+                          checked={blackoutForm.block_all_day}
+                          onCheckedChange={(value) => setBlackoutForm((current) => ({ ...current, block_all_day: value }))}
+                          className="data-[state=checked]:bg-blue-600"
+                        />
+                      </div>
+                      {!blackoutForm.block_all_day && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Field label="Unavailable from">
+                            <Select
+                              value={blackoutForm.blocked_start_time}
+                              onValueChange={(value) => setBlackoutForm((current) => ({ ...current, blocked_start_time: value }))}
+                            >
+                              <SelectTrigger className="h-10 border-slate-200 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TIME_OPTIONS.map((option) => (
+                                  <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Unavailable until">
+                            <Select
+                              value={blackoutForm.blocked_end_time}
+                              onValueChange={(value) => setBlackoutForm((current) => ({ ...current, blocked_end_time: value }))}
+                            >
+                              <SelectTrigger className="h-10 border-slate-200 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TIME_OPTIONS.map((option) => (
+                                  <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </div>
+                      )}
+                      <Button
                         type="button"
-                        onClick={() => removeBlackout(block.id)}
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-white hover:text-red-600"
-                        aria-label={`Remove ${block.label}`}
+                        onClick={addBlackout}
+                        disabled={savingBlackout}
+                        className="h-11 w-full bg-blue-600 font-bold text-white hover:bg-blue-700"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                        <Plus className="h-4 w-4" />
+                        {savingBlackout ? 'Adding...' : 'Add unavailable time'}
+                      </Button>
                     </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addBlackout}
-                    className="mt-4 h-11 w-full border-blue-200 font-bold text-blue-700 hover:text-blue-700"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add unavailable time
-                  </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {blackouts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-sm font-medium text-slate-500">
+                        No unavailable time added.
+                      </div>
+                    ) : (
+                      blackouts.map((block) => (
+                        <div key={block.id} className="flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-3">
+                          <CalendarDays className="h-5 w-5 shrink-0 text-amber-600" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-slate-950">{block.label || 'Unavailable'}</p>
+                            <p className="truncate text-xs text-slate-600">{formatBlockRange(block)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeBlackout(block)}
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-white hover:text-red-600"
+                            aria-label={`Remove ${block.label || 'unavailable time'}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </Card>
 
               <Card title="Session Types" icon={UserRound}>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-[minmax(0,1fr)_82px_74px_28px] gap-2 text-xs font-bold text-slate-500">
-                    <span>Session Type</span>
-                    <span>Duration</span>
-                    <span>Available</span>
-                    <span />
-                  </div>
+                <div className="space-y-4">
                   {sessionTypes.map((type) => (
-                    <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_82px_74px_28px] items-center gap-2">
-                      <Input
-                        value={type.name}
-                        onChange={(event) => updateSessionType(type.id, { name: event.target.value })}
-                        className="h-9 border-0 bg-transparent px-0 text-sm font-medium shadow-none focus-visible:ring-0"
-                      />
-                      <Select
-                        value={type.duration}
-                        onValueChange={(value) => updateSessionType(type.id, { duration: value })}
-                      >
-                        <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="30">30 min</SelectItem>
-                          <SelectItem value="45">45 min</SelectItem>
-                          <SelectItem value="60">60 min</SelectItem>
-                          <SelectItem value="90">90 min</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Switch
-                        checked={type.available}
-                        onCheckedChange={(value) => updateSessionType(type.id, { available: value })}
-                        className="data-[state=checked]:bg-blue-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeSessionType(type.id)}
-                        className="grid h-8 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-red-600"
-                        aria-label={`Remove ${type.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    <div key={type.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_112px_92px]">
+                        <Field label="Session name">
+                          <Input
+                            value={type.name}
+                            onChange={(event) => updateSessionType(type.id, { name: event.target.value })}
+                            placeholder="e.g. Shooting clinic"
+                            className="h-10 border-slate-200 bg-white text-sm font-semibold"
+                          />
+                        </Field>
+                        <Field label="Duration">
+                          <Select
+                            value={type.duration}
+                            onValueChange={(value) => updateSessionType(type.id, { duration: value })}
+                          >
+                            <SelectTrigger className="h-10 border-slate-200 bg-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">30 min</SelectItem>
+                              <SelectItem value="45">45 min</SelectItem>
+                              <SelectItem value="60">60 min</SelectItem>
+                              <SelectItem value="75">75 min</SelectItem>
+                              <SelectItem value="90">90 min</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label="Price">
+                          <div className="flex h-10 items-center rounded-md border border-slate-200 bg-white px-3">
+                            <span className="text-sm font-bold text-slate-500">$</span>
+                            <input
+                              value={type.price || ''}
+                              onChange={(event) => updateSessionType(type.id, { price: event.target.value.replace(/[^\d]/g, '') })}
+                              className="min-w-0 flex-1 bg-transparent pl-1 text-sm font-semibold text-slate-950 outline-none"
+                              placeholder="79"
+                              aria-label={`${type.name || 'Session'} price`}
+                            />
+                          </div>
+                        </Field>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <label className="flex items-center gap-3">
+                          <Switch
+                            checked={type.available}
+                            onCheckedChange={(value) => updateSessionType(type.id, { available: value })}
+                            className="data-[state=checked]:bg-blue-600"
+                          />
+                          <span className="text-sm font-bold text-slate-700">
+                            {type.available ? 'Available for booking' : 'Hidden from booking'}
+                          </span>
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => removeSessionType(type.id)}
+                          className="h-9 text-slate-500 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   <Button
@@ -1028,6 +1435,7 @@ export default function CoachSettings() {
                   {WEEK_DAYS.map((day) => {
                     const dayAvailability = availability[day.key] || { windows: [] };
                     const previewWindows = dayAvailability.enabled ? dayAvailability.windows || [] : [];
+                    const previewBlocks = blackouts.filter((block) => blockIncludesDate(block, day.dateIso));
                     return (
                       <div key={day.key} className="relative h-[178px] border-r border-b border-slate-200 bg-white">
                         {PREVIEW_TIMES.map((time, index) => (
@@ -1051,16 +1459,15 @@ export default function CoachSettings() {
                             {formatTime(window.end)}
                           </div>
                         ))}
-                        {day.key === 'Friday' && (
-                          <div className="absolute bottom-7 left-3 right-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700">
-                            Family event
+                        {previewBlocks.slice(0, 2).map((block, index) => (
+                          <div
+                            key={`${day.key}-${block.id}`}
+                            className="absolute left-3 right-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700"
+                            style={{ bottom: `${index * 36 + 6}px` }}
+                          >
+                            {block.label || 'Unavailable'}
                           </div>
-                        )}
-                        {day.key === 'Saturday' && (
-                          <div className="absolute bottom-1 left-3 right-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700">
-                            Tournament travel
-                          </div>
-                        )}
+                        ))}
                       </div>
                     );
                   })}

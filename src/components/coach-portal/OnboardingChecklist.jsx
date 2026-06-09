@@ -44,7 +44,7 @@ export function computeChecklist(user, coach) {
       key: 'availability',
       label: 'Set weekly availability',
       blurb: 'Clients can only book when you have availability set.',
-      href: '/coach/schedule',
+      href: '/coach/settings?section=calendar',
       done: !!coach?.availability && Object.values(coach.availability).some(d => d?.enabled),
       blocking: !(!!coach?.availability && Object.values(coach?.availability || {}).some(d => d?.enabled)),
     },

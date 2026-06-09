@@ -1,216 +1,200 @@
-import React, { useEffect, useState } from 'react';
-import { coachRepo, coachBlockRepo } from '@/api/repo';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { coachBlockRepo, coachRepo } from '@/api/repo';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Calendar, Plus, Trash2, Clock } from 'lucide-react';
-import { format } from 'date-fns';
+import {
+  Ban,
+  CalendarDays,
+  Clock,
+  Settings,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import WeeklyAvailabilityEditor, { hasAvailabilityErrors } from '@/components/coach/WeeklyAvailabilityEditor';
-import { useConfirm } from '@/components/ui/confirm-dialog';
+
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function formatTime(value) {
+  if (!value) return '';
+  const [hourText, minute = '00'] = value.split(':');
+  const hour = Number(hourText);
+  if (Number.isNaN(hour)) return value;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minute} ${suffix}`;
+}
+
+function formatDateLabel(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatBlockRange(block) {
+  if (!block?.start_date || !block?.end_date) return 'Date not set';
+  const start = formatDateLabel(block.start_date);
+  const end = formatDateLabel(block.end_date);
+  const dateText = block.start_date === block.end_date ? start : `${start} - ${end}`;
+  if (block.block_all_day) return `${dateText} · All day`;
+  return `${dateText} · ${formatTime(block.blocked_start_time)} - ${formatTime(block.blocked_end_time)}`;
+}
+
+function windowsFor(dayAvailability) {
+  if (!dayAvailability?.enabled) return [];
+  if (Array.isArray(dayAvailability.windows) && dayAvailability.windows.length) {
+    return dayAvailability.windows;
+  }
+  if (dayAvailability.start && dayAvailability.end) {
+    return [{ start: dayAvailability.start, end: dayAvailability.end }];
+  }
+  return [];
+}
+
+function SummaryCard({ title, icon: Icon, children }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-base font-extrabold text-slate-950">{title}</h2>
+        <Icon className="h-5 w-5 text-slate-700" />
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function CoachSchedule() {
   const { user } = useCurrentUser();
-  const [blocks, setBlocks] = useState([]);
   const [coach, setCoach] = useState(null);
+  const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newBlock, setNewBlock] = useState({ label: '', start_date: '', end_date: '', block_all_day: true, blocked_start_time: '', blocked_end_time: '' });
-  const [availability, setAvailability] = useState({});
-  const [savingAvail, setSavingAvail] = useState(false);
-  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
-    // Route guard already checks for user + coach_id; this is defensive.
-    if (!user || !user.coach_id) {
+    if (!user?.coach_id) {
       setLoading(false);
-      return;
+      return undefined;
     }
+
     let cancelled = false;
-    const load = async () => {
+    (async () => {
       try {
-        const coaches = await coachRepo.filter({ id: user.coach_id });
+        const [coachRow, blockRows] = await Promise.all([
+          coachRepo.get(user.coach_id).catch(() => null),
+          coachBlockRepo.filter({ coach_id: user.coach_id, is_active: true }, 'start_date').catch(() => []),
+        ]);
         if (cancelled) return;
-        if (coaches.length > 0) {
-          setCoach(coaches[0]);
-          setAvailability(coaches[0].availability || {});
-        }
-        const b = await coachBlockRepo.filter({ coach_id: user.coach_id, is_active: true }, '-start_date');
-        if (!cancelled) setBlocks(b);
+        setCoach(coachRow);
+        setBlocks(blockRows || []);
       } catch (err) {
         console.error('CoachSchedule load failed', err);
-        if (!cancelled) toast.error('Could not load schedule. Please refresh.');
+        if (!cancelled) toast.error('Could not load schedule overview.');
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
-    load();
+    })();
+
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user?.coach_id]);
 
-  const addBlock = async () => {
-    if (!newBlock.start_date || !newBlock.end_date) {
-      toast.error('Please select start and end dates.');
-      return;
-    }
-    if (newBlock.end_date < newBlock.start_date) {
-      toast.error('End date must be on or after start date.');
-      return;
-    }
-    if (!newBlock.block_all_day) {
-      if (!newBlock.blocked_start_time || !newBlock.blocked_end_time) {
-        toast.error('Please set both start and end times, or turn on "Block All Day".');
-        return;
-      }
-      if (newBlock.blocked_start_time >= newBlock.blocked_end_time) {
-        toast.error('Block end time must be after start time.');
-        return;
-      }
-    }
-    try {
-      const block = { ...newBlock, coach_id: user.coach_id, is_active: true };
-      await coachBlockRepo.create(block);
-      toast.success('Block added');
-      const b = await coachBlockRepo.filter({ coach_id: user.coach_id, is_active: true }, '-start_date');
-      setBlocks(b);
-      setNewBlock({ label: '', start_date: '', end_date: '', block_all_day: true, blocked_start_time: '', blocked_end_time: '' });
-    } catch (err) {
-      toast.error('Could not save block. Please try again.');
-    }
-  };
-
-  const saveAvailability = async () => {
-    if (hasAvailabilityErrors(availability)) {
-      toast.error('Fix the highlighted availability rows before saving.');
-      return;
-    }
-    if (!coach?.id) {
-      toast.error('Coach profile not loaded yet — refresh and try again.');
-      return;
-    }
-    setSavingAvail(true);
-    try {
-      await coachRepo.update(coach.id, { availability });
-      toast.success('Availability saved');
-    } catch (err) {
-      console.error('saveAvailability failed', err);
-      toast.error(err?.message || 'Could not save availability. Please try again.');
-    } finally {
-      setSavingAvail(false);
-    }
-  };
-
-  const removeBlock = async (block) => {
-    const ok = await confirm({
-      title: 'Remove this block?',
-      description: block.label ? `"${block.label}"` : 'This unavailability block will be removed.',
-      consequences: [
-        `${format(new Date(block.start_date), 'MMM d')} — ${format(new Date(block.end_date), 'MMM d, yyyy')}${block.block_all_day ? ' · All day' : ` · ${block.blocked_start_time}–${block.blocked_end_time}`}`,
-        'Clients will be able to book during this range again.',
-      ],
-      confirmLabel: 'Remove block',
-      variant: 'destructive',
-    });
-    if (!ok) return;
-    await coachBlockRepo.update(block.id, { is_active: false });
-    setBlocks(prev => prev.filter(b => b.id !== block.id));
-    toast.success('Block removed');
-  };
+  const availableDays = useMemo(() => (
+    DAYS.map((day) => ({ day, windows: windowsFor(coach?.availability?.[day]) }))
+      .filter((item) => item.windows.length > 0)
+  ), [coach?.availability]);
 
   if (loading) {
-    return <div className="py-24 text-center"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
+    return (
+      <div className="py-24 text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+      </div>
+    );
   }
 
   return (
-    <div className="py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-2">SCHEDULE MANAGER</h1>
-        <p className="text-muted-foreground mb-10">Manage your availability and block off dates.</p>
-
-        {/* Weekly Availability */}
-        <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-1">
-            <Clock className="inline w-4 h-4 mr-2" />Weekly Availability
-          </h2>
-          <p className="text-xs text-muted-foreground mb-4">Set which days and hours you're available for bookings.</p>
-          <WeeklyAvailabilityEditor availability={availability} onChange={setAvailability} />
-          <Button onClick={saveAvailability} disabled={savingAvail} className="mt-4 bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-            {savingAvail ? 'Saving...' : 'Save Availability'}
-          </Button>
+    <div className="mx-auto max-w-[1280px] space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Coach Schedule</p>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-slate-950 sm:text-4xl">Schedule Overview</h1>
+          <p className="mt-2 max-w-2xl text-base text-slate-600">
+            View the bookable rhythm your clients see. Availability windows, blackout ranges, buffers, and session types are configured in Availability Rules.
+          </p>
         </div>
-
-        {/* Add Block */}
-        <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-4">
-            <Plus className="inline w-4 h-4 mr-2" />Add Block
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <Label className="font-display tracking-wider uppercase text-xs">Label</Label>
-              <Input placeholder="e.g. Vacation, Personal Day" value={newBlock.label} onChange={e => setNewBlock({...newBlock, label: e.target.value})} className="bg-secondary border-border mt-1" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="font-display tracking-wider uppercase text-xs">Start Date</Label>
-                <Input type="date" value={newBlock.start_date} onChange={e => setNewBlock({...newBlock, start_date: e.target.value})} className="bg-secondary border-border mt-1" />
-              </div>
-              <div>
-                <Label className="font-display tracking-wider uppercase text-xs">End Date</Label>
-                <Input type="date" value={newBlock.end_date} onChange={e => setNewBlock({...newBlock, end_date: e.target.value})} className="bg-secondary border-border mt-1" />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={newBlock.block_all_day} onCheckedChange={v => setNewBlock({...newBlock, block_all_day: v})} />
-              <Label className="text-sm">Block All Day</Label>
-            </div>
-            {!newBlock.block_all_day && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="font-display tracking-wider uppercase text-xs">Start Time</Label>
-                  <Input type="time" value={newBlock.blocked_start_time} onChange={e => setNewBlock({...newBlock, blocked_start_time: e.target.value})} className="bg-secondary border-border mt-1" />
-                </div>
-                <div>
-                  <Label className="font-display tracking-wider uppercase text-xs">End Time</Label>
-                  <Input type="time" value={newBlock.blocked_end_time} onChange={e => setNewBlock({...newBlock, blocked_end_time: e.target.value})} className="bg-secondary border-border mt-1" />
-                </div>
-              </div>
-            )}
-            <Button onClick={addBlock} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-              Add Block
-            </Button>
-          </div>
-        </div>
-
-        {/* Current Blocks */}
-        <h2 className="font-display text-lg tracking-widest uppercase text-foreground mb-4">
-          <Calendar className="inline w-4 h-4 mr-2" />Current Blocks
-        </h2>
-        {blocks.length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm">
-            No blocks set. Your calendar is fully open.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {blocks.map(block => (
-              <div key={block.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-display tracking-wider text-sm text-foreground">{block.label || 'Blocked'}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {format(new Date(block.start_date), 'MMM d')} — {format(new Date(block.end_date), 'MMM d, yyyy')}
-                    {!block.block_all_day && ` · ${block.blocked_start_time} – ${block.blocked_end_time}`}
-                    {block.block_all_day && ' · All Day'}
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => removeBlock(block)} className="text-destructive hover:text-destructive">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+        <Button asChild className="h-11 bg-blue-600 px-6 font-bold text-white hover:bg-blue-700">
+          <Link to="/coach/settings?section=calendar">
+            <Settings className="h-4 w-4" />
+            Manage availability rules
+          </Link>
+        </Button>
       </div>
-      {confirmDialog}
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <SummaryCard title="Weekly Bookable Windows" icon={Clock}>
+          {availableDays.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-500">
+              No weekly availability is active yet.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {availableDays.map(({ day, windows }) => (
+                <div key={day} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-sm font-extrabold text-slate-950">{day}</p>
+                  <div className="mt-2 space-y-1">
+                    {windows.map((window, index) => (
+                      <p key={`${day}-${index}`} className="text-sm font-semibold text-slate-700">
+                        {formatTime(window.start)} - {formatTime(window.end)}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SummaryCard>
+
+        <SummaryCard title="Unavailable Time" icon={Ban}>
+          {blocks.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-500">
+              No blackout ranges are active.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {blocks.slice(0, 6).map((block) => (
+                <div key={block.id} className="rounded-lg border border-amber-100 bg-amber-50/70 p-3">
+                  <p className="truncate text-sm font-extrabold text-slate-950">{block.label || 'Unavailable'}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-600">{formatBlockRange(block)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </SummaryCard>
+      </div>
+
+      <SummaryCard title="Live Schedule" icon={CalendarDays}>
+        <div className="grid gap-3 md:grid-cols-7">
+          {DAYS.map((day) => {
+            const windows = windowsFor(coach?.availability?.[day]);
+            return (
+              <div key={day} className="min-h-[140px] rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">{day.slice(0, 3)}</p>
+                {windows.length ? (
+                  <div className="mt-3 space-y-2">
+                    {windows.map((window, index) => (
+                      <div key={`${day}-preview-${index}`} className="rounded-md bg-blue-100 px-2 py-2 text-xs font-bold text-blue-700">
+                        {formatTime(window.start)}
+                        <br />
+                        {formatTime(window.end)}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-8 text-xs font-semibold text-slate-400">Off</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SummaryCard>
     </div>
   );
 }

@@ -43,7 +43,7 @@ const navItems = [
     icon: ClipboardList,
     isActive: ({ pathname, search }) => pathname === '/coach/sessions' && search.includes('bookings'),
   },
-  { label: 'Calendar', to: '/coach/schedule', icon: CalendarDays, isActive: ({ pathname }) => pathname === '/coach/schedule' },
+  { label: 'Schedule', to: '/coach/schedule', icon: CalendarDays, isActive: ({ pathname }) => pathname === '/coach/schedule' },
   {
     label: 'Sessions',
     to: '/coach/sessions',

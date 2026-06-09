@@ -41,7 +41,7 @@ const statCards = [
   {
     label: 'Upcoming Sessions',
     value: '8',
-    action: 'View calendar',
+    action: 'View schedule',
     href: '/coach/schedule',
     icon: CalendarDays,
     tone: 'blue',
@@ -309,7 +309,7 @@ function FirstLoginCoachStarter() {
               Create a demo coaching profile for {displayName}
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              This creates a hidden coach profile linked to your account so Profile Builder, Calendar, Payments,
+              This creates a hidden coach profile linked to your account so Profile Builder, Schedule, Payments,
               and Sessions have a real coach record to work with. You can edit every field before an admin activates it.
             </p>
           </div>
