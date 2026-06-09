@@ -294,16 +294,16 @@ function SectionButton({ section, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-start gap-4 rounded-lg px-4 py-4 text-left transition ${
+      className={`flex min-h-[68px] w-full items-center gap-3 rounded-md border px-3 py-3 text-left transition ${
         active
-          ? 'bg-blue-50 text-blue-700 shadow-sm'
-          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950'
+          ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
+          : 'border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950'
       }`}
     >
-      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${active ? 'text-blue-600' : 'text-slate-700'}`} />
+      <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-blue-600' : 'text-slate-700'}`} />
       <span className="min-w-0">
         <span className="block text-sm font-bold">{section.label}</span>
-        <span className={`mt-1 block text-xs ${active ? 'text-blue-700/75' : 'text-slate-500'}`}>
+        <span className={`mt-1 hidden text-xs sm:block ${active ? 'text-blue-700/75' : 'text-slate-500'}`}>
           {section.sub}
         </span>
       </span>
@@ -685,23 +685,23 @@ export default function CoachSettings() {
         </p>
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:min-h-[720px]">
-          <div className="space-y-1">
+      <div className="min-w-0 space-y-4">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
             {settingsSections.map((section) => (
-              <SectionButton
-                key={section.id}
-                section={section}
-                active={activeSection === section.id}
-                onClick={() => setActiveSection(section.id)}
-              />
-            ))}
+                <SectionButton
+                  key={section.id}
+                  section={section}
+                  active={activeSection === section.id}
+                  onClick={() => setActiveSection(section.id)}
+                />
+              ))}
           </div>
-        </aside>
+        </section>
 
         {activeSection === 'calendar' ? (
           <div className="min-w-0 space-y-4">
-            <div className="flex justify-end gap-4 sm:-mt-14">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
               <span className="hidden self-center text-sm font-medium text-slate-500 sm:inline">{lastSavedAvailability}</span>
               <Button
                 type="button"
