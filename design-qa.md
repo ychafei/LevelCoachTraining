@@ -1,3 +1,37 @@
+## Coach Settings Coach Profile Image-To-Code QA
+
+**Source Visual Truth**
+- `/Users/yousef/.codex/generated_images/019ea3aa-90ef-7781-bd5c-2d825a502cdb/ig_00f7ca53b0cbe468016a284af41944819381f1251e33b21463.png`
+
+**Implementation Evidence**
+- Route captured: `http://127.0.0.1:5174/coach/settings`
+- Desktop screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-profile-final.png`
+- Mobile screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-profile-mobile.png`
+- Desktop viewport used for comparison: `2048 x 1152`
+- Mobile viewport used for responsive check: `390 x 844`
+- State: authenticated coach settings route with the internal `Coach Profile` rail item selected by default.
+
+**Focused Region Comparison Evidence**
+- The reviewed footer from the source mockup was intentionally removed per request; browser text checks found `0` matches for the reviewed copy and `0` matches for `Under review`.
+- The top-right avatar, Profile Photo card avatar, and Live Profile Preview avatar all resolve to the same uploaded `coach.photo_url`.
+- The settings rail, Public Profile, Profile Photo, Specializations, Bio & Quote, Programs & Rates, and Live Profile Preview cards are present and match the supplied card hierarchy.
+- Controls are live: profile fields autosave on blur, profile visibility toggles, image upload saves to Appwrite and dispatches the shared coach-profile update event, specialization chips add/remove, and program rows add/remove/edit.
+- Responsive behavior: mobile stacks the settings rail and cards without text or control overlap.
+
+**Findings**
+- No actionable P0/P1/P2 issues remain.
+- P3 follow-up: program rates are currently local UI state because the existing `coaches` collection has no dedicated program/rate schema.
+
+**Implementation Checklist**
+- `npm run lint` passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+- Browser QA captured authenticated desktop and mobile states.
+
+final result: passed
+
+---
+
 ## Coach Settings Image-To-Code QA
 
 **Source Visual Truth**

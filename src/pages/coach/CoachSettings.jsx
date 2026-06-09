@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -21,9 +23,16 @@ import {
   CalendarDays,
   CheckCircle2,
   CreditCard,
+  DollarSign,
+  Eye,
   Lock,
+  MapPin,
   MoreVertical,
+  Plus,
   ShieldCheck,
+  Star,
+  Tag,
+  Trash2,
   Upload,
   UserRound,
   WalletCards,
@@ -40,6 +49,20 @@ const settingsSections = [
   { id: 'payments', label: 'Payments', sub: 'Payment methods & payouts', icon: CreditCard },
   { id: 'privacy', label: 'Privacy & Safety', sub: 'Control your privacy', icon: ShieldCheck },
   { id: 'security', label: 'Security', sub: 'Password & 2FA', icon: Lock },
+];
+
+const DEFAULT_SPECIALIZATIONS = [
+  'Speed & Agility',
+  'Strength & Conditioning',
+  'Soccer Skills',
+  '1-on-1 Sessions',
+  'Small Group Training',
+];
+
+const DEFAULT_PROGRAMS = [
+  { id: 'intro', name: 'Intro Session', duration: '30', price: '49' },
+  { id: 'private', name: 'Private Session', duration: '60', price: '99' },
+  { id: 'group', name: 'Small Group', duration: '60', price: '69' },
 ];
 
 function splitName(name = '') {
@@ -65,6 +88,41 @@ function initialsFor(name) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+}
+
+function coachDisplayName(coach, fallback = 'Demo Coach') {
+  return [coach?.first_name, coach?.last_name].filter(Boolean).join(' ')
+    || coach?.name
+    || coach?.full_name
+    || fallback;
+}
+
+function toProfileDraft(coach, fallbackEmail = '') {
+  return {
+    displayName: coachDisplayName(coach),
+    email: coach?.email || fallbackEmail,
+    training_area: coach?.training_area || 'Metro Detroit speed, strength, and skills development',
+    bio: coach?.bio || 'I help athletes build sharper movement, stronger habits, and more confidence through structured private training.',
+    quote: coach?.quote || 'Progress you can measure. Confidence you can feel.',
+    specializations: Array.isArray(coach?.specializations) && coach.specializations.length
+      ? coach.specializations
+      : DEFAULT_SPECIALIZATIONS,
+    is_active: coach?.is_active !== false,
+  };
+}
+
+function profilePayloadFromDraft(draft) {
+  const nameParts = splitName(draft.displayName);
+  return {
+    first_name: nameParts.first_name || 'Demo',
+    last_name: nameParts.last_name || 'Coach',
+    email: draft.email,
+    training_area: draft.training_area,
+    bio: draft.bio,
+    quote: draft.quote,
+    specializations: draft.specializations || [],
+    is_active: draft.is_active !== false,
+  };
 }
 
 function Card({ title, icon: Icon, children, className = '' }) {
@@ -159,20 +217,42 @@ function CalendarConnection({ icon: Icon, name, email, connected, onMenu }) {
   );
 }
 
+function CoachAvatar({ src, initials, size = 'md', alt = 'Coach profile' }) {
+  const sizeClass = {
+    sm: 'h-14 w-14 text-sm',
+    md: 'h-24 w-24 text-xl',
+    lg: 'h-32 w-32 text-2xl',
+  }[size];
+
+  return (
+    <span className={`grid ${sizeClass} shrink-0 place-items-center overflow-hidden rounded-full bg-slate-100 font-bold text-slate-600`}>
+      {src ? (
+        <img src={src} alt={alt} className="h-full w-full object-cover" />
+      ) : (
+        initials
+      )}
+    </span>
+  );
+}
+
 export default function CoachSettings() {
   const { user, refetchUser } = useAuth();
   const fileInputRef = useRef(null);
-  const [activeSection, setActiveSection] = useState('account');
+  const [activeSection, setActiveSection] = useState('profile');
   const [coach, setCoach] = useState(null);
   const [stripeAccount, setStripeAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [identity, setIdentity] = useState({
     fullName: '',
     email: '',
     phone: '',
   });
+  const [profileDraft, setProfileDraft] = useState(() => toProfileDraft(null));
+  const [specializationInput, setSpecializationInput] = useState('');
+  const [programs, setPrograms] = useState(DEFAULT_PROGRAMS);
   const [notifications, setNotifications] = useState({
     bookingRequests: true,
     sessionReminders: true,
@@ -195,6 +275,9 @@ export default function CoachSettings() {
   const coachEmail = coach?.email || user?.email || 'demo.coach@levelcoach.training';
   const avatarUrl = coach?.photo_url || user?.photo_url || '';
   const stripeReady = !!stripeAccount && stripeAccount.charges_enabled && stripeAccount.payouts_enabled;
+  const previewName = profileDraft.displayName || displayName;
+  const previewInitials = initialsFor(previewName);
+  const previewTags = (profileDraft.specializations || []).slice(0, 3);
 
   useEffect(() => {
     setIdentity({
@@ -202,6 +285,13 @@ export default function CoachSettings() {
       email: user?.email || '',
       phone: user?.phone || '',
     });
+    if (!coach) {
+      setProfileDraft((current) => ({
+        ...current,
+        displayName: displayNameFor(user),
+        email: user?.email || current.email,
+      }));
+    }
   }, [user]);
 
   useEffect(() => {
@@ -221,6 +311,7 @@ export default function CoachSettings() {
         ]);
         if (cancelled) return;
         setCoach(coachRow);
+        setProfileDraft(toProfileDraft(coachRow, user?.email || ''));
         setStripeAccount(stripeRows?.[0] || null);
       } catch (err) {
         console.error('CoachSettings load failed', err);
@@ -249,6 +340,66 @@ export default function CoachSettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveProfile = async (nextDraft = profileDraft, { silent = false } = {}) => {
+    if (!coach) return null;
+    setSavingProfile(true);
+    try {
+      const payload = profilePayloadFromDraft(nextDraft);
+      const updated = await coachRepo.update(coach.id, payload);
+      const nextCoach = { ...coach, ...updated, ...payload };
+      setCoach(nextCoach);
+      setProfileDraft(toProfileDraft(nextCoach, user?.email || ''));
+      if (!silent) toast.success('Coach profile saved');
+      return nextCoach;
+    } catch (err) {
+      console.error('CoachSettings profile save failed', err);
+      if (!silent) toast.error('Could not save coach profile.');
+      return null;
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const updateProfileDraft = (patch) => {
+    setProfileDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const addSpecialization = async () => {
+    const value = specializationInput.trim();
+    if (!value) return;
+    const nextSpecializations = Array.from(new Set([...(profileDraft.specializations || []), value]));
+    const nextDraft = { ...profileDraft, specializations: nextSpecializations };
+    setSpecializationInput('');
+    setProfileDraft(nextDraft);
+    await saveProfile(nextDraft, { silent: true });
+  };
+
+  const removeSpecialization = async (value) => {
+    const nextDraft = {
+      ...profileDraft,
+      specializations: (profileDraft.specializations || []).filter((item) => item !== value),
+    };
+    setProfileDraft(nextDraft);
+    await saveProfile(nextDraft, { silent: true });
+  };
+
+  const updateProgram = (id, patch) => {
+    setPrograms((current) => current.map((program) => (
+      program.id === id ? { ...program, ...patch } : program
+    )));
+  };
+
+  const addProgram = () => {
+    setPrograms((current) => [
+      ...current,
+      { id: `program-${Date.now()}`, name: 'New Program', duration: '60', price: '79' },
+    ]);
+  };
+
+  const removeProgram = (id) => {
+    setPrograms((current) => current.filter((program) => program.id !== id));
   };
 
   const uploadPhoto = async (event) => {
@@ -304,6 +455,245 @@ export default function CoachSettings() {
           </div>
         </aside>
 
+        {activeSection === 'profile' ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+              <Card title="Public Profile" icon={UserRound}>
+                <div className="space-y-4">
+                  <Field label="Display Name">
+                    <Input
+                      value={profileDraft.displayName}
+                      onChange={(event) => updateProfileDraft({ displayName: event.target.value })}
+                      onBlur={() => saveProfile(profileDraft, { silent: true })}
+                      className="h-10 border-slate-200 bg-white"
+                    />
+                  </Field>
+
+                  <Field label="Public Email">
+                    <div className="relative">
+                      <Input
+                        value={profileDraft.email}
+                        onChange={(event) => updateProfileDraft({ email: event.target.value })}
+                        onBlur={() => saveProfile(profileDraft, { silent: true })}
+                        className="h-10 border-slate-200 bg-white pr-24"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <StatusPill>{coach?.email_verified_at ? 'Verified' : 'Saved'}</StatusPill>
+                      </span>
+                    </div>
+                  </Field>
+
+                  <Field label="Training Area">
+                    <Input
+                      value={profileDraft.training_area}
+                      onChange={(event) => updateProfileDraft({ training_area: event.target.value })}
+                      onBlur={() => saveProfile(profileDraft, { silent: true })}
+                      className="h-10 border-slate-200 bg-white"
+                    />
+                  </Field>
+
+                  <div className="flex items-center justify-between gap-4 pt-1">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-950">Profile Visibility</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Allow athletes to view your public profile</p>
+                    </div>
+                    <Switch
+                      checked={profileDraft.is_active !== false}
+                      onCheckedChange={(value) => {
+                        const nextDraft = { ...profileDraft, is_active: value };
+                        setProfileDraft(nextDraft);
+                        void saveProfile(nextDraft, { silent: true });
+                      }}
+                      className="data-[state=checked]:bg-blue-600"
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Profile Photo">
+                <div className="flex flex-col items-center text-center">
+                  <CoachAvatar src={avatarUrl} initials={previewInitials} size="lg" />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={uploadPhoto}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || !coach}
+                    className="mt-7 h-11 w-full max-w-[240px] border-slate-200 font-bold"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploading ? 'Uploading...' : 'Upload new photo'}
+                  </Button>
+                  <p className="mt-4 text-xs font-medium text-slate-500">JPG, PNG or GIF. Max 5MB.</p>
+                </div>
+              </Card>
+
+              <Card title="Specializations" icon={Tag}>
+                <div className="flex flex-wrap gap-2">
+                  {(profileDraft.specializations || []).map((item) => (
+                    <Badge
+                      key={item}
+                      variant="secondary"
+                      className="gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-200"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeSpecialization(item)}
+                        className="text-slate-500 hover:text-slate-950"
+                        aria-label={`Remove ${item}`}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="mt-6 flex gap-2">
+                  <Input
+                    value={specializationInput}
+                    onChange={(event) => setSpecializationInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void addSpecialization();
+                      }
+                    }}
+                    placeholder="Add specialization"
+                    className="h-10 border-slate-200 bg-white"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addSpecialization}
+                    className="h-10 border-slate-200 font-bold"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+              <Card title="Bio & Quote">
+                <div className="space-y-4">
+                  <Field label="Bio">
+                    <Textarea
+                      value={profileDraft.bio}
+                      onChange={(event) => updateProfileDraft({ bio: event.target.value })}
+                      onBlur={() => saveProfile(profileDraft, { silent: true })}
+                      className="min-h-[108px] resize-none border-slate-200 bg-white text-sm"
+                    />
+                  </Field>
+                  <Field label="Quote">
+                    <Input
+                      value={profileDraft.quote}
+                      onChange={(event) => updateProfileDraft({ quote: event.target.value })}
+                      onBlur={() => saveProfile(profileDraft, { silent: true })}
+                      className="h-10 border-slate-200 bg-white"
+                    />
+                  </Field>
+                </div>
+              </Card>
+
+              <Card title="Programs & Rates" icon={DollarSign}>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_86px_76px_32px] gap-2 text-xs font-bold text-slate-600">
+                    <span>Program</span>
+                    <span>Duration</span>
+                    <span>Price</span>
+                    <span />
+                  </div>
+                  {programs.map((program) => (
+                    <div key={program.id} className="grid grid-cols-[minmax(0,1fr)_86px_76px_32px] items-center gap-2">
+                      <Input
+                        value={program.name}
+                        onChange={(event) => updateProgram(program.id, { name: event.target.value })}
+                        className="h-9 border-0 bg-transparent px-0 text-sm font-medium shadow-none focus-visible:ring-0"
+                      />
+                      <Select
+                        value={program.duration}
+                        onValueChange={(value) => updateProgram(program.id, { duration: value })}
+                      >
+                        <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30">30 min</SelectItem>
+                          <SelectItem value="45">45 min</SelectItem>
+                          <SelectItem value="60">60 min</SelectItem>
+                          <SelectItem value="90">90 min</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex h-9 items-center rounded-md border border-slate-200 bg-white px-2">
+                        <span className="text-xs font-bold text-slate-500">$</span>
+                        <input
+                          value={program.price}
+                          onChange={(event) => updateProgram(program.id, { price: event.target.value.replace(/[^\d]/g, '') })}
+                          className="min-w-0 flex-1 bg-transparent pl-1 text-sm font-semibold text-slate-950 outline-none"
+                          aria-label={`${program.name} price`}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeProgram(program.id)}
+                        className="grid h-9 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-red-600"
+                        aria-label={`Remove ${program.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addProgram}
+                    className="mt-1 h-10 border-slate-200 font-bold text-blue-700 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add program
+                  </Button>
+                </div>
+              </Card>
+
+              <Card title="Live Profile Preview" icon={Eye}>
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-start gap-4">
+                    <CoachAvatar src={avatarUrl} initials={previewInitials} size="sm" alt={`${previewName} profile`} />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-lg font-extrabold text-slate-950">{previewName}</h3>
+                      <div className="mt-1 flex items-center gap-1 text-sm text-slate-700">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                        <span className="font-semibold">4.9</span>
+                        <span className="text-slate-500">(112 reviews)</span>
+                      </div>
+                      <p className="mt-1 flex items-center gap-1 text-sm text-slate-600">
+                        <MapPin className="h-4 w-4 text-blue-600" />
+                        Metro Detroit
+                      </p>
+                    </div>
+                  </div>
+                  <div className="my-4 border-t border-slate-200" />
+                  <p className="line-clamp-1 text-xs text-slate-500">
+                    {previewTags.join(' · ') || 'Private training'}
+                  </p>
+                  <Button className="mt-4 h-11 w-full bg-blue-600 font-bold text-white hover:bg-blue-700">
+                    Book intro
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            {savingProfile && (
+              <p className="px-1 text-xs font-semibold text-slate-500">Saving coach profile...</p>
+            )}
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             <Card title="Account Identity" icon={UserRound}>
@@ -360,13 +750,7 @@ export default function CoachSettings() {
 
             <Card title="Profile Photo">
               <div className="flex flex-col items-center text-center">
-                <span className="grid h-24 w-24 place-items-center overflow-hidden rounded-full bg-slate-100 text-xl font-bold text-slate-600">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="Coach profile" className="h-full w-full object-cover" />
-                  ) : (
-                    initials
-                  )}
-                </span>
+                <CoachAvatar src={avatarUrl} initials={initials} />
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -589,6 +973,7 @@ export default function CoachSettings() {
             <span>Your account is secure. We use industry-standard encryption to protect your data.</span>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
