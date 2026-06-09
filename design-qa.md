@@ -1,3 +1,39 @@
+## Coach Settings Calendar & Availability Image-To-Code QA
+
+**Source Visual Truth**
+- `/Users/yousef/.codex/generated_images/019ea3aa-90ef-7781-bd5c-2d825a502cdb/ig_00f7ca53b0cbe468016a284f3d5e1081939b2755d51255ca0e.png`
+
+**Implementation Evidence**
+- Route captured: `http://127.0.0.1:5174/coach/settings`
+- Desktop screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-calendar-final.png`
+- Mobile screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-calendar-mobile.png`
+- Full mobile screenshot: `/Users/yousef/Documents/LCTV1/LCTrainings/output/coach-settings-calendar-mobile-full.png`
+- Desktop viewport used for comparison: `2048 x 1152`
+- Mobile viewport used for responsive check: `390 x 844`
+- State: authenticated coach settings route with the internal `Calendar & Availability` rail item selected by default.
+
+**Focused Region Comparison Evidence**
+- The settings rail, Weekly Availability, Calendar Sync, Booking Rules, Time Off & Blackouts, Session Types, and Calendar Preview cards are present and match the supplied hierarchy.
+- Weekly availability controls are live Select-based time controls, not native time inputs; browser QA found `0` `input[type="time"]` controls.
+- Weekly availability persists to the existing coach `availability` payload through `coachRepo.update`.
+- Time Off & Blackouts and Session Types are interactive UI controls, with add/remove and toggle behavior matching the mockup.
+- Calendar Preview reflects the active weekly availability windows and blocked time surfaces.
+- Responsive behavior: mobile stacks the settings rail and cards without page-level horizontal overflow; browser QA measured `scrollWidth` equal to `390`.
+
+**Findings**
+- No actionable P0/P1/P2 visual, route, or responsive issues remain.
+- P3 follow-up: calendar sync, blackout dates, booking rules, and session type changes are local UI state until dedicated backend fields/collections are added.
+
+**Implementation Checklist**
+- `npm run lint` passed.
+- `npm run build` passed.
+- `git diff --check` passed.
+- Browser QA captured authenticated desktop, mobile viewport, and full mobile states.
+
+final result: passed
+
+---
+
 ## Coach Settings Coach Profile Image-To-Code QA
 
 **Source Visual Truth**

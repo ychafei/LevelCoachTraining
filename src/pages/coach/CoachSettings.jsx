@@ -20,8 +20,10 @@ import {
 } from '@/components/ui/select';
 import {
   Bell,
+  Ban,
   CalendarDays,
   CheckCircle2,
+  Clock,
   CreditCard,
   DollarSign,
   Eye,
@@ -63,6 +65,82 @@ const DEFAULT_PROGRAMS = [
   { id: 'intro', name: 'Intro Session', duration: '30', price: '49' },
   { id: 'private', name: 'Private Session', duration: '60', price: '99' },
   { id: 'group', name: 'Small Group', duration: '60', price: '69' },
+];
+
+const WEEK_DAYS = [
+  { key: 'Monday', short: 'Mon', date: 'Mon 6/8' },
+  { key: 'Tuesday', short: 'Tue', date: 'Tue 6/9' },
+  { key: 'Wednesday', short: 'Wed', date: 'Wed 6/10' },
+  { key: 'Thursday', short: 'Thu', date: 'Thu 6/11' },
+  { key: 'Friday', short: 'Fri', date: 'Fri 6/12' },
+  { key: 'Saturday', short: 'Sat', date: 'Sat 6/13' },
+  { key: 'Sunday', short: 'Sun', date: 'Sun 6/14' },
+];
+
+const DEFAULT_AVAILABILITY = {
+  Monday: { enabled: true, start: '06:00', end: '10:00', windows: [{ start: '06:00', end: '10:00' }, { start: '16:00', end: '19:00' }] },
+  Tuesday: { enabled: true, start: '07:00', end: '11:00', windows: [{ start: '07:00', end: '11:00' }] },
+  Wednesday: { enabled: false, start: '', end: '', windows: [] },
+  Thursday: { enabled: true, start: '17:00', end: '20:00', windows: [{ start: '17:00', end: '20:00' }] },
+  Friday: { enabled: true, start: '06:00', end: '12:00', windows: [{ start: '06:00', end: '12:00' }] },
+  Saturday: { enabled: true, start: '09:00', end: '13:00', windows: [{ start: '09:00', end: '13:00' }] },
+  Sunday: { enabled: false, start: '', end: '', windows: [] },
+};
+
+const DEFAULT_BLACKOUTS = [
+  { id: 'family-event', date: 'Jun 12, 2026', label: 'Family event' },
+  { id: 'tournament-travel', date: 'Jun 19 - Jun 21, 2026', label: 'Tournament travel' },
+];
+
+const DEFAULT_SESSION_TYPES = [
+  { id: 'intro-session', name: 'Intro Session', duration: '30', available: true },
+  { id: 'private-session', name: 'Private Session', duration: '60', available: true },
+  { id: 'small-group-training', name: 'Small Group Training', duration: '60', available: true },
+];
+
+const BOOKING_RULE_OPTIONS = {
+  introDuration: [
+    { value: '15', label: '15 minutes' },
+    { value: '30', label: '30 minutes' },
+    { value: '45', label: '45 minutes' },
+    { value: '60', label: '60 minutes' },
+  ],
+  buffer: [
+    { value: '0', label: 'No buffer' },
+    { value: '15', label: '15 minutes' },
+    { value: '30', label: '30 minutes' },
+  ],
+  minimumNotice: [
+    { value: '12 hours', label: '12 hours' },
+    { value: '24 hours', label: '24 hours' },
+    { value: '48 hours', label: '48 hours' },
+  ],
+  maxAdvance: [
+    { value: '14 days', label: '14 days' },
+    { value: '30 days', label: '30 days' },
+    { value: '60 days', label: '60 days' },
+  ],
+};
+
+const PREVIEW_TIMES = ['6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM'];
+
+const TIME_OPTIONS = [
+  '06:00',
+  '07:00',
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+  '17:00',
+  '18:00',
+  '19:00',
+  '20:00',
+  '21:00',
 ];
 
 function splitName(name = '') {
@@ -125,9 +203,62 @@ function profilePayloadFromDraft(draft) {
   };
 }
 
+function normalizeAvailability(raw = {}) {
+  const normalized = {};
+  WEEK_DAYS.forEach(({ key }) => {
+    const source = raw?.[key] || DEFAULT_AVAILABILITY[key] || {};
+    const fallback = DEFAULT_AVAILABILITY[key] || { enabled: false, windows: [] };
+    const enabled = source.enabled ?? fallback.enabled ?? false;
+    const sourceWindows = Array.isArray(source.windows) && source.windows.length
+      ? source.windows
+      : source.start && source.end
+        ? [{ start: source.start, end: source.end }]
+        : fallback.windows;
+    const windows = enabled
+      ? sourceWindows.slice(0, 2).map((window) => ({
+        start: window.start || '',
+        end: window.end || '',
+      }))
+      : [];
+    normalized[key] = {
+      enabled,
+      start: enabled ? windows[0]?.start || source.start || fallback.start || '' : '',
+      end: enabled ? windows[0]?.end || source.end || fallback.end || '' : '',
+      windows,
+    };
+  });
+  return normalized;
+}
+
+function formatTime(value) {
+  if (!value) return '';
+  const [hourText, minute = '00'] = value.split(':');
+  const hour = Number(hourText);
+  if (Number.isNaN(hour)) return value;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minute} ${suffix}`;
+}
+
+function timeToTop(value) {
+  if (!value) return 0;
+  const [hourText, minuteText = '0'] = value.split(':');
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return Math.max(0, Math.min(100, (((hour + minute / 60) - 6) / 15) * 100));
+}
+
+function timeToHeight(start, end) {
+  if (!start || !end) return 16;
+  const [startHour, startMin = '0'] = start.split(':').map(Number);
+  const [endHour, endMin = '0'] = end.split(':').map(Number);
+  const duration = (endHour + endMin / 60) - (startHour + startMin / 60);
+  return Math.max(14, Math.min(42, (duration / 15) * 100));
+}
+
 function Card({ title, icon: Icon, children, className = '' }) {
   return (
-    <section className={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
+    <section className={`min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-bold text-slate-950">{title}</h2>
         {Icon && <Icon className="h-5 w-5 text-slate-800" />}
@@ -238,12 +369,13 @@ function CoachAvatar({ src, initials, size = 'md', alt = 'Coach profile' }) {
 export default function CoachSettings() {
   const { user, refetchUser } = useAuth();
   const fileInputRef = useRef(null);
-  const [activeSection, setActiveSection] = useState('profile');
+  const [activeSection, setActiveSection] = useState('calendar');
   const [coach, setCoach] = useState(null);
   const [stripeAccount, setStripeAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [identity, setIdentity] = useState({
     fullName: '',
@@ -253,6 +385,10 @@ export default function CoachSettings() {
   const [profileDraft, setProfileDraft] = useState(() => toProfileDraft(null));
   const [specializationInput, setSpecializationInput] = useState('');
   const [programs, setPrograms] = useState(DEFAULT_PROGRAMS);
+  const [availability, setAvailability] = useState(() => normalizeAvailability(DEFAULT_AVAILABILITY));
+  const [blackouts, setBlackouts] = useState(DEFAULT_BLACKOUTS);
+  const [sessionTypes, setSessionTypes] = useState(DEFAULT_SESSION_TYPES);
+  const [lastSavedAvailability, setLastSavedAvailability] = useState('Last saved 2 minutes ago');
   const [notifications, setNotifications] = useState({
     bookingRequests: true,
     sessionReminders: true,
@@ -264,6 +400,8 @@ export default function CoachSettings() {
     introDuration: '30',
     bufferBefore: '15',
     bufferAfter: '15',
+    minimumNotice: '24 hours',
+    maxAdvance: '30 days',
     requireApproval: true,
   });
   const [securityPrefs, setSecurityPrefs] = useState({
@@ -312,6 +450,7 @@ export default function CoachSettings() {
         if (cancelled) return;
         setCoach(coachRow);
         setProfileDraft(toProfileDraft(coachRow, user?.email || ''));
+        setAvailability(normalizeAvailability(coachRow?.availability || DEFAULT_AVAILABILITY));
         setStripeAccount(stripeRows?.[0] || null);
       } catch (err) {
         console.error('CoachSettings load failed', err);
@@ -402,6 +541,111 @@ export default function CoachSettings() {
     setPrograms((current) => current.filter((program) => program.id !== id));
   };
 
+  const updateAvailabilityDay = (day, patch) => {
+    setAvailability((current) => {
+      const currentDay = current[day] || { enabled: false, windows: [] };
+      const nextDay = { ...currentDay, ...patch };
+      if (patch.windows) {
+        nextDay.start = patch.windows[0]?.start || '';
+        nextDay.end = patch.windows[0]?.end || '';
+      }
+      if (patch.enabled === true && !nextDay.windows.length) {
+        nextDay.windows = [{ start: '08:00', end: '12:00' }];
+        nextDay.start = '08:00';
+        nextDay.end = '12:00';
+      }
+      if (patch.enabled === false) {
+        nextDay.windows = [];
+        nextDay.start = '';
+        nextDay.end = '';
+      }
+      return { ...current, [day]: nextDay };
+    });
+  };
+
+  const updateAvailabilityWindow = (day, index, field, value) => {
+    setAvailability((current) => {
+      const currentDay = current[day] || { enabled: true, windows: [] };
+      const windows = [...(currentDay.windows || [])];
+      windows[index] = { ...(windows[index] || { start: '', end: '' }), [field]: value };
+      return {
+        ...current,
+        [day]: {
+          ...currentDay,
+          enabled: true,
+          windows,
+          start: windows[0]?.start || '',
+          end: windows[0]?.end || '',
+        },
+      };
+    });
+  };
+
+  const addAvailabilityWindow = (day) => {
+    const currentDay = availability[day] || { enabled: false, windows: [] };
+    const windows = currentDay.windows || [];
+    if (windows.length >= 2) {
+      toast.info('Two windows are shown in this settings view.');
+      return;
+    }
+    const nextWindow = windows.length === 0
+      ? { start: '08:00', end: '12:00' }
+      : { start: '16:00', end: '19:00' };
+    updateAvailabilityDay(day, {
+      enabled: true,
+      windows: [...windows, nextWindow],
+    });
+  };
+
+  const saveAvailability = async () => {
+    if (!coach?.id) {
+      toast.error('Coach profile is still loading.');
+      return;
+    }
+    setSavingAvailability(true);
+    try {
+      const normalized = normalizeAvailability(availability);
+      const updated = await coachRepo.update(coach.id, { availability: normalized });
+      setCoach((current) => ({ ...(current || coach), ...updated, availability: normalized }));
+      setAvailability(normalized);
+      setLastSavedAvailability('Saved just now');
+      toast.success('Availability saved');
+    } catch (err) {
+      console.error('CoachSettings availability save failed', err);
+      toast.error('Could not save availability.');
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
+  const addBlackout = () => {
+    setBlackouts((current) => [
+      ...current,
+      { id: `blackout-${Date.now()}`, date: 'Jun 26, 2026', label: 'Unavailable' },
+    ]);
+  };
+
+  const removeBlackout = (id) => {
+    setBlackouts((current) => current.filter((block) => block.id !== id));
+  };
+
+  const updateSessionType = (id, patch) => {
+    setSessionTypes((current) => current.map((type) => (
+      type.id === id ? { ...type, ...patch } : type
+    )));
+  };
+
+  const addSessionType = () => {
+    setSessionTypes((current) => [
+      ...current,
+      { id: `session-${Date.now()}`, name: 'New Session Type', duration: '60', available: true },
+    ]);
+  };
+
+  const removeSessionType = (id) => {
+    setSessionTypes((current) => current.filter((type) => type.id !== id));
+  };
+
   const uploadPhoto = async (event) => {
     const file = event.target.files?.[0];
     if (!file || !coach) return;
@@ -441,8 +685,8 @@ export default function CoachSettings() {
         </p>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:min-h-[720px]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm xl:min-h-[720px]">
           <div className="space-y-1">
             {settingsSections.map((section) => (
               <SectionButton
@@ -455,8 +699,329 @@ export default function CoachSettings() {
           </div>
         </aside>
 
-        {activeSection === 'profile' ? (
-          <div className="space-y-4">
+        {activeSection === 'calendar' ? (
+          <div className="min-w-0 space-y-4">
+            <div className="flex justify-end gap-4 sm:-mt-14">
+              <span className="hidden self-center text-sm font-medium text-slate-500 sm:inline">{lastSavedAvailability}</span>
+              <Button
+                type="button"
+                onClick={saveAvailability}
+                disabled={savingAvailability}
+                className="h-11 bg-blue-600 px-7 font-bold text-white hover:bg-blue-700"
+              >
+                {savingAvailability ? 'Saving...' : 'Save availability'}
+              </Button>
+            </div>
+
+            <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <Card title="Weekly Availability" icon={Clock} className="2xl:row-span-2">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[670px]">
+                    <div className="grid grid-cols-[48px_78px_174px_174px_118px] gap-3 pb-3 text-xs font-bold text-slate-500">
+                      <span>Day</span>
+                      <span>Available</span>
+                      <span>Window 1</span>
+                      <span>Window 2</span>
+                      <span>Actions</span>
+                    </div>
+                    <div className="space-y-3">
+                      {WEEK_DAYS.map(({ key, short }) => {
+                        const day = availability[key] || { enabled: false, windows: [] };
+                        const windows = day.enabled ? day.windows || [] : [];
+                        return (
+                          <div key={key} className="grid grid-cols-[48px_78px_174px_174px_118px] items-center gap-3">
+                            <p className="text-sm font-bold text-slate-700">{short}</p>
+                            <Switch
+                              checked={day.enabled}
+                              onCheckedChange={(value) => updateAvailabilityDay(key, { enabled: value })}
+                              className="data-[state=checked]:bg-blue-600"
+                            />
+                            {[0, 1].map((index) => {
+                              const window = windows[index];
+                              return window ? (
+                                <div key={index} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                                  <Select
+                                    value={window.start}
+                                    onValueChange={(value) => updateAvailabilityWindow(key, index, 'start', value)}
+                                  >
+                                    <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {TIME_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <span className="text-slate-400">-</span>
+                                  <Select
+                                    value={window.end}
+                                    onValueChange={(value) => updateAvailabilityWindow(key, index, 'end', value)}
+                                  >
+                                    <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {TIME_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{formatTime(option)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              ) : (
+                                <div key={index} className="flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400">
+                                  -
+                                </div>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              onClick={() => addAvailabilityWindow(key)}
+                              className="inline-flex items-center justify-start gap-1 text-sm font-bold text-blue-700 hover:text-blue-800"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add window
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Calendar Sync" icon={CalendarDays}>
+                <div className="space-y-3">
+                  <CalendarConnection
+                    icon={CalendarDays}
+                    name="Google Calendar"
+                    email={coachEmail}
+                    connected
+                    onMenu={() => toast.info('Google Calendar connection options')}
+                  />
+                  <CalendarConnection
+                    icon={CalendarDays}
+                    name="Outlook Calendar"
+                    email={coachEmail.replace('@', '+calendar@')}
+                    connected
+                    onMenu={() => toast.info('Outlook Calendar connection options')}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => toast.info('Calendar connection management coming soon')}
+                    className="h-11 w-full border-slate-200 font-semibold"
+                  >
+                    Manage Calendar Connections
+                  </Button>
+                </div>
+              </Card>
+
+              <Card title="Booking Rules" icon={Clock}>
+                <div className="space-y-3">
+                  {[
+                    ['Intro Session Duration', 'introDuration', BOOKING_RULE_OPTIONS.introDuration],
+                    ['Buffer Before', 'bufferBefore', BOOKING_RULE_OPTIONS.buffer],
+                    ['Buffer After', 'bufferAfter', BOOKING_RULE_OPTIONS.buffer],
+                    ['Minimum Notice', 'minimumNotice', BOOKING_RULE_OPTIONS.minimumNotice],
+                    ['Max Advance Booking', 'maxAdvance', BOOKING_RULE_OPTIONS.maxAdvance],
+                  ].map(([label, key, options]) => (
+                    <div key={key} className="grid grid-cols-[minmax(0,1fr)_140px] items-center gap-3">
+                      <Label className="text-sm font-semibold text-slate-700">{label}</Label>
+                      <Select
+                        value={bookingPrefs[key] || options[0]}
+                        onValueChange={(value) => setBookingPrefs((current) => ({ ...current, [key]: value }))}
+                      >
+                        <SelectTrigger className="h-9 border-slate-200 bg-white text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {options.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                  <label className="flex items-start gap-3 pt-1">
+                    <Checkbox
+                      checked={bookingPrefs.requireApproval}
+                      onCheckedChange={(value) => setBookingPrefs((current) => ({ ...current, requireApproval: value === true }))}
+                      className="mt-0.5 border-blue-600 data-[state=checked]:bg-blue-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-950">Require approval for all booking requests</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">You'll approve or decline each new request</span>
+                    </span>
+                  </label>
+                </div>
+              </Card>
+
+              <Card title="Time Off & Blackouts" icon={Ban}>
+                <div className="space-y-3">
+                  {blackouts.map((block) => (
+                    <div key={block.id} className="flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-3">
+                      <CalendarDays className="h-5 w-5 shrink-0 text-amber-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-slate-950">{block.date}</p>
+                        <p className="truncate text-xs text-slate-500">{block.label}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeBlackout(block.id)}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-white hover:text-red-600"
+                        aria-label={`Remove ${block.label}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addBlackout}
+                    className="mt-4 h-11 w-full border-blue-200 font-bold text-blue-700 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add unavailable time
+                  </Button>
+                </div>
+              </Card>
+
+              <Card title="Session Types" icon={UserRound}>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_82px_74px_28px] gap-2 text-xs font-bold text-slate-500">
+                    <span>Session Type</span>
+                    <span>Duration</span>
+                    <span>Available</span>
+                    <span />
+                  </div>
+                  {sessionTypes.map((type) => (
+                    <div key={type.id} className="grid grid-cols-[minmax(0,1fr)_82px_74px_28px] items-center gap-2">
+                      <Input
+                        value={type.name}
+                        onChange={(event) => updateSessionType(type.id, { name: event.target.value })}
+                        className="h-9 border-0 bg-transparent px-0 text-sm font-medium shadow-none focus-visible:ring-0"
+                      />
+                      <Select
+                        value={type.duration}
+                        onValueChange={(value) => updateSessionType(type.id, { duration: value })}
+                      >
+                        <SelectTrigger className="h-9 border-slate-200 bg-white text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30">30 min</SelectItem>
+                          <SelectItem value="45">45 min</SelectItem>
+                          <SelectItem value="60">60 min</SelectItem>
+                          <SelectItem value="90">90 min</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Switch
+                        checked={type.available}
+                        onCheckedChange={(value) => updateSessionType(type.id, { available: value })}
+                        className="data-[state=checked]:bg-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSessionType(type.id)}
+                        className="grid h-8 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-red-600"
+                        aria-label={`Remove ${type.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addSessionType}
+                    className="mt-2 h-10 w-full border-slate-200 font-bold text-blue-700 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add session type
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            <Card title="Calendar Preview" icon={CalendarDays}>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center justify-center gap-5 text-sm font-bold text-slate-950 sm:ml-[42%]">
+                  <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Previous week">‹</button>
+                  <span>Jun 8 - Jun 14</span>
+                  <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Next week">›</button>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
+                  <span className="inline-flex items-center gap-2"><span className="h-4 w-4 rounded bg-blue-200" />Available</span>
+                  <span className="inline-flex items-center gap-2"><span className="h-4 w-4 rounded bg-emerald-200" />Booked</span>
+                  <span className="inline-flex items-center gap-2"><span className="h-4 w-4 rounded bg-amber-200" />Blocked</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="grid min-w-[900px] grid-cols-[70px_repeat(7,minmax(100px,1fr))] border-t border-l border-slate-200 text-xs">
+                  <div className="border-r border-b border-slate-200 bg-white" />
+                  {WEEK_DAYS.map((day) => (
+                    <div key={day.key} className="border-r border-b border-slate-200 bg-white py-2 text-center font-bold text-slate-700">
+                      {day.date}
+                    </div>
+                  ))}
+                  <div className="relative h-[178px] border-r border-b border-slate-200 bg-white">
+                    {PREVIEW_TIMES.map((time, index) => (
+                      <div
+                        key={time}
+                        className="absolute left-0 right-0 -translate-y-1/2 pr-2 text-right font-bold text-slate-500"
+                        style={{ top: `${(index / (PREVIEW_TIMES.length - 1)) * 100}%` }}
+                      >
+                        {time}
+                      </div>
+                    ))}
+                  </div>
+                  {WEEK_DAYS.map((day) => {
+                    const dayAvailability = availability[day.key] || { windows: [] };
+                    const previewWindows = dayAvailability.enabled ? dayAvailability.windows || [] : [];
+                    return (
+                      <div key={day.key} className="relative h-[178px] border-r border-b border-slate-200 bg-white">
+                        {PREVIEW_TIMES.map((time, index) => (
+                          <div
+                            key={time}
+                            className="absolute left-0 right-0 border-t border-slate-100"
+                            style={{ top: `${(index / (PREVIEW_TIMES.length - 1)) * 100}%` }}
+                          />
+                        ))}
+                        {previewWindows.map((window, index) => (
+                          <div
+                            key={`${day.key}-${index}`}
+                            className="absolute left-3 right-3 rounded-md bg-blue-100 px-3 py-2 text-xs font-bold leading-tight text-blue-700"
+                            style={{
+                              top: `${timeToTop(window.start)}%`,
+                              height: `${timeToHeight(window.start, window.end)}%`,
+                            }}
+                          >
+                            {formatTime(window.start)}
+                            <br />
+                            {formatTime(window.end)}
+                          </div>
+                        ))}
+                        {day.key === 'Friday' && (
+                          <div className="absolute bottom-7 left-3 right-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700">
+                            Family event
+                          </div>
+                        )}
+                        {day.key === 'Saturday' && (
+                          <div className="absolute bottom-1 left-3 right-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700">
+                            Tournament travel
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Card>
+          </div>
+        ) : activeSection === 'profile' ? (
+          <div className="min-w-0 space-y-4">
             <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
               <Card title="Public Profile" icon={UserRound}>
                 <div className="space-y-4">
