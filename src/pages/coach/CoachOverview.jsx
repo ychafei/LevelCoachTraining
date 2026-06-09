@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   CalendarDays,
@@ -9,6 +9,7 @@ import {
   DollarSign,
   Eye,
   Star,
+  UserPlus,
 } from 'lucide-react';
 import {
   Area,
@@ -21,7 +22,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { coachRepo } from '@/api/repo';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/AuthContext';
+import { auth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const toneClasses = {
   blue: 'bg-blue-50 text-blue-600',
@@ -189,6 +195,54 @@ const performanceRows = [
   { label: 'Profile Engagement', value: '90%', pct: 90 },
 ];
 
+const demoAvailability = {
+  Monday: { enabled: true, start: '16:00', end: '19:00' },
+  Tuesday: { enabled: true, start: '16:00', end: '19:00' },
+  Wednesday: { enabled: false, start: '08:00', end: '20:00' },
+  Thursday: { enabled: true, start: '16:00', end: '19:00' },
+  Friday: { enabled: true, start: '15:00', end: '18:00' },
+  Saturday: { enabled: true, start: '09:00', end: '13:00' },
+  Sunday: { enabled: false, start: '08:00', end: '20:00' },
+};
+
+function splitName(user) {
+  const fallbackName = user?.name || user?.full_name || '';
+  const first = user?.first_name || fallbackName.trim().split(/\s+/)[0] || 'Demo';
+  const last = user?.last_name || fallbackName.trim().split(/\s+/).slice(1).join(' ') || 'Coach';
+  return { first, last };
+}
+
+function demoCoachPayload(user) {
+  const { first, last } = splitName(user);
+  const payload = {
+    first_name: first,
+    last_name: last,
+    email: user?.email || 'coach@example.com',
+    phone: user?.phone || '',
+    county: 'Oakland',
+    training_area: 'Metro Detroit speed, strength, and skills development',
+    bio: `${first} helps athletes build sharper movement, stronger habits, and more confidence through structured private training. This demo profile is ready to edit with your real specialties, service area, and availability.`,
+    quote: 'Progress you can measure. Confidence you can feel.',
+    photo_url: '/homepage-coach-marcus.png',
+    specializations: [
+      'Speed & Agility',
+      'Strength & Conditioning',
+      'Soccer Skills',
+      '1-on-1 Sessions',
+      'Small Group Training',
+    ],
+    availability: demoAvailability,
+    is_active: false,
+    is_head_coach: false,
+    display_order: 999,
+    platform_fee_type: 'none',
+    platform_fee_value: 0,
+    user_id: user?.account_id || user?.id || '',
+  };
+  if (user?.email_verified) payload.email_verified_at = new Date().toISOString();
+  return payload;
+}
+
 function DashboardCard({ className, children, ...props }) {
   return (
     <section
@@ -197,6 +251,79 @@ function DashboardCard({ className, children, ...props }) {
     >
       {children}
     </section>
+  );
+}
+
+function FirstLoginCoachStarter() {
+  const { user, refetchUser } = useAuth();
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  const needsCoachProfile = !!user && !user.coach_id;
+  const displayName = useMemo(() => {
+    const { first, last } = splitName(user);
+    return `${first} ${last}`.trim();
+  }, [user]);
+
+  if (!needsCoachProfile) return null;
+
+  const createDemoProfile = async () => {
+    setCreating(true);
+    try {
+      const accountId = user?.account_id || user?.id || '';
+      const existing = accountId
+        ? await coachRepo.filter({ user_id: accountId }).catch(() => [])
+        : [];
+      const coach = existing[0] || await coachRepo.create(demoCoachPayload(user));
+      const rolePatch = user?.role === 'admin' || user?.role === 'super_admin'
+        ? {}
+        : { role: 'coach' };
+
+      await auth.updateCurrentUser({
+        ...rolePatch,
+        coach_id: coach.id,
+        onboarding_role: 'coach',
+        onboarding_status: 'complete',
+        profile_setup_complete: false,
+      });
+      await refetchUser();
+      toast.success(existing[0] ? 'Demo coach profile linked' : 'Demo coach profile created');
+      navigate('/coach/profile');
+    } catch (error) {
+      console.error('Could not create demo coach profile', error);
+      toast.error(error?.message || 'Could not create the demo coach profile.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <DashboardCard className="overflow-hidden border-blue-200 bg-blue-50/55 p-5">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-blue-600 text-white shadow-[0_12px_26px_rgba(37,99,235,0.25)]">
+            <UserPlus className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-600">First coach login</p>
+            <h2 className="mt-1 text-xl font-extrabold text-slate-950">
+              Create a demo coaching profile for {displayName}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              This creates a hidden coach profile linked to your account so Profile Builder, Calendar, Payments,
+              and Sessions have a real coach record to work with. You can edit every field before an admin activates it.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          onClick={createDemoProfile}
+          disabled={creating}
+          className="h-11 shrink-0 bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700"
+        >
+          {creating ? 'Creating profile...' : 'Create demo profile'}
+        </Button>
+      </div>
+    </DashboardCard>
   );
 }
 
@@ -505,6 +632,8 @@ function CoachPerformanceCard() {
 export default function CoachOverview() {
   return (
     <div className="mx-auto max-w-[1540px] space-y-4">
+      <FirstLoginCoachStarter />
+
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-extrabold text-slate-950 sm:text-4xl">Coach Dashboard</h1>
         <p className="text-lg text-slate-600">Your business at a glance.</p>
