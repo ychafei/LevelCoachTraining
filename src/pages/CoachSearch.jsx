@@ -26,7 +26,8 @@ import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const SPORTS = ['All sports', 'Soccer', 'Basketball', 'Football', 'Baseball', 'Volleyball', 'Strength', 'Speed'];
 const AVAILABILITY = ['Any time', 'This week', 'Evenings', 'Weekends'];
-const RADII = ['10', '15', '25', '50'];
+const RADII = ['10', '15', '25', '50', '100'];
+const EXPANSION_RADII = [10, 15, 25, 50, 100];
 
 function valueFromParams(params, key, fallback) {
   return params.get(key) || fallback;
@@ -113,14 +114,53 @@ export default function CoachSearch() {
     [filters.location],
   );
 
-  const filteredCoaches = useMemo(
-    () => coaches.filter((coach) => matchesCoachSearch(coach, { ...filters, place: activePlace })),
-    [coaches, filters, activePlace],
-  );
+  const filteredCoaches = useMemo(() => {
+    const selectedRadius = Number(filters.radius || 15);
+    const baseRadius = Number.isFinite(selectedRadius) && selectedRadius > 0 ? selectedRadius : 15;
+    const filterAtRadius = (radius) => coaches.filter((coach) => (
+      matchesCoachSearch(coach, { ...filters, radius: String(radius), place: activePlace })
+    ));
+
+    if (!activePlace) {
+      return {
+        matches: filterAtRadius(baseRadius),
+        selectedRadius: baseRadius,
+        effectiveRadius: baseRadius,
+        expanded: false,
+      };
+    }
+
+    const candidates = Array.from(new Set([
+      baseRadius,
+      ...EXPANSION_RADII.filter((radius) => radius > baseRadius),
+    ]));
+
+    for (const radius of candidates) {
+      const matches = filterAtRadius(radius);
+      if (matches.length > 0 || radius === candidates[candidates.length - 1]) {
+        return {
+          matches,
+          selectedRadius: baseRadius,
+          effectiveRadius: radius,
+          expanded: radius > baseRadius,
+        };
+      }
+    }
+
+    return {
+      matches: [],
+      selectedRadius: baseRadius,
+      effectiveRadius: baseRadius,
+      expanded: false,
+    };
+  }, [coaches, filters, activePlace]);
+
+  const displayedCoaches = filteredCoaches.matches;
+  const visibleRadius = loading ? Number(filters.radius || 15) : filteredCoaches.effectiveRadius;
 
   const coachBookingParams = useMemo(
-    () => bookingParams(activePlace, filters.radius),
-    [activePlace, filters.radius],
+    () => bookingParams(activePlace, filteredCoaches.effectiveRadius || filters.radius),
+    [activePlace, filteredCoaches.effectiveRadius, filters.radius],
   );
 
   const applyFilters = (event) => {
@@ -164,8 +204,8 @@ export default function CoachSearch() {
             <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Results</p>
               <p className="mt-1 font-display text-3xl font-bold text-slate-950">
-                {loading ? '...' : filteredCoaches.length}
-                <span className="ml-2 text-sm font-semibold text-slate-500">coach{filteredCoaches.length === 1 ? '' : 'es'}</span>
+                {loading ? '...' : displayedCoaches.length}
+                <span className="ml-2 text-sm font-semibold text-slate-500">coach{displayedCoaches.length === 1 ? '' : 'es'}</span>
               </p>
             </div>
           </div>
@@ -227,7 +267,9 @@ export default function CoachSearch() {
             <div className="mt-4 space-y-3">
               <FilterPill label={filters.sport} active={filters.sport !== 'All sports'} />
               <FilterPill
-                label={activePlace ? `${activePlace.label} within ${filters.radius} mi` : (filters.location || 'Any location')}
+                label={activePlace
+                  ? `${activePlace.label} · ${visibleRadius || filters.radius} mi search`
+                  : (filters.location || 'Any location')}
                 active={!!filters.location}
               />
               <FilterPill label={filters.availability} active={filters.availability !== 'Any time'} />
@@ -246,8 +288,8 @@ export default function CoachSearch() {
                 {loading
                   ? 'Loading verified coach profiles...'
                   : activePlace
-                    ? `${filteredCoaches.length} result${filteredCoaches.length === 1 ? '' : 's'} within ${filters.radius} miles of ${activePlace.label}`
-                    : `${filteredCoaches.length} result${filteredCoaches.length === 1 ? '' : 's'} for your search`}
+                    ? `${displayedCoaches.length} coach${displayedCoaches.length === 1 ? '' : 'es'} serving ${activePlace.label} at a ${visibleRadius}-mile search radius`
+                    : `${displayedCoaches.length} result${displayedCoaches.length === 1 ? '' : 's'} for your search`}
               </p>
             </div>
             <Link to="/apply/private-training-coach" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
@@ -270,9 +312,20 @@ export default function CoachSearch() {
             </div>
           )}
 
-          {!loading && !error && filteredCoaches.length > 0 && (
+          {!loading && !error && filteredCoaches.expanded && (
+            <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
+              <p className="font-bold text-blue-900">
+                No coaches matched within {filteredCoaches.selectedRadius} miles of {activePlace.label}.
+              </p>
+              <p className="mt-1 text-blue-800">
+                Showing coaches within {filteredCoaches.effectiveRadius} miles and coaches who serve nearby athletes.
+              </p>
+            </div>
+          )}
+
+          {!loading && !error && displayedCoaches.length > 0 && (
             <div className="space-y-3">
-              {filteredCoaches.map((coach) => (
+              {displayedCoaches.map((coach) => (
                 <PublicCoachCard
                   key={coach.id}
                   coach={coach}
@@ -284,7 +337,7 @@ export default function CoachSearch() {
             </div>
           )}
 
-          {!loading && !error && filteredCoaches.length === 0 && (
+          {!loading && !error && displayedCoaches.length === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
                 <Search className="h-6 w-6" />

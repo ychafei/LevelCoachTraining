@@ -1,3 +1,5 @@
+import { countyForPlace, resolvePlace } from './metroDetroitPlaces';
+
 const demoAvailability = (start = '16:00', end = '20:00', days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday']) => {
   const availability = {};
   ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach((day) => {
@@ -51,6 +53,7 @@ function slug(value) {
 export const DEMO_COACH_PROFILES = demoRows.map((row, index) => {
   const [sport, first, last, organization, city, photoUrl, price, specializations] = row;
   const county = counties[index % counties.length];
+  const place = resolvePlace(`${city}, MI`);
   const daySets = [
     ['Monday', 'Wednesday', 'Friday'],
     ['Tuesday', 'Thursday', 'Saturday'],
@@ -70,6 +73,15 @@ export const DEMO_COACH_PROFILES = demoRows.map((row, index) => {
     sports: [sport],
     county,
     training_area: `${city}, MI`,
+    service_city: city,
+    service_state: 'MI',
+    service_zip: place?.aliases?.find((alias) => /^\d{5}$/.test(alias)) || '',
+    service_radius_miles: [10, 15, 25, 25, 50][index % 5],
+    service_type: ['facility', 'travels', 'hybrid'][index % 3],
+    service_venue: `${organization} training site`,
+    service_counties: Array.from(new Set([countyForPlace(place) || county, county].filter(Boolean))),
+    location_lat: place?.lat,
+    location_lng: place?.lng,
     photo_url: photoUrl,
     quote: `${sport} coaching built around clear goals, useful feedback, and confident reps.`,
     bio: `${first} is a demo LevelCoach profile used to preview how athletes compare coaches before the marketplace goes live. This sample profile shows how specialties, location, pricing, and availability will appear once real coaches complete their profiles.`,

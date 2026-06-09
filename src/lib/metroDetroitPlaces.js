@@ -39,6 +39,7 @@ function normalize(value) {
 }
 
 function numericCoord(value) {
+  if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -77,10 +78,47 @@ export function findPlaceSuggestions(query, limit = 6) {
 export function resolvePlace(value) {
   if (!value) return null;
   const exact = normalize(value);
+  const embedded = METRO_DETROIT_PLACES
+    .map((place) => {
+      const terms = [
+        normalize(place.label).replace(/\bmi\b/g, '').trim(),
+        ...(place.aliases || []).map((alias) => normalize(alias)),
+      ].filter(Boolean);
+      const match = terms
+        .filter((term) => exact.includes(term))
+        .sort((a, b) => b.length - a.length)[0];
+      return { place, matchLength: match?.length || 0 };
+    })
+    .filter((item) => item.matchLength > 0)
+    .sort((a, b) => b.matchLength - a.matchLength)[0]?.place;
   return METRO_DETROIT_PLACES.find((place) => (
     normalize(place.label) === exact
     || place.aliases?.some((alias) => normalize(alias) === exact)
-  )) || findPlaceSuggestions(value, 1)[0] || null;
+  ))
+    || embedded
+    || findPlaceSuggestions(value, 1)[0]
+    || null;
+}
+
+export function placeParts(placeOrLabel) {
+  const label = typeof placeOrLabel === 'string' ? placeOrLabel : placeOrLabel?.label;
+  const [city = '', state = 'MI'] = String(label || '').split(',').map((part) => part.trim());
+  return {
+    city,
+    state: state || 'MI',
+  };
+}
+
+export function countyForPlace(placeOrLabel) {
+  const place = typeof placeOrLabel === 'string' ? resolvePlace(placeOrLabel) : placeOrLabel;
+  const text = normalize([
+    place?.label,
+    ...(place?.aliases || []),
+  ].filter(Boolean).join(' '));
+  if (text.includes('oakland')) return 'Oakland';
+  if (text.includes('macomb')) return 'Macomb';
+  if (text.includes('wayne')) return 'Wayne';
+  return '';
 }
 
 export function distanceMiles(a, b) {
@@ -104,10 +142,22 @@ export function coachCoordinates(coach) {
   const directLat = numericCoord(coach?.location_lat ?? coach?.lat ?? coach?.latitude);
   const directLng = numericCoord(coach?.location_lng ?? coach?.lng ?? coach?.longitude);
   if (directLat !== null && directLng !== null) {
-    return { label: coach?.training_area || coach?.city || coach?.county || 'Coach location', lat: directLat, lng: directLng };
+    return {
+      label: coach?.service_area_label
+        || coach?.training_area
+        || [coach?.service_city, coach?.service_state].filter(Boolean).join(', ')
+        || coach?.city
+        || coach?.county
+        || 'Coach location',
+      lat: directLat,
+      lng: directLng,
+    };
   }
 
   const locationFields = [
+    coach?.service_area_label,
+    coach?.service_city ? [coach.service_city, coach?.service_state || 'MI'].filter(Boolean).join(', ') : '',
+    coach?.service_zip,
     coach?.training_area,
     coach?.city,
     coach?.location,
@@ -124,8 +174,19 @@ export function coachCoordinates(coach) {
 
 export function coachDistanceMiles(coach, place) {
   const coords = coachCoordinates(coach);
-  const target = place?.lat && place?.lng ? place : resolvePlace(place?.label || place);
+  const target = numericCoord(place?.lat) !== null && numericCoord(place?.lng) !== null
+    ? place
+    : resolvePlace(place?.label || place);
   return distanceMiles(coords, target);
+}
+
+export function coachServiceRadiusMiles(coach) {
+  const radius = Number(
+    coach?.service_radius_miles
+    ?? coach?.training_radius_miles
+    ?? coach?.radius_miles,
+  );
+  return Number.isFinite(radius) && radius > 0 ? radius : null;
 }
 
 export function coachWithinRadius(coach, place, radiusMiles = 15) {

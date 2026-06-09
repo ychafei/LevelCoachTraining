@@ -3,7 +3,7 @@
 // `coach.id` and `coach.availability['Monday']` like everywhere else.
 import {
   coachDistanceMiles,
-  coachWithinRadius,
+  coachServiceRadiusMiles,
   resolvePlace,
 } from '@/lib/metroDetroitPlaces';
 
@@ -25,6 +25,13 @@ const SPORT_KEYWORDS = [
   'Speed',
   'Goalkeeper',
 ];
+
+const SERVICE_TYPE_LABELS = {
+  facility: 'Coach facility',
+  travels: 'Coach travels',
+  hybrid: 'Facility or travel',
+  online: 'Online training',
+};
 
 export function parseAvailability(val) {
   if (val && typeof val === 'object') return val;
@@ -89,6 +96,9 @@ function inferSport(coach, specializations) {
     coach?.bio,
     coach?.quote,
     coach?.training_area,
+    coach?.service_city,
+    coach?.service_venue,
+    ...(toArray(coach?.service_counties)),
   ].filter(Boolean).join(' ').toLowerCase();
   const match = SPORT_KEYWORDS.find((sport) => haystack.includes(sport.toLowerCase()));
   return match || 'Private Coaching';
@@ -154,10 +164,16 @@ export function publicCoachDisplay(coach, options = {}) {
   const specializations = toArray(normalized?.specializations);
   const ageGroups = toArray(normalized?.age_groups);
   const trainingFormats = toArray(normalized?.training_formats);
+  const serviceCounties = toArray(normalized?.service_counties);
   const displayName = getCoachName(normalized);
   const county = compact(normalized?.county) || '';
-  const trainingArea = firstValue(normalized, ['training_area', 'location', 'city']);
-  const locationLabel = trainingArea || (county ? `${county} County` : 'Location coming soon');
+  const serviceCity = compact(normalized?.service_city) || '';
+  const serviceState = compact(normalized?.service_state) || '';
+  const cityStateLabel = [serviceCity, serviceState].filter(Boolean).join(', ');
+  const trainingArea = firstValue(normalized, ['service_area_label', 'training_area', 'location', 'city']);
+  const locationLabel = cityStateLabel || trainingArea || (county ? `${county} County` : 'Location coming soon');
+  const serviceRadiusMiles = coachServiceRadiusMiles(normalized);
+  const serviceType = compact(normalized?.service_type) || '';
   const organizationName = firstValue(normalized, [
     'organization_name',
     'org_name',
@@ -193,6 +209,16 @@ export function publicCoachDisplay(coach, options = {}) {
     locationLabel,
     countyLabel: county ? `${county} County` : '',
     trainingArea,
+    serviceCity,
+    serviceState,
+    serviceZip: compact(normalized?.service_zip) || '',
+    serviceVenue: compact(normalized?.service_venue) || '',
+    serviceRadiusMiles,
+    serviceRadiusLabel: serviceRadiusMiles ? `${serviceRadiusMiles} mi radius` : '',
+    serviceType,
+    serviceTypeLabel: SERVICE_TYPE_LABELS[serviceType] || '',
+    serviceCounties,
+    servedAreas: serviceCounties.length ? serviceCounties.map((item) => `${item} County`) : (county ? [`${county} County`] : []),
     specializations,
     ageGroups,
     trainingFormats,
@@ -214,6 +240,38 @@ export function publicCoachDisplay(coach, options = {}) {
     profileHref: coachProfileHref(normalized),
     bookIntroHref: coachBookHref(normalized, { intro: '1' }),
   };
+}
+
+function looseLocationMatches(haystack, location) {
+  const loc = String(location || '').toLowerCase();
+  const isDetroitMetro = loc.includes('detroit') || loc.includes('metro');
+  const isMetroCounty = ['oakland', 'macomb', 'wayne'].some((county) => haystack.includes(county));
+  if (isDetroitMetro && isMetroCounty) return true;
+  const looseLocation = loc
+    .replace(/\bmi\b/g, '')
+    .replace(/\bmichigan\b/g, '')
+    .replace(/[,\s]+/g, ' ')
+    .trim();
+  return !!looseLocation && (haystack.includes(looseLocation) || haystack.includes(loc));
+}
+
+function coachMatchesPlace(coach, searchPlace, radius, haystack) {
+  const distance = coachDistanceMiles(coach, searchPlace);
+  const selectedRadius = Number.isFinite(radius) ? radius : 15;
+  const coachRadius = coachServiceRadiusMiles(coach) || 0;
+  const serviceType = compact(coach?.service_type);
+  const canServeBeyondBase = serviceType === 'travels' || serviceType === 'hybrid';
+  const effectiveRadius = canServeBeyondBase
+    ? Math.max(selectedRadius, coachRadius)
+    : selectedRadius;
+
+  if (distance !== null) return distance <= effectiveRadius;
+
+  const placeTerms = [
+    searchPlace?.label,
+    ...(searchPlace?.aliases || []),
+  ].filter(Boolean);
+  return placeTerms.some((term) => looseLocationMatches(haystack, term));
 }
 
 function minutes(value) {
@@ -248,11 +306,18 @@ export function matchesCoachSearch(coach, filters = {}) {
     model.primarySport,
     model.locationLabel,
     model.countyLabel,
+    model.serviceCity,
+    model.serviceState,
+    model.serviceZip,
+    model.serviceVenue,
+    model.serviceRadiusLabel,
+    model.serviceTypeLabel,
     model.headline,
     model.bio,
     ...model.specializations,
     ...model.ageGroups,
     ...model.trainingFormats,
+    ...model.servedAreas,
   ].join(' ').toLowerCase();
 
   const sport = compact(filters.sport);
@@ -262,19 +327,9 @@ export function matchesCoachSearch(coach, filters = {}) {
 
   if (sport && sport !== 'All sports' && !haystack.includes(sport.toLowerCase())) return false;
   if (searchPlace) {
-    if (!coachWithinRadius(coach, searchPlace, Number.isFinite(radius) ? radius : 15)) return false;
+    if (!coachMatchesPlace(coach, searchPlace, Number.isFinite(radius) ? radius : 15, haystack)) return false;
   } else if (location) {
-    const loc = location.toLowerCase();
-    const isDetroitMetro = loc.includes('detroit') || loc.includes('metro');
-    const isMetroCounty = ['oakland', 'macomb', 'wayne'].some((county) => haystack.includes(county));
-    if (!(isDetroitMetro && isMetroCounty)) {
-      const looseLocation = loc
-        .replace(/\bmi\b/g, '')
-        .replace(/\bmichigan\b/g, '')
-        .replace(/[,\s]+/g, ' ')
-        .trim();
-      if (looseLocation && !haystack.includes(looseLocation) && !haystack.includes(loc)) return false;
-    }
+    if (!looseLocationMatches(haystack, location)) return false;
   }
   if (!hasAvailabilityMatch(coach, availability)) return false;
   return true;

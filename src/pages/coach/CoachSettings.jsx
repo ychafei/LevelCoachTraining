@@ -4,6 +4,12 @@ import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import { coachBlockRepo, coachRepo, stripeConnectedAccountRepo } from '@/api/repo';
 import { storage } from '@/lib/storage';
+import {
+  countyForPlace,
+  findPlaceSuggestions,
+  placeParts,
+  resolvePlace,
+} from '@/lib/metroDetroitPlaces';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -101,6 +107,23 @@ const DEFAULT_SPECIALIZATIONS = [
   '1-on-1 Sessions',
   'Small Group Training',
 ];
+
+const SERVICE_RADIUS_OPTIONS = [
+  { value: '10', label: '10 miles' },
+  { value: '15', label: '15 miles' },
+  { value: '25', label: '25 miles' },
+  { value: '50', label: '50 miles' },
+  { value: '100', label: '100 miles' },
+];
+
+const SERVICE_TYPE_OPTIONS = [
+  { value: 'facility', label: 'I host at a facility' },
+  { value: 'travels', label: 'I travel to athletes' },
+  { value: 'hybrid', label: 'Facility and travel' },
+  { value: 'online', label: 'Online training only' },
+];
+
+const SERVICE_COUNTY_OPTIONS = ['Oakland', 'Macomb', 'Wayne'];
 
 const DEFAULT_PROGRAMS = [
   { id: 'intro', name: 'Intro Session', duration: '30', price: '49' },
@@ -249,6 +272,44 @@ function coachDisplayName(coach, fallback = 'Demo Coach') {
     || fallback;
 }
 
+function serviceCityLabel(city, state = 'MI') {
+  const cleanCity = String(city || '').trim();
+  if (!cleanCity) return '';
+  return [cleanCity, state].filter(Boolean).join(', ');
+}
+
+function serviceAreaSummaryFromDraft(draft = {}) {
+  const location = serviceCityLabel(draft.service_city, draft.service_state || 'MI') || draft.training_area;
+  const radius = Number(draft.service_radius_miles || 25);
+  const radiusLabel = Number.isFinite(radius) && radius > 0 ? `${radius} mile radius` : '';
+  return [location, radiusLabel].filter(Boolean).join(' · ');
+}
+
+function serviceDraftFromCoach(coach = {}) {
+  const resolved = resolvePlace(
+    serviceCityLabel(coach?.service_city, coach?.service_state)
+    || coach?.training_area
+    || coach?.county,
+  );
+  const parts = resolved ? placeParts(resolved) : { city: '', state: 'MI' };
+  const inferredCounty = resolved ? countyForPlace(resolved) : '';
+
+  return {
+    service_city: coach?.service_city || parts.city || '',
+    service_state: coach?.service_state || parts.state || 'MI',
+    service_zip: coach?.service_zip || '',
+    service_radius_miles: String(coach?.service_radius_miles || 25),
+    service_type: coach?.service_type || 'hybrid',
+    service_venue: coach?.service_venue || '',
+    service_counties: Array.isArray(coach?.service_counties) && coach.service_counties.length
+      ? coach.service_counties
+      : [coach?.county || inferredCounty].filter(Boolean),
+    county: coach?.county || inferredCounty || 'Oakland',
+    location_lat: coach?.location_lat ?? resolved?.lat ?? '',
+    location_lng: coach?.location_lng ?? resolved?.lng ?? '',
+  };
+}
+
 function toProfileDraft(coach, fallbackEmail = '') {
   return {
     displayName: coachDisplayName(coach),
@@ -260,20 +321,39 @@ function toProfileDraft(coach, fallbackEmail = '') {
       ? coach.specializations
       : DEFAULT_SPECIALIZATIONS,
     is_active: coach?.is_active !== false,
+    ...serviceDraftFromCoach(coach),
   };
 }
 
 function profilePayloadFromDraft(draft) {
   const nameParts = splitName(draft.displayName);
-  return {
+  const servicePlace = resolvePlace(serviceCityLabel(draft.service_city, draft.service_state || 'MI'))
+    || resolvePlace(draft.training_area);
+  const radius = Number(draft.service_radius_miles || 25);
+  const payload = {
     first_name: nameParts.first_name || 'Demo',
     last_name: nameParts.last_name || 'Coach',
     email: draft.email,
-    training_area: draft.training_area,
+    training_area: draft.training_area || serviceAreaSummaryFromDraft(draft),
     bio: draft.bio,
     quote: draft.quote,
     specializations: draft.specializations || [],
     is_active: draft.is_active !== false,
+    county: draft.county || (servicePlace ? countyForPlace(servicePlace) : '') || 'Oakland',
+    service_city: draft.service_city || '',
+    service_state: draft.service_state || 'MI',
+    service_zip: draft.service_zip || '',
+    service_radius_miles: Number.isFinite(radius) ? radius : 25,
+    service_type: draft.service_type || 'hybrid',
+    service_venue: draft.service_venue || '',
+    service_counties: draft.service_counties || [],
+  };
+  const lat = Number(draft.location_lat || servicePlace?.lat);
+  const lng = Number(draft.location_lng || servicePlace?.lng);
+  if (Number.isFinite(lat)) payload.location_lat = lat;
+  if (Number.isFinite(lng)) payload.location_lng = lng;
+  return {
+    ...payload,
   };
 }
 
@@ -524,6 +604,11 @@ export default function CoachSettings() {
   const previewName = profileDraft.displayName || displayName;
   const previewInitials = initialsFor(previewName);
   const previewTags = (profileDraft.specializations || []).slice(0, 3);
+  const serviceSuggestions = useMemo(
+    () => findPlaceSuggestions(profileDraft.service_city || profileDraft.training_area, 4),
+    [profileDraft.service_city, profileDraft.training_area],
+  );
+  const serviceSummary = serviceAreaSummaryFromDraft(profileDraft);
   const activeSectionMeta = settingsSections.find((section) => section.id === activeSection) || settingsSections[0];
 
   useEffect(() => {
@@ -647,6 +732,37 @@ export default function CoachSettings() {
     const nextDraft = {
       ...profileDraft,
       specializations: (profileDraft.specializations || []).filter((item) => item !== value),
+    };
+    setProfileDraft(nextDraft);
+    await saveProfile(nextDraft, { silent: true });
+  };
+
+  const selectServicePlace = async (place) => {
+    const parts = placeParts(place);
+    const county = countyForPlace(place);
+    const nextDraft = {
+      ...profileDraft,
+      service_city: parts.city,
+      service_state: parts.state || 'MI',
+      training_area: serviceCityLabel(parts.city, parts.state || 'MI'),
+      county: county || profileDraft.county,
+      service_counties: Array.from(new Set([...(profileDraft.service_counties || []), county].filter(Boolean))),
+      location_lat: place.lat,
+      location_lng: place.lng,
+    };
+    setProfileDraft(nextDraft);
+    await saveProfile(nextDraft, { silent: true });
+  };
+
+  const toggleServiceCounty = async (county) => {
+    const current = profileDraft.service_counties || [];
+    const service_counties = current.includes(county)
+      ? current.filter((item) => item !== county)
+      : [...current, county];
+    const nextDraft = {
+      ...profileDraft,
+      service_counties,
+      county: service_counties[0] || profileDraft.county || county,
     };
     setProfileDraft(nextDraft);
     await saveProfile(nextDraft, { silent: true });
@@ -1556,10 +1672,161 @@ export default function CoachSettings() {
                     />
                   </div>
                 </div>
-              </Card>
+	              </Card>
+	
+	              <Card title="Service Area" icon={MapPin}>
+	                <div className="space-y-4">
+	                  <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+	                    <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Where athletes can train with you</p>
+	                    <p className="mt-1 text-sm font-bold text-slate-950">{serviceSummary || 'Set your city and radius'}</p>
+	                  </div>
 
-              <Card title="Profile Photo">
-                <div className="flex flex-col items-center text-center">
+	                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px]">
+	                    <Field label="Primary city">
+	                      <Input
+	                        value={profileDraft.service_city || ''}
+	                        onChange={(event) => {
+	                          const service_city = event.target.value;
+	                          updateProfileDraft({
+	                            service_city,
+	                            training_area: serviceCityLabel(service_city, profileDraft.service_state || 'MI'),
+	                          });
+	                        }}
+	                        onBlur={() => {
+	                          const place = resolvePlace(serviceCityLabel(profileDraft.service_city, profileDraft.service_state || 'MI'));
+	                          if (place) void selectServicePlace(place);
+	                          else void saveProfile(profileDraft, { silent: true });
+	                        }}
+	                        placeholder="e.g. Royal Oak"
+	                        className="h-10 border-slate-200 bg-white"
+	                      />
+	                    </Field>
+	                    <Field label="State">
+	                      <Select
+	                        value={profileDraft.service_state || 'MI'}
+	                        onValueChange={(value) => {
+	                          const nextDraft = {
+	                            ...profileDraft,
+	                            service_state: value,
+	                            training_area: serviceCityLabel(profileDraft.service_city, value),
+	                          };
+	                          setProfileDraft(nextDraft);
+	                          void saveProfile(nextDraft, { silent: true });
+	                        }}
+	                      >
+	                        <SelectTrigger className="h-10 border-slate-200 bg-white">
+	                          <SelectValue />
+	                        </SelectTrigger>
+	                        <SelectContent>
+	                          <SelectItem value="MI">MI</SelectItem>
+	                        </SelectContent>
+	                      </Select>
+	                    </Field>
+	                  </div>
+
+	                  {serviceSuggestions.length > 0 && (
+	                    <div className="flex flex-wrap gap-2">
+	                      {serviceSuggestions.map((place) => (
+	                        <button
+	                          key={place.label}
+	                          type="button"
+	                          onClick={() => selectServicePlace(place)}
+	                          className="rounded-md border border-blue-100 bg-white px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
+	                        >
+	                          {place.label}
+	                        </button>
+	                      ))}
+	                    </div>
+	                  )}
+
+	                  <div className="grid gap-3 sm:grid-cols-2">
+	                    <Field label="ZIP code">
+	                      <Input
+	                        value={profileDraft.service_zip || ''}
+	                        onChange={(event) => updateProfileDraft({ service_zip: event.target.value })}
+	                        onBlur={() => saveProfile(profileDraft, { silent: true })}
+	                        placeholder="48067"
+	                        className="h-10 border-slate-200 bg-white"
+	                      />
+	                    </Field>
+	                    <Field label="Training radius">
+	                      <Select
+	                        value={String(profileDraft.service_radius_miles || '25')}
+	                        onValueChange={(value) => {
+	                          const nextDraft = { ...profileDraft, service_radius_miles: value };
+	                          setProfileDraft(nextDraft);
+	                          void saveProfile(nextDraft, { silent: true });
+	                        }}
+	                      >
+	                        <SelectTrigger className="h-10 border-slate-200 bg-white">
+	                          <SelectValue />
+	                        </SelectTrigger>
+	                        <SelectContent>
+	                          {SERVICE_RADIUS_OPTIONS.map((option) => (
+	                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+	                          ))}
+	                        </SelectContent>
+	                      </Select>
+	                    </Field>
+	                  </div>
+
+	                  <Field label="Training setup">
+	                    <Select
+	                      value={profileDraft.service_type || 'hybrid'}
+	                      onValueChange={(value) => {
+	                        const nextDraft = { ...profileDraft, service_type: value };
+	                        setProfileDraft(nextDraft);
+	                        void saveProfile(nextDraft, { silent: true });
+	                      }}
+	                    >
+	                      <SelectTrigger className="h-10 border-slate-200 bg-white">
+	                        <SelectValue />
+	                      </SelectTrigger>
+	                      <SelectContent>
+	                        {SERVICE_TYPE_OPTIONS.map((option) => (
+	                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+	                        ))}
+	                      </SelectContent>
+	                    </Select>
+	                  </Field>
+
+	                  <Field label="Venue or field name">
+	                    <Input
+	                      value={profileDraft.service_venue || ''}
+	                      onChange={(event) => updateProfileDraft({ service_venue: event.target.value })}
+	                      onBlur={() => saveProfile(profileDraft, { silent: true })}
+	                      placeholder="Optional, e.g. Total Sports Royal Oak"
+	                      className="h-10 border-slate-200 bg-white"
+	                    />
+	                  </Field>
+
+	                  <div>
+	                    <Label className="text-xs font-semibold text-slate-700">Counties served</Label>
+	                    <div className="mt-2 flex flex-wrap gap-2">
+	                      {SERVICE_COUNTY_OPTIONS.map((county) => {
+	                        const selected = (profileDraft.service_counties || []).includes(county);
+	                        return (
+	                          <button
+	                            key={county}
+	                            type="button"
+	                            onClick={() => toggleServiceCounty(county)}
+	                            className={`rounded-md border px-3 py-2 text-xs font-black transition ${
+	                              selected
+	                                ? 'border-blue-600 bg-blue-600 text-white'
+	                                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-700'
+	                            }`}
+	                          >
+	                            {county}
+	                          </button>
+	                        );
+	                      })}
+	                    </div>
+	                  </div>
+	                </div>
+	              </Card>
+
+	              <Card title="Profile Photo">
+	                <div className="flex flex-col items-center text-center">
                   <CoachAvatar src={avatarUrl} initials={previewInitials} size="lg" />
                   <input
                     ref={fileInputRef}
@@ -1722,7 +1989,7 @@ export default function CoachSettings() {
                       </div>
                       <p className="mt-1 flex items-center gap-1 text-sm text-slate-600">
                         <MapPin className="h-4 w-4 text-blue-600" />
-                        Metro Detroit
+                        {serviceSummary || 'Service area coming soon'}
                       </p>
                     </div>
                   </div>

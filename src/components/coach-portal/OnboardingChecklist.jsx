@@ -34,10 +34,10 @@ export function computeChecklist(user, coach) {
     },
     {
       key: 'training_area',
-      label: 'Set your training area',
-      blurb: 'Where do you train clients?',
-      href: '/coach/profile',
-      done: !!(coach?.training_area && coach.training_area.trim().length > 0),
+      label: 'Set your service area',
+      blurb: 'City, radius, and where athletes can train with you.',
+      href: '/coach/settings?section=profile',
+      done: !!((coach?.service_city && coach.service_city.trim().length > 0) || (coach?.training_area && coach.training_area.trim().length > 0)),
       blocking: false,
     },
     {

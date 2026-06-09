@@ -99,6 +99,16 @@ export default function PublicCoachCard({
                 <MapPin className="h-3.5 w-3.5 text-blue-600" />
                 {model.locationLabel}
               </span>
+              {model.serviceRadiusLabel && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 ring-1 ring-blue-100">
+                  {model.serviceRadiusLabel}
+                </span>
+              )}
+              {model.serviceTypeLabel && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-slate-700 ring-1 ring-slate-200">
+                  {model.serviceTypeLabel}
+                </span>
+              )}
               {displayDistance !== null && Number.isFinite(displayDistance) && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-100">
                   {displayDistance < 10 ? displayDistance.toFixed(1) : Math.round(displayDistance)} mi away

@@ -99,6 +99,7 @@ export default function CoachDetail() {
   const details = [
     { label: 'Primary sport', value: model.primarySport, icon: Trophy },
     { label: 'Training area', value: model.locationLabel, icon: MapPin },
+    { label: 'Service radius', value: [model.serviceRadiusLabel, model.serviceTypeLabel].filter(Boolean).join(' · '), icon: Target },
     { label: 'Availability', value: model.availability, icon: CalendarDays },
     { label: 'Reviews', value: model.ratingLabel ? `${model.ratingLabel} · ${model.reviewLabel}` : model.reviewLabel, icon: Star },
   ];
@@ -210,7 +211,16 @@ export default function CoachDetail() {
               <FocusList title="Specialties" items={model.specializations} fallback={`${model.primarySport} training`} />
               <FocusList title="Training formats" items={model.trainingFormats} fallback="1-on-1 and small group sessions" />
               <FocusList title="Age groups" items={model.ageGroups} fallback="Ask during booking" />
-              <FocusList title="Location" items={[model.trainingArea || model.countyLabel].filter(Boolean)} fallback="Location shared during booking" />
+              <FocusList
+                title="Service area"
+                items={[
+                  model.locationLabel,
+                  model.serviceVenue,
+                  model.serviceRadiusLabel,
+                  ...model.servedAreas,
+                ].filter(Boolean)}
+                fallback="Location shared during booking"
+              />
             </div>
           </InfoSection>
 

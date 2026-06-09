@@ -14,7 +14,7 @@
 //   APPWRITE_API_KEY          server-side key (no VITE_ prefix)
 //   APPWRITE_DATABASE_ID      optional, defaults to "lctraining"
 
-import { Client, Databases, Storage, Permission, Role } from 'node-appwrite';
+import { Client, Databases, Storage, Permission, Role, Query } from 'node-appwrite';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,39 +101,60 @@ async function ensureCollection(id, name, perms = AUTH_ONLY) {
   await safe(`collection "${id}"`, () => databases.createCollection(DB_ID, id, name, perms));
 }
 
+const attributeKeysByCollection = new Map();
+
+async function getAttributeKeys(coll) {
+  if (attributeKeysByCollection.has(coll)) return attributeKeysByCollection.get(coll);
+  const res = await databases.listAttributes(DB_ID, coll, [Query.limit(100)]);
+  const keys = new Set(res.attributes.map((attribute) => attribute.key));
+  attributeKeysByCollection.set(coll, keys);
+  return keys;
+}
+
+async function ensureAttribute(label, coll, key, create) {
+  const keys = await getAttributeKeys(coll);
+  if (keys.has(key)) {
+    console.log(`  = ${label} (exists)`);
+    return null;
+  }
+  const result = await safe(label, create);
+  keys.add(key);
+  return result;
+}
+
 // Attribute creators — Appwrite Node SDK signatures
 async function attrString(coll, key, size, required = false, def = null, array = false) {
-  await safe(`  ${coll}.${key} string(${size})`, () =>
+  await ensureAttribute(`  ${coll}.${key} string(${size})`, coll, key, () =>
     databases.createStringAttribute(DB_ID, coll, key, size, required, def, array)
   );
 }
 async function attrInt(coll, key, required = false, min = null, max = null, def = null, array = false) {
-  await safe(`  ${coll}.${key} int`, () =>
+  await ensureAttribute(`  ${coll}.${key} int`, coll, key, () =>
     databases.createIntegerAttribute(DB_ID, coll, key, required, min, max, def, array)
   );
 }
 async function attrFloat(coll, key, required = false, min = null, max = null, def = null, array = false) {
-  await safe(`  ${coll}.${key} float`, () =>
+  await ensureAttribute(`  ${coll}.${key} float`, coll, key, () =>
     databases.createFloatAttribute(DB_ID, coll, key, required, min, max, def, array)
   );
 }
 async function attrBool(coll, key, required = false, def = false, array = false) {
-  await safe(`  ${coll}.${key} bool`, () =>
+  await ensureAttribute(`  ${coll}.${key} bool`, coll, key, () =>
     databases.createBooleanAttribute(DB_ID, coll, key, required, def, array)
   );
 }
 async function attrDatetime(coll, key, required = false, def = null, array = false) {
-  await safe(`  ${coll}.${key} datetime`, () =>
+  await ensureAttribute(`  ${coll}.${key} datetime`, coll, key, () =>
     databases.createDatetimeAttribute(DB_ID, coll, key, required, def, array)
   );
 }
 async function attrEnum(coll, key, elements, required = false, def = null, array = false) {
-  await safe(`  ${coll}.${key} enum[${elements.join(',')}]`, () =>
+  await ensureAttribute(`  ${coll}.${key} enum[${elements.join(',')}]`, coll, key, () =>
     databases.createEnumAttribute(DB_ID, coll, key, elements, required, def, array)
   );
 }
 async function attrEmail(coll, key, required = false, def = null, array = false) {
-  await safe(`  ${coll}.${key} email`, () =>
+  await ensureAttribute(`  ${coll}.${key} email`, coll, key, () =>
     databases.createEmailAttribute(DB_ID, coll, key, required, def, array)
   );
 }
@@ -232,6 +253,13 @@ async function provisionCoaches() {
   await attrString('coaches', 'phone', 30);
   await attrEnum('coaches',   'county', ['Oakland', 'Macomb', 'Wayne'], true);
   await attrString('coaches', 'training_area', 255);
+  await attrString('coaches', 'service_city', 120);
+  await attrString('coaches', 'service_state', 30);
+  await attrString('coaches', 'service_zip', 20);
+  await attrInt('coaches',    'service_radius_miles', false, 0, 250, 25);
+  await attrEnum('coaches',   'service_type', ['facility', 'travels', 'hybrid', 'online'], false, 'hybrid');
+  await attrString('coaches', 'service_venue', 500);
+  await attrString('coaches', 'service_counties', 100, false, null, true);
   await attrFloat('coaches',  'location_lat');
   await attrFloat('coaches',  'location_lng');
   await attrString('coaches', 'bio', 20000); // TEXT
@@ -250,6 +278,8 @@ async function provisionCoaches() {
   await waitAttributesReady('coaches');
   await ensureIndex('coaches', 'idx_is_active',     'key', ['is_active']);
   await ensureIndex('coaches', 'idx_county',        'key', ['county']);
+  await ensureIndex('coaches', 'idx_service_city',  'key', ['service_city']);
+  await ensureIndex('coaches', 'idx_service_state', 'key', ['service_state']);
   await ensureIndex('coaches', 'idx_display_order', 'key', ['display_order']);
   await ensureIndex('coaches', 'idx_user_id',       'key', ['user_id']);
 }
