@@ -93,8 +93,12 @@ export const auth = {
   // accountProfile.ensure call inside getCurrentUser() inserts the matching
   // profiles row server-side.
   signUp: async (email, password) => {
-    await account.create(ID.unique(), email, password);
-    await account.createEmailPasswordSession(email, password);
+    // Clear any lingering session first — Appwrite rejects
+    // createEmailPasswordSession with "a session is active" otherwise, which
+    // surfaces as a confusing generic error during signup.
+    try { await account.deleteSession('current'); } catch { /* no session */ }
+    await account.create(ID.unique(), email.trim().toLowerCase(), password);
+    await account.createEmailPasswordSession(email.trim().toLowerCase(), password);
     // Send a verification email (best-effort — never block signup on it).
     try {
       await account.createVerification(`${window.location.origin}/verify-email`);

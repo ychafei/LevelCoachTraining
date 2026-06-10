@@ -156,18 +156,35 @@ export default function ApplyPrivateTrainingCoach() {
     if (!validate()) return;
 
     setSubmitting(true);
-    try {
-      // 1. Optionally create / use an account so the application is linked to
-      //    it (per-document read grant + faster approval linking).
-      let hasAccount = usingExistingAccount;
-      if (!usingExistingAccount && wantsAccount) {
+
+    // Phase 1 — create the account (only for new applicants). Isolated so an
+    // account problem (email taken, weak password, active session) shows a
+    // clear, specific message instead of a generic one.
+    let hasAccount = usingExistingAccount;
+    if (!usingExistingAccount && wantsAccount) {
+      try {
         await auth.signOut();
         await auth.signUp(form.email.trim(), form.password);
         hasAccount = true;
+      } catch (err) {
+        const type = err?.type || '';
+        const code = err?.code;
+        if (code === 409 || type === 'user_already_exists') {
+          setFormError('An account with that email already exists. Sign in first, then submit your application from your account.');
+        } else if (type.includes('password')) {
+          setFormError('That password was rejected. Use at least 8 characters with a mix of letters, numbers, and a symbol.');
+        } else if (type === 'user_session_already_exists') {
+          setFormError('You appear to be signed in already. Refresh the page and try again, or apply from your existing account.');
+        } else {
+          setFormError(err?.message || 'We could not create your account. Please try again.');
+        }
+        setSubmitting(false);
+        return;
       }
+    }
 
-      // 2. Submit the application through the `applications` function
-      //    (validates, rate-limits, honeypot, audit).
+    // Phase 2 — submit the application (validated/rate-limited server-side).
+    try {
       const background = [
         `Sports coached: ${sports.join(', ')}`,
         `Service area: ${form.serviceArea.trim()}`,
@@ -190,40 +207,37 @@ export default function ApplyPrivateTrainingCoach() {
         resume_url: form.resumeUrl.trim(),
         background_check_consent: true,
       });
-
-      // 3. Best-effort profile bookkeeping through the whitelist (never blocks
-      //    the application itself).
-      if (hasAccount) {
-        try {
-          const fresh = await refetchUser();
-          if (fresh && fresh.onboarding_status !== 'complete') {
-            await auth.updateCurrentUser({
-              onboarding_role: 'coach_applicant',
-              onboarding_status: 'complete',
-              profile_setup_complete: true,
-              first_name: form.firstName.trim(),
-              last_name: form.lastName.trim(),
-              phone: normalizePhoneForStorage(form.phone),
-              dob: form.dob,
-              terms_accepted: true,
-            });
-            await refetchUser();
-          }
-        } catch (profileErr) {
-          console.warn('[apply] profile bookkeeping skipped:', profileErr?.message || profileErr);
-        }
-      }
-
-      setSubmitted(true);
     } catch (err) {
-      if (err?.code === 409 || err?.type === 'user_already_exists') {
-        setFormError('An account with that email already exists. Sign in first, then submit your application.');
-      } else {
-        setFormError(err?.message || 'Could not submit your coach application.');
-      }
-    } finally {
+      setFormError(err?.message || 'Could not submit your application. Please try again.');
       setSubmitting(false);
+      return;
     }
+
+    // Phase 3 — best-effort profile bookkeeping. Never blocks success: the
+    // application is already in.
+    if (hasAccount) {
+      try {
+        const fresh = await refetchUser();
+        if (fresh && fresh.onboarding_status !== 'complete') {
+          await auth.updateCurrentUser({
+            onboarding_role: 'coach_applicant',
+            onboarding_status: 'complete',
+            profile_setup_complete: true,
+            first_name: form.firstName.trim(),
+            last_name: form.lastName.trim(),
+            phone: normalizePhoneForStorage(form.phone),
+            dob: form.dob,
+            terms_accepted: true,
+          });
+          await refetchUser();
+        }
+      } catch (profileErr) {
+        console.warn('[apply] profile bookkeeping skipped:', profileErr?.message || profileErr);
+      }
+    }
+
+    setSubmitted(true);
+    setSubmitting(false);
   };
 
   const handleGoogle = async () => {
