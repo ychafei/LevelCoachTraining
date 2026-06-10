@@ -45,6 +45,13 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings] = useState(null);
+  // Admin "View as role" preview — lets a platform admin walk the athlete /
+  // parent / coach / organization portals to see what each role experiences.
+  // Client-side only: server permissions are unchanged, so the admin sees what
+  // they're actually allowed to see. Persisted so it survives navigation.
+  const [viewAsRole, setViewAsRoleState] = useState(() => {
+    try { return sessionStorage.getItem('lc_view_as') || null; } catch { return null; }
+  });
 
   useEffect(() => {
     void checkUserAuth();
@@ -108,11 +115,26 @@ export const AuthProvider = ({ children }) => {
     || user?.role === 'admin'
     || user?.role === 'super_admin';
   const isSuperAdmin = user?.is_super_admin === true;
-  const isCoach = labels.includes('coach') || user?.role === 'coach' || isAdmin;
   const onboardingComplete = !user || isOnboardingComplete(user);
-  const isOrganizationAdmin = isOrganizationUser(user);
-  const isGuardian = isParentOrGuardian(user);
-  const isAthleteUser = isAthlete(user);
+
+  // The preview role is only honored for real platform admins.
+  const previewRole = isAdmin ? viewAsRole : null;
+  const setViewAs = useCallback((role) => {
+    try {
+      if (role) sessionStorage.setItem('lc_view_as', role);
+      else sessionStorage.removeItem('lc_view_as');
+    } catch { /* ignore storage failures */ }
+    setViewAsRoleState(role || null);
+  }, []);
+  const clearViewAs = useCallback(() => setViewAs(null), [setViewAs]);
+
+  // Role booleans: when previewing, they reflect the previewed role so the
+  // existing route guards admit the admin into that portal.
+  const isCoach = previewRole ? previewRole === 'coach'
+    : (labels.includes('coach') || user?.role === 'coach' || isAdmin);
+  const isOrganizationAdmin = previewRole ? previewRole === 'organization' : isOrganizationUser(user);
+  const isGuardian = previewRole ? (previewRole === 'parent' || previewRole === 'guardian') : isParentOrGuardian(user);
+  const isAthleteUser = previewRole ? previewRole === 'athlete' : isAthlete(user);
 
   if (authError?.type === 'account_banned') {
     return <AccountSuspendedScreen />;
@@ -134,6 +156,9 @@ export const AuthProvider = ({ children }) => {
       isGuardian,
       isAthlete: isAthleteUser,
       onboardingComplete,
+      viewAsRole: previewRole,
+      setViewAs,
+      clearViewAs,
       logout,
       navigateToLogin,
       checkAppState: checkUserAuth,

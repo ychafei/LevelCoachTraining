@@ -8,6 +8,7 @@ import {
   TrendingUp, Building2, Scale, ShieldAlert,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import ViewAsMenu from '@/features/admin/ViewAsMenu';
 
 const adminLinks = [
   { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage coaches and verification' },
@@ -207,11 +208,14 @@ export default function AdminPanel() {
             <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">ADMIN PANEL</h1>
             <p className="text-muted-foreground">Operations overview for LevelCoach Training.</p>
           </div>
-          {user?.email && (
-            <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">
-              Signed in as <span className="text-foreground">{user.email}</span>
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            <ViewAsMenu />
+            {user?.email && (
+              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">
+                Signed in as <span className="text-foreground">{user.email}</span>
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Metrics grid */}

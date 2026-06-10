@@ -232,6 +232,11 @@ const ORG_UPDATE_FIELDS = {
   logo_file_id: (v) => str(v, 0, 128),
   brand_color: (v) => str(v, 0, 20),
   coach_count_label: (v) => str(v, 0, 80),
+  // How money flows to coaches for org-affiliated bookings:
+  //   split        — platform pays coach + org their shares directly (default)
+  //   organization — org receives the whole balance (minus platform fee), pays coaches itself
+  //   coach        — coach is paid directly; org takes nothing
+  payout_model: (v) => (['split', 'organization', 'coach'].includes(v) ? v : undefined),
 };
 
 async function updateOrg(databases, profile, payload) {

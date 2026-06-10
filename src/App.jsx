@@ -8,6 +8,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { homePathForRole } from '@/lib/roleHome';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import ViewAsBanner from '@/features/admin/ViewAsBanner';
 import {
   RequireOnboardingComplete,
   RequireCoach,
@@ -133,6 +134,7 @@ const AuthenticatedApp = () => {
 
   return (
     <Suspense fallback={<PageLoader />}>
+      <ViewAsBanner />
       <Routes>
         <Route element={<PublicLayout />}>
           {/* Public routes */}

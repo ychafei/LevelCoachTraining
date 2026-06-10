@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Ban, UserPlus, AlertTriangle, Zap, Lock } from 'lucide-react';
+import { Ban, UserPlus, AlertTriangle, Zap, Lock, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
 import { logAdminAction } from '@/lib/audit';
+import UserDetailDialog from '@/features/admin/UserDetailDialog';
 
 function displayName(profile) {
   return [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
@@ -40,6 +41,7 @@ export default function AdminUsers() {
   const [creditDuration, setCreditDuration] = useState('60');
   const [creditPackageName, setCreditPackageName] = useState('Admin Grant');
   const [creditSaving, setCreditSaving] = useState(false);
+  const [detailUser, setDetailUser] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -229,9 +231,15 @@ export default function AdminUsers() {
       cell: (row) => {
         const editable = canEditUser(row);
         const isSelf = row.email === me?.email;
+        const viewBtn = (
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setDetailUser(row)}>
+            <Eye className="w-3 h-3 mr-1" aria-hidden="true" /> View
+          </Button>
+        );
         if (!editable) {
           return (
             <div className="flex items-center gap-2 justify-end">
+              {viewBtn}
               {isSelf && <span className="text-xs font-display tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
               {(row.role === 'super_admin' || row.is_super_admin) && (
                 <span className="text-xs font-display tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
@@ -244,6 +252,7 @@ export default function AdminUsers() {
         const isPlatformAdmin = row.role === 'admin' || row.role === 'super_admin';
         return (
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {viewBtn}
             {isMasterAdmin && (
               <Select
                 value={isPlatformAdmin ? row.role : 'user'}
@@ -315,6 +324,8 @@ export default function AdminUsers() {
           />
         )}
       </div>
+
+      {detailUser && <UserDetailDialog profile={detailUser} onClose={() => setDetailUser(null)} />}
 
       <Dialog open={!!banDialog} onOpenChange={() => setBanDialog(null)}>
         <DialogContent className="bg-card border-border">

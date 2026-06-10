@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCents } from '@/features/org/money';
+import PayoutModelCard from '@/features/org/PayoutModelCard';
 import { AlertTriangle, CheckCircle2, CreditCard, ExternalLink, RefreshCw, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -134,6 +135,13 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
 
   return (
     <div className="space-y-6">
+      {/* Payout model — how coaches get paid */}
+      <PayoutModelCard
+        organizationId={organizationId}
+        organization={organization}
+        isOrgAdmin={isOrgAdmin}
+      />
+
       {/* Stripe Connect */}
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
