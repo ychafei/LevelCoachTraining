@@ -1,197 +1,185 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { coachRepo, sessionRepo, stripeConnectedAccountRepo } from '@/api/repo';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  organizationCoachRepo,
+  organizationRepo,
+  payoutRuleRepo,
+  reportsRepo,
+  stripeConnectedAccountRepo,
+} from '@/api/repo';
 import { useAuth } from '@/lib/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useMyCoach } from '@/features/coach/useMyCoach';
+import StripeConnectPanel from '@/features/coach/StripeConnectPanel';
+import { formatCents, formatMonthLabel, formatBps } from '@/features/coach/money';
 import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
   DollarSign,
-  ExternalLink,
-  RefreshCw,
   Receipt,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { formatCurrency, summarizeSessions } from '@/lib/earnings';
-import {
-  createStripeConnectAccount,
-  createStripeConnectOnboarding,
-  refreshStripeConnectAccount,
-} from '@/lib/stripeConnect';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-function shortDate(yyyyMmDd) {
-  const d = new Date(`${yyyyMmDd}T12:00:00Z`);
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', month: 'short', day: 'numeric' }).format(d);
-}
+const DEFAULT_PLATFORM_FEE_BPS = 1500; // ARCHITECTURE.md §4 default
 
-function TrendTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const b = payload[0].payload;
-  return (
-    <div className="bg-card border border-border rounded-lg p-3 text-xs space-y-1 shadow-lg">
-      <p className="font-display tracking-wider uppercase text-[10px] text-muted-foreground">
-        {shortDate(b.weekStart)} - {shortDate(b.weekEnd)}
-      </p>
-      <p className="text-foreground">Net: <span className="font-display">{formatCurrency(b.net)}</span></p>
-      {b.fees > 0 && <p className="text-muted-foreground">Gross: {formatCurrency(b.gross)} · Fee: {formatCurrency(b.fees)}</p>}
-      <p className="text-muted-foreground">{b.sessions} session{b.sessions === 1 ? '' : 's'}</p>
-    </div>
-  );
-}
+const TYPE_LABELS = {
+  coach_payout: 'Session payouts',
+  org_payout: 'Organization payouts',
+  platform_fee: 'Platform fees',
+  charge: 'Charges',
+  refund: 'Refunds',
+  refund_reversal: 'Refund reversals',
+  transfer_reversal: 'Transfer reversals',
+};
 
-function requirementsList(account) {
-  try {
-    const parsed = JSON.parse(account?.requirements_due || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function connectLabel(account) {
-  if (!account) return { label: 'Not connected', tone: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
-  if (account.charges_enabled && account.payouts_enabled) {
-    return { label: 'Ready', tone: 'bg-green-500/10 text-green-500 border-green-500/20' };
-  }
-  if (account.details_submitted) return { label: 'Reviewing', tone: 'bg-blue-500/10 text-blue-500 border-blue-500/20' };
-  return { label: 'Onboarding needed', tone: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
+function typeLabel(type) {
+  return TYPE_LABELS[type] || String(type || 'other').replace(/_/g, ' ');
 }
 
 export default function CoachEarnings() {
-  const { user } = useAuth();
-  const [coach, setCoach] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [connectAccount, setConnectAccount] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const { isAdmin } = useAuth();
+  const { coach, loading: coachLoading } = useMyCoach();
 
-  const load = async () => {
-    if (!user) {
-      setLoading(false);
-      return;
+  const [earnings, setEarnings] = useState(null);
+  const [earningsError, setEarningsError] = useState('');
+  const [connectAccount, setConnectAccount] = useState(null);
+  const [orgLink, setOrgLink] = useState(null);
+  const [orgName, setOrgName] = useState('');
+  const [payoutRule, setPayoutRule] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const coachId = coach?.id || '';
+
+  const load = useCallback(async () => {
+    if (!coachId) return;
+    setLoading(true);
+    const [earn, accountRows, linkRows] = await Promise.all([
+      reportsRepo.coachEarnings().catch((err) => {
+        setEarningsError(err?.message || 'Could not load earnings.');
+        return null;
+      }),
+      stripeConnectedAccountRepo.filter({ owner_type: 'coach', owner_id: coachId }).catch(() => []),
+      organizationCoachRepo.filter({ coach_id: coachId, status: 'active' }).catch(() => []),
+    ]);
+    setEarnings(earn);
+    setConnectAccount(accountRows?.[0] || null);
+
+    const link = linkRows?.[0] || null;
+    setOrgLink(link);
+    if (link?.organization_id) {
+      const [rules, org] = await Promise.all([
+        payoutRuleRepo.filter({ organization_id: link.organization_id, coach_id: coachId }).catch(() => []),
+        organizationRepo.get(link.organization_id).catch(() => null),
+      ]);
+      setPayoutRule(rules?.[0] || null);
+      setOrgName(org?.name || '');
+    } else {
+      setPayoutRule(null);
+      setOrgName('');
     }
-    const coachRow = user.coach_id ? await coachRepo.get(user.coach_id).catch(() => null) : null;
-    const ssns = user.coach_id ? await sessionRepo.filter({ coach_id: user.coach_id }, '-date') : [];
-    const accountRows = user.coach_id
-      ? await stripeConnectedAccountRepo.filter({ owner_type: 'coach', owner_id: user.coach_id }).catch(() => [])
-      : [];
-    setCoach(coachRow);
-    setSessions(ssns);
-    setConnectAccount(accountRows[0] || null);
     setLoading(false);
-  };
+  }, [coachId]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await load();
-      } catch (err) {
-        if (!cancelled) {
-          console.error('CoachEarnings load failed', err);
-          setLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    if (coachLoading) return;
+    if (!coachId) { setLoading(false); return; }
+    void load();
+  }, [coachId, coachLoading, load]);
 
-  const summary = useMemo(() => summarizeSessions(sessions, coach), [sessions, coach]);
+  const monthly = useMemo(() => (earnings?.monthly || []).map((bucket) => ({
+    month: bucket.month,
+    label: formatMonthLabel(bucket.month),
+    earned: (Number(bucket.earned_cents) || 0) / 100,
+    sessions_completed: Number(bucket.sessions_completed) || 0,
+  })), [earnings]);
 
-  const startOnboarding = async () => {
-    if (!user?.coach_id) return;
-    setConnecting(true);
-    try {
-      const account = connectAccount || await createStripeConnectAccount({
-        ownerType: 'coach',
-        ownerId: user.coach_id,
-        email: coach?.email || user.email,
-      });
-      if (!connectAccount && account?.record_id) await load();
-      const link = await createStripeConnectOnboarding({ ownerType: 'coach', ownerId: user.coach_id });
-      if (link?.url) window.location.href = link.url;
-      else toast.error('Stripe did not return an onboarding link.');
-    } catch (err) {
-      toast.error(err?.data?.error || err?.message || 'Could not start Stripe onboarding');
-    } finally {
-      setConnecting(false);
-    }
-  };
+  const byType = useMemo(() => {
+    const map = earnings?.totals?.by_type;
+    if (!map || typeof map !== 'object') return [];
+    return Object.entries(map)
+      .map(([type, cents]) => ({ type, cents: Number(cents) || 0 }))
+      .sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents));
+  }, [earnings]);
 
-  const refreshStatus = async () => {
-    if (!user?.coach_id) return;
-    setRefreshing(true);
-    try {
-      await refreshStripeConnectAccount({
-        ownerType: 'coach',
-        ownerId: user.coach_id,
-        stripeAccountId: connectAccount?.stripe_account_id,
-      });
-      await load();
-      toast.success('Stripe status refreshed');
-    } catch (err) {
-      toast.error(err?.data?.error || err?.message || 'Could not refresh Stripe status');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  if (loading) {
+  if (coachLoading || loading) {
     return (
-      <div className="py-24 text-center">
-        <div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" />
+      <div className="space-y-4" aria-busy="true" aria-label="Loading earnings">
+        <div className="h-9 w-44 animate-pulse rounded bg-secondary" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="h-28 animate-pulse rounded-lg border border-border bg-secondary/50" />
+          ))}
+        </div>
+        <div className="h-64 animate-pulse rounded-lg border border-border bg-secondary/50" />
       </div>
     );
   }
 
-  if (!user?.coach_id) {
+  if (!coach) {
     return (
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
           <p className="font-display tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
-          <p className="text-sm text-muted-foreground mt-1">Earnings need a linked coach record. Ask an admin to link your account.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isAdmin
+              ? 'Your admin account is not linked to a coach record, so there are no earnings to show.'
+              : 'Earnings need a linked coach record. Ask an admin to link your account.'}
+          </p>
         </div>
       </div>
     );
   }
 
-  const monthLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', month: 'long', year: 'numeric' }).format(new Date());
-  const trendIsEmpty = summary.weeklyTrend.every(b => b.sessions === 0);
-  const mtdSubtitle = summary.hasFee
-    ? `Gross ${formatCurrency(summary.mtdGross)} · Fee ${formatCurrency(summary.mtdFees)}`
-    : monthLabel;
-  const status = connectLabel(connectAccount);
-  const due = requirementsList(connectAccount);
+  const platformFeeBps = Number.isFinite(Number(coach.platform_fee_bps)) && coach.platform_fee_bps !== null && coach.platform_fee_bps !== undefined && coach.platform_fee_bps !== ''
+    ? Number(coach.platform_fee_bps)
+    : DEFAULT_PLATFORM_FEE_BPS;
+
+  const totals = earnings?.totals || null;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Earnings</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Payouts are handled through Stripe Connect. {summary.hasFee
-            ? <>Platform fee: <span className="text-foreground">{coach.platform_fee_type === 'percent' ? `${coach.platform_fee_value}%` : `${formatCurrency(coach.platform_fee_value)} per session`}</span>.</>
-            : 'No platform fee - you keep 100%.'
-          }
+          Computed server-side from the payment ledger and real Stripe transfers.
         </p>
       </div>
 
+      {/* Totals */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'MTD Earnings', value: formatCurrency(summary.mtdNet), sub: mtdSubtitle, icon: DollarSign },
-          { label: 'Stripe Payouts', value: status.label, sub: connectAccount?.stripe_account_id || 'Connect account required', icon: Wallet },
-          { label: 'Paid This Month', value: summary.paidThisMonth, sub: 'sessions paid', icon: Receipt },
-          { label: 'Lifetime', value: formatCurrency(summary.lifetimeNet), sub: summary.hasFee ? `Gross ${formatCurrency(summary.lifetimeGross)}` : 'all-time net', icon: TrendingUp },
+          {
+            label: 'Total Earned',
+            value: totals ? formatCents(totals.earned_cents) : '—',
+            sub: 'ledger, all-time',
+            icon: DollarSign,
+          },
+          {
+            label: 'Paid Out',
+            value: totals ? formatCents(totals.transfers_paid_cents) : '—',
+            sub: totals && Number(totals.transfers_pending_cents) > 0
+              ? `${formatCents(totals.transfers_pending_cents)} pending`
+              : 'via Stripe transfers',
+            icon: Wallet,
+          },
+          {
+            label: 'Sessions Completed',
+            value: totals ? totals.sessions_completed : '—',
+            sub: 'all-time',
+            icon: Receipt,
+          },
+          {
+            label: 'Reversed',
+            value: totals ? formatCents(totals.transfers_reversed_cents) : '—',
+            sub: 'refund transfer reversals',
+            icon: TrendingUp,
+          },
         ].map(s => (
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
-              <s.icon className="w-4 h-4 text-accent" />
+              <s.icon className="w-4 h-4 text-accent" aria-hidden="true" />
               <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</span>
             </div>
             <p className="font-display text-xl sm:text-2xl font-bold text-foreground truncate">{s.value}</p>
@@ -200,70 +188,68 @@ export default function CoachEarnings() {
         ))}
       </div>
 
+      {earningsError && (
+        <div className="bg-card border border-destructive/30 rounded-lg p-4 text-sm text-destructive break-words">
+          {earningsError}
+        </div>
+      )}
+
+      {/* Stripe Connect */}
+      <StripeConnectPanel coachId={coachId} account={connectAccount} onChanged={load} />
+
+      {/* Fee disclosure + org split */}
       <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Stripe Connect</h2>
-              <Badge className={`${status.tone} border`}>{status.label}</Badge>
+        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">How You're Paid</h2>
+        <div className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Platform fee: <span className="text-foreground font-semibold">{formatBps(platformFeeBps)}</span> of each
+            client payment{coach.platform_fee_bps == null || coach.platform_fee_bps === '' ? ' (platform default)' : ' (set for your account)'}.
+          </p>
+          {orgLink && payoutRule ? (
+            <div className="rounded-lg border border-border bg-secondary/40 p-3">
+              <p className="text-foreground font-semibold mb-1">
+                Organization split{orgName ? ` — ${orgName}` : ''}
+              </p>
+              <ul className="space-y-0.5">
+                <li>Your share: <span className="text-foreground">{formatBps(payoutRule.coach_share_bps)}</span></li>
+                <li>Organization share: <span className="text-foreground">{formatBps(payoutRule.org_share_bps)}</span></li>
+                <li>Platform share: <span className="text-foreground">{formatBps(payoutRule.platform_share_bps)}</span></li>
+              </ul>
             </div>
-            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
-              Complete Stripe onboarding so LevelCoach can route card payments to your payout account after verified checkout payments.
+          ) : orgLink ? (
+            <p>
+              You're linked to an organization{orgName ? ` (${orgName})` : ''}, but no payout split has been set yet —
+              the default org split applies until your organization admin configures one.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={startOnboarding}
-              disabled={connecting}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              {connectAccount ? 'Continue Onboarding' : 'Create Account'}
-            </Button>
-            <Button variant="outline" onClick={refreshStatus} disabled={!connectAccount || refreshing} className="font-display tracking-wider uppercase">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
+          ) : (
+            <p>You're a solo coach: you keep {formatBps(10000 - platformFeeBps)} of each payment.</p>
+          )}
+          <p className="flex items-center gap-1.5 text-xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-600" aria-hidden="true" />
+            All splits are computed server-side at payment time and recorded in an append-only ledger.
+          </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-          {[
-            { label: 'Charges', done: !!connectAccount?.charges_enabled },
-            { label: 'Payouts', done: !!connectAccount?.payouts_enabled },
-            { label: 'Details', done: !!connectAccount?.details_submitted },
-          ].map(item => (
-            <div key={item.label} className="border border-border rounded-lg p-3 flex items-center gap-2">
-              {item.done ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertTriangle className="w-4 h-4 text-yellow-500" />}
-              <span className="text-sm text-foreground">{item.label}</span>
-            </div>
-          ))}
-        </div>
-        {(due.length > 0 || connectAccount?.disabled_reason) && (
-          <div className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-500">
-            {connectAccount?.disabled_reason && <p className="font-medium">Stripe status: {connectAccount.disabled_reason}</p>}
-            {due.length > 0 && <p className="mt-1">Outstanding requirements: {due.slice(0, 6).join(', ')}</p>}
-          </div>
-        )}
       </div>
 
+      {/* Monthly chart */}
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">8-Week Trend</h2>
-          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Net per week</span>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Monthly Earnings</h2>
+          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">from the ledger</span>
         </div>
-        {trendIsEmpty ? (
+        {monthly.length === 0 ? (
           <div className="py-12 text-center">
-            <BarChart3 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-muted-foreground text-sm">Complete your first sessions to see your trend.</p>
+            <BarChart3 className="w-8 h-8 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
+            <p className="text-muted-foreground text-sm">No earnings recorded yet.</p>
+            <p className="text-xs text-muted-foreground mt-1">Your monthly totals appear after your first paid session.</p>
           </div>
         ) : (
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={summary.weeklyTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <BarChart data={monthly.slice(-12)} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
                 <XAxis
-                  dataKey="weekStart"
-                  tickFormatter={shortDate}
+                  dataKey="label"
                   tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                   axisLine={{ stroke: 'hsl(var(--border))' }}
                   tickLine={false}
@@ -273,12 +259,34 @@ export default function CoachEarnings() {
                   tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                   axisLine={{ stroke: 'hsl(var(--border))' }}
                   tickLine={false}
-                  width={50}
+                  width={56}
                 />
-                <Tooltip cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} content={<TrendTooltip />} />
-                <Bar dataKey="net" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
+                <Tooltip
+                  cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                  formatter={(value) => [value.toLocaleString('en-US', { style: 'currency', currency: 'USD' }), 'Earned']}
+                />
+                <Bar dataKey="earned" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Ledger breakdown by type */}
+      <div className="bg-card border border-border rounded-lg p-5">
+        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Ledger Breakdown</h2>
+        {byType.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No ledger entries yet — entries are created when clients pay.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {byType.map(({ type, cents }) => (
+              <div key={type} className="flex items-center justify-between gap-3 py-2.5">
+                <span className="text-sm text-foreground capitalize">{typeLabel(type)}</span>
+                <span className={`font-display text-sm font-bold ${cents < 0 ? 'text-destructive' : 'text-foreground'}`}>
+                  {formatCents(cents)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

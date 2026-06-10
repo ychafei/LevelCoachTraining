@@ -942,6 +942,9 @@ const PRODUCTION_COLLECTIONS = [
     ],
     indexes: [
       { key: 'idx_sca_owner', type: 'key', attrs: ['owner_type', 'owner_id'] },
+      // Unique guard: one connected account per owner (prevents duplicate
+      // Stripe accounts from concurrent createAccount calls).
+      { key: 'uniq_sca_owner', type: 'unique', attrs: ['owner_type', 'owner_id'] },
       { key: 'idx_sca_account', type: 'unique', attrs: ['stripe_account_id'] },
     ],
   },

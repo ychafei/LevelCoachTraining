@@ -29,22 +29,42 @@ export default function AdminBlog() {
   useEffect(() => { load(); }, []);
   const load = () => blogPostRepo.list('-created_date').then(setPosts);
 
+  // Draft fields save directly (admin label); publish/unpublish must go
+  // through adminOps.publishBlogPost so the server flips the public
+  // per-document read grant that makes the post visible on the site.
   const save = async () => {
     if (!editing.title || !editing.slug) { toast.error('Title and slug are required'); return; }
-    if (editing.id) {
-      await blogPostRepo.update(editing.id, editing);
-    } else {
-      await blogPostRepo.create(editing);
+    const { status: desiredStatus, ...fields } = editing;
+    const previousStatus = editing.id
+      ? (posts.find(p => p.id === editing.id)?.status || 'draft')
+      : 'draft';
+    try {
+      let savedId = editing.id;
+      if (editing.id) {
+        await blogPostRepo.update(editing.id, fields);
+      } else {
+        const created = await blogPostRepo.create(fields);
+        savedId = created?.id;
+      }
+      if (savedId && desiredStatus !== previousStatus) {
+        await blogPostRepo.publish(savedId, desiredStatus === 'published');
+      }
+      toast.success('Post saved');
+      setOpen(false);
+      load();
+    } catch (err) {
+      toast.error(err?.message || 'Could not save the post.');
     }
-    toast.success('Post saved');
-    setOpen(false);
-    load();
   };
 
   const remove = async (id) => {
-    await blogPostRepo.delete(id);
-    toast.success('Post deleted');
-    load();
+    try {
+      await blogPostRepo.delete(id);
+      toast.success('Post deleted');
+      load();
+    } catch (err) {
+      toast.error(err?.message || 'Could not delete the post. Unpublish it instead if deletion is not permitted.');
+    }
   };
 
   const addTag = () => {

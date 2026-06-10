@@ -1,95 +1,47 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+// Phase 4 — booking integrity (server-side validation, credits, minors, tz).
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const root = process.cwd();
-const read = (file) => readFileSync(resolve(root, file), 'utf8');
+const failures = [];
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const check = (ok, msg) => { if (!ok) failures.push(msg); };
+const includes = (path, snippets) => {
+  const content = read(path);
+  for (const s of snippets) check(content.includes(s), `${path} is missing: ${s}`);
+};
 
-let failures = 0;
+for (const file of [
+  'functions/booking/src/main.js',
+  'functions/getCoachAvailability/src/main.js',
+  'src/pages/Book.jsx',
+  'src/lib/scheduleET.js',
+]) check(existsSync(join(root, file)), `Missing required Phase 4 file: ${file}`);
 
-function pass(message) {
-  console.log(`ok - ${message}`);
-}
-
-function fail(message) {
-  failures += 1;
-  console.error(`not ok - ${message}`);
-}
-
-function includes(file, needles) {
-  const text = read(file);
-  for (const needle of needles) {
-    if (text.includes(needle)) pass(`${file} includes ${needle}`);
-    else fail(`${file} is missing ${needle}`);
-  }
-}
-
-function excludes(file, needles) {
-  const text = read(file);
-  for (const needle of needles) {
-    if (!text.includes(needle)) pass(`${file} excludes ${needle}`);
-    else fail(`${file} still contains ${needle}`);
-  }
-}
-
-includes('src/lib/metroDetroitPlaces.js', [
-  'findPlaceSuggestions',
-  'distanceMiles',
-  'coachWithinRadius',
+includes('functions/booking/src/main.js', [
+  'is_minor',                 // minors cannot book without a guardian
+  'legalPacketComplete',      // legal gate on the credit path
+  'guardian_athletes',        // guardian booking authority
+  'booking_rules',            // notice/buffer/max-advance enforcement
+  'starts_at_utc',
 ]);
 
-includes('src/pages/CoachSearch.jsx', [
-  'findPlaceSuggestions',
-  'Radius',
-  'location_lat',
-  'PublicCoachCard',
-]);
-excludes('src/pages/CoachSearch.jsx', [
-  'const GOALS',
-  'filters.goal',
-  'Training goal',
-]);
+// Public availability is privacy-safe: opaque busy ranges, never session docs.
+const avail = read('functions/getCoachAvailability/src/main.js');
+check(!avail.includes('client_email'), 'getCoachAvailability must not expose client_email');
+check(avail.includes('busy'), 'getCoachAvailability must return busy ranges');
 
-includes('src/components/public/PublicCoachCard.jsx', [
-  'bookingParams',
-  'distanceMiles',
-  'coachBookHref',
-  'mi away',
-]);
+// The booking UI delegates to the server function and shows the policy.
+includes('src/pages/Book.jsx', ["'booking'", '24']);
+const book = read('src/pages/Book.jsx');
+check(!book.includes('sessionRepo.create'), 'Book.jsx must not create sessions directly');
 
-includes('src/pages/Book.jsx', [
-  'availabilityMode',
-  'availabilityPreference',
-  'I am flexible',
-  'athleteAvailabilityPreferenceRepo',
-  'booking_location_label',
-]);
-excludes('src/pages/Book.jsx', [
-  'GOAL_TAGS',
-  'selectedTags',
-  'SESSION GOALS',
-]);
+// Timezone-correct rendering helpers exist.
+includes('src/lib/scheduleET.js', ['formatInTz', 'zonedStartUtcMs']);
 
-includes('src/components/StripeCheckout.jsx', [
-  'extraPayload',
-  'onBeforeCheckout',
-]);
-
-includes('functions/createStripeCheckout/src/main.js', [
-  'validateBookingLocation',
-  'validateAvailabilityPayload',
-  'booking_location_status',
-  'availability_mode',
-]);
-
-includes('scripts/provision-appwrite.mjs', [
-  "'location_lat'",
-  "'location_lng'",
-  "'athlete_availability_preferences'",
-]);
-
-if (failures > 0) {
-  console.error(`Phase 4 verification failed with ${failures} issue(s).`);
+if (failures.length) {
+  console.error('Phase 4 verification failed:');
+  for (const f of failures) console.error(`- ${f}`);
   process.exit(1);
 }
-
 console.log('Phase 4 verification passed.');

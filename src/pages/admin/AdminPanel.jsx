@@ -5,15 +5,18 @@ import useCurrentUser from '@/hooks/useCurrentUser';
 import {
   Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare,
   Shield, MailX, Zap, CalendarClock, CheckCircle2, UserCheck, History,
-  TrendingUp,
+  TrendingUp, Building2, Scale, ShieldAlert,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 const adminLinks = [
   { label: 'Coaches', path: '/admin/coaches', icon: Users, desc: 'Manage coaches and verification' },
   { label: 'Bookings', path: '/admin/bookings', icon: Calendar, desc: 'View all sessions' },
-  { label: 'Credits', path: '/admin/credits', icon: Zap, desc: 'Add, refund, or remove credits' },
-  { label: 'Payments', path: '/admin/payments', icon: DollarSign, desc: 'Stripe reconciliation and refunds' },
+  { label: 'Credits', path: '/admin/credits', icon: Zap, desc: 'Grant or revoke session credits' },
+  { label: 'Payments', path: '/admin/payments', icon: DollarSign, desc: 'Stripe payments and refunds' },
+  { label: 'Organizations', path: '/admin/organizations', icon: Building2, desc: 'Org workspaces, rosters, payout rules' },
+  { label: 'Reconciliation', path: '/admin/reconciliation', icon: Scale, desc: 'Platform totals, fees, and the ledger' },
+  { label: 'Safety', path: '/admin/safety', icon: ShieldAlert, desc: 'Member-filed safety reports' },
   { label: 'Content', path: '/admin/content', icon: FileText, desc: 'Edit site content' },
   { label: 'Pricing', path: '/admin/pricing', icon: DollarSign, desc: 'Manage packages' },
   { label: 'Applications', path: '/admin/applications', icon: Briefcase, desc: 'Review applications' },

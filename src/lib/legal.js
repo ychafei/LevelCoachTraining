@@ -1,5 +1,5 @@
 import { legalAgreementRepo, legalTemplateRepo } from '@/api/repo';
-import { rpc } from '@/lib/rpc';
+import { callFn } from '@/lib/rpc';
 import { storage } from '@/lib/storage';
 
 export const SIGNER_ROLE_TO_TEMPLATE_ROLE = {
@@ -82,14 +82,14 @@ export async function getLegalPacketStatus({ user, signerRole, athleteId = '', c
   };
 }
 
+// callFn surfaces the server's `.error` message verbatim on failures, so UIs
+// can toast err.message directly.
 export async function signLegalAgreement(payload) {
-  const res = await rpc.invoke('signLegalAgreement', payload);
-  return res.data;
+  return callFn('signLegalAgreement', payload);
 }
 
 export async function generateLegalAgreementPdf(agreementId) {
-  const res = await rpc.invoke('generateLegalAgreementPdf', { agreement_id: agreementId });
-  return res.data;
+  return callFn('generateLegalAgreementPdf', { agreement_id: agreementId });
 }
 
 export function legalPdfUrl(fileId) {

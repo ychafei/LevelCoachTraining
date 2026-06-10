@@ -1,301 +1,61 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { sessionRepo, sessionCreditRepo, profileRepo, conversationRepo } from '@/api/repo';
+import { sessionRepo, conversationRepo } from '@/api/repo';
+import { useMyCoach } from '@/features/coach/useMyCoach';
 import { useAuth } from '@/lib/AuthContext';
+import TrainingToolkit from '@/features/coach/TrainingToolkit';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  ArrowLeft, User as UserIcon, MapPin, Users, Zap,
-  Clock, CheckCircle2, XCircle, MessageSquare, StickyNote, Save, Check,
-  ClipboardList, Lock, Eye,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  ArrowLeft, User as UserIcon, Users,
+  Clock, CheckCircle2, XCircle, MessageSquare, StickyNote, Check, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatLongDateET, formatTimeET } from '@/lib/formatInET';
+import { formatLongDateInTz, formatTimeInTz } from '@/lib/scheduleET';
 
 const statusConfig = {
   pending:   { icon: Clock, color: 'bg-accent/10 text-accent border-accent/20', label: 'Pending' },
   confirmed: { icon: CheckCircle2, color: 'bg-primary/10 text-primary border-primary/20', label: 'Confirmed' },
-  completed: { icon: CheckCircle2, color: 'bg-green-500/10 text-green-400 border-green-500/20', label: 'Completed' },
+  completed: { icon: CheckCircle2, color: 'bg-green-500/10 text-green-600 border-green-500/20', label: 'Completed' },
+  no_show:   { icon: AlertTriangle, color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20', label: 'No-show' },
   cancelled: { icon: XCircle, color: 'bg-destructive/10 text-destructive border-destructive/20', label: 'Cancelled' },
 };
-
-function calcAge(dobStr) {
-  if (!dobStr) return null;
-  const dob = new Date(dobStr);
-  if (isNaN(dob.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - dob.getFullYear();
-  const m = now.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
-  return age;
-}
-
-// ----- Inline notes editor -------------------------------------------------
-// Coach-private in v1 (UI-only — see plan's server-side gap note).
-function SessionNotesEditor({ session, onSaved }) {
-  const [value, setValue] = useState(session.notes || '');
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(!session.notes);
-  const isDirty = value !== (session.notes || '');
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await sessionRepo.update(session.id, { notes: value });
-      toast.success('Notes saved');
-      setEditing(false);
-      onSaved?.(session.id, value);
-    } catch (err) {
-      console.error('notes save failed', err);
-      toast.error('Could not save notes.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!editing && session.notes) {
-    return (
-      <div className="mt-3 bg-secondary/50 border border-border rounded p-3">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1">
-            <StickyNote className="w-3 h-3" /> Private Notes
-          </p>
-          <button type="button" onClick={() => setEditing(true)} className="text-[10px] font-display tracking-widest uppercase text-accent hover:underline">
-            Edit
-          </button>
-        </div>
-        <p className="text-sm text-foreground whitespace-pre-wrap">{session.notes}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-3">
-      <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1 flex items-center gap-1">
-        <StickyNote className="w-3 h-3" /> Private Notes (only visible to you)
-      </p>
-      <Textarea
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="What did you work on? What's next?"
-        className="bg-background border-border text-sm"
-        rows={3}
-      />
-      <div className="flex items-center gap-2 mt-2">
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={saving || !isDirty}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
-        >
-          {saving ? 'Saving...' : <><Save className="w-3 h-3 mr-1" /> Save</>}
-        </Button>
-        {session.notes && (
-          <Button size="sm" variant="ghost" onClick={() => { setValue(session.notes || ''); setEditing(false); }} className="text-xs">
-            Cancel
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ----- Coaching plan editor ------------------------------------------------
-// Coach-private structured plan. Stored on the most relevant Session: the next
-// upcoming session if one exists, otherwise the most recent past session. The
-// plan reads from the most recent session that has any plan field populated, so
-// older entries don't disappear when a new session is created.
-
-const PLAN_FIELDS = [
-  { key: 'training_plan',        label: 'Training Plan',        placeholder: 'Long-term plan for this client.',                        visibility: 'private' },
-  { key: 'strengths',            label: 'Strengths',            placeholder: 'What this client does well.',                            visibility: 'private' },
-  { key: 'weaknesses',           label: 'Weaknesses',           placeholder: 'Areas to develop.',                                      visibility: 'private' },
-  { key: 'next_session_focus',   label: 'Next Session Focus',   placeholder: 'What to work on at the next session.',                   visibility: 'private' },
-  { key: 'homework',             label: 'Homework',             placeholder: 'Between-session work — the client sees this.',           visibility: 'shared' },
-  { key: 'client_visible_notes', label: 'Notes for Client',     placeholder: 'Anything else you want the client to see on their dashboard.', visibility: 'shared' },
-];
-
-function pickTargetSession(sessions) {
-  if (!sessions || sessions.length === 0) return null;
-  const upcoming = sessions
-    .filter(s => s.status === 'pending' || s.status === 'confirmed')
-    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
-  if (upcoming.length > 0) return upcoming[0];
-  // Otherwise most recent by date (sessions list comes pre-sorted desc)
-  return sessions[0];
-}
-
-function pickPlanSnapshot(sessions) {
-  // Walk sessions from newest to oldest; the first non-empty value per field wins.
-  const out = {};
-  PLAN_FIELDS.forEach(f => { out[f.key] = ''; });
-  for (const s of sessions) {
-    PLAN_FIELDS.forEach(f => {
-      if (!out[f.key] && s[f.key]) out[f.key] = s[f.key];
-    });
-    if (PLAN_FIELDS.every(f => out[f.key])) break;
-  }
-  return out;
-}
-
-function CoachingPlan({ sessions, onSaved }) {
-  const targetSession = useMemo(() => pickTargetSession(sessions), [sessions]);
-  const snapshot = useMemo(() => pickPlanSnapshot(sessions), [sessions]);
-  const [draft, setDraft] = useState(snapshot);
-  const [saving, setSaving] = useState(false);
-
-  // Reset draft when the snapshot changes (e.g. after save propagates).
-  useEffect(() => { setDraft(snapshot); }, [snapshot]);
-
-  const dirty = useMemo(
-    () => PLAN_FIELDS.some(f => (draft[f.key] || '') !== (snapshot[f.key] || '')),
-    [draft, snapshot]
-  );
-
-  if (!targetSession) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-center gap-2 mb-2">
-          <ClipboardList className="w-4 h-4 text-accent" />
-          <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          The plan saves to your most relevant session with this client. Book or hold a session first to start the plan.
-        </p>
-      </div>
-    );
-  }
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const patch = {};
-      PLAN_FIELDS.forEach(f => { patch[f.key] = draft[f.key] || ''; });
-      await sessionRepo.update(targetSession.id, patch);
-      onSaved?.(targetSession.id, patch);
-      toast.success('Coaching plan saved');
-    } catch (err) {
-      console.error('plan save failed', err);
-      toast.error('Could not save coaching plan');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const targetLabel = (targetSession.status === 'pending' || targetSession.status === 'confirmed')
-    ? `next session · ${formatLongDateET(targetSession.date)}`
-    : `most recent session · ${formatLongDateET(targetSession.date)}`;
-
-  return (
-    <div className="bg-card border border-border rounded-lg p-5">
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="w-4 h-4 text-accent" />
-          <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">Coaching Plan</h2>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground mb-4">
-        Saves to your <span className="text-foreground">{targetLabel}</span>. Past entries stay attached to their session — this view always shows the latest values.
-      </p>
-
-      {/* Private — coach only */}
-      <div className="flex items-center gap-2 mb-2">
-        <Lock className="w-3 h-3 text-muted-foreground" />
-        <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Private — coach only</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-        {PLAN_FIELDS.filter(f => f.visibility === 'private').map(f => (
-          <div key={f.key} className={f.key === 'training_plan' ? 'md:col-span-2' : ''}>
-            <label className="font-display tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
-            <Textarea
-              value={draft[f.key] || ''}
-              onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
-              placeholder={f.placeholder}
-              rows={f.key === 'training_plan' ? 4 : 3}
-              className="bg-secondary border-border mt-1 text-sm"
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Shared — visible to client */}
-      <div className="flex items-center gap-2 mb-2">
-        <Eye className="w-3 h-3 text-accent" />
-        <p className="text-[10px] font-display tracking-widest uppercase text-accent">Shared — visible on client dashboard</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {PLAN_FIELDS.filter(f => f.visibility === 'shared').map(f => (
-          <div key={f.key}>
-            <label className="font-display tracking-wider uppercase text-xs text-muted-foreground">{f.label}</label>
-            <Textarea
-              value={draft[f.key] || ''}
-              onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
-              placeholder={f.placeholder}
-              rows={3}
-              className="bg-secondary border-accent/30 mt-1 text-sm"
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-end gap-2 mt-4">
-        {dirty && (
-          <button
-            type="button"
-            onClick={() => setDraft(snapshot)}
-            className="text-[11px] font-display tracking-widest uppercase text-muted-foreground hover:text-foreground"
-          >
-            Revert
-          </button>
-        )}
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={!dirty || saving}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90 disabled:opacity-40"
-        >
-          <Save className="w-3 h-3 mr-1" /> {saving ? 'Saving…' : 'Save Plan'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ----- Main page -----------------------------------------------------------
 
 export default function CoachClientDetail() {
   const { clientEmail: raw } = useParams();
   const clientEmail = decodeURIComponent(raw || '');
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const { coach, loading: coachLoading } = useMyCoach();
   const navigate = useNavigate();
 
   const [sessions, setSessions] = useState([]);
-  const [credits, setCredits] = useState([]);
-  const [clientUser, setClientUser] = useState(null);
   const [existingConvo, setExistingConvo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [creatingConvo, setCreatingConvo] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [firstMessage, setFirstMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
-    if (!user?.coach_id || !clientEmail) { setLoading(false); return; }
+    if (coachLoading) return undefined;
+    if (!coach?.id || !clientEmail) { setLoading(false); return undefined; }
     let cancelled = false;
     (async () => {
       try {
-        const [ssns, crds, users, convos] = await Promise.all([
-          sessionRepo.filter({ coach_id: user.coach_id, client_email: clientEmail }, '-date'),
-          sessionCreditRepo.filter({ client_email: clientEmail }),
-          profileRepo.filter({ email: clientEmail }),
-          // NOTE: broad-fetch limitation — narrowed client-side. See risks in plan.
-          conversationRepo.filter({}),
+        const [ssns, convos] = await Promise.all([
+          sessionRepo.filter({ coach_id: coach.id, client_email: clientEmail }, '-date'),
+          // Per-document grants scope this list to the caller's own threads.
+          conversationRepo.list('-last_message_at').catch(() => []),
         ]);
         if (cancelled) return;
         setSessions(ssns || []);
-        setCredits(crds || []);
-        setClientUser(users?.[0] || null);
         const convo = (convos || []).find(c =>
-          !c.is_archived &&
-          c.participant_emails?.includes(user.email) &&
-          c.participant_emails?.includes(clientEmail)
+          !c.is_archived
+          && (!user?.email || c.participant_emails?.includes(user.email))
+          && c.participant_emails?.some((e) => String(e).toLowerCase() === clientEmail.toLowerCase())
         );
         setExistingConvo(convo || null);
       } catch (err) {
@@ -306,66 +66,92 @@ export default function CoachClientDetail() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, clientEmail]);
+  }, [coach?.id, coachLoading, clientEmail, user?.email]);
 
   // Derived --------------------------------------------------------------
   const completed = sessions.filter(s => s.status === 'completed');
   const upcoming = sessions.filter(s => s.status === 'pending' || s.status === 'confirmed');
-  const clientName = sessions[0]?.client_name
-    || [clientUser?.first_name, clientUser?.last_name].filter(Boolean).join(' ')
-    || clientUser?.full_name
-    || clientEmail;
-  const age = clientUser?.dob ? calcAge(clientUser.dob) : (sessions[0]?.client_age ?? null);
-  const isMinor = age != null && age < 18;
-  const county = sessions[0]?.county || clientUser?.county;
+  const clientName = sessions[0]?.client_name || clientEmail;
+  const age = sessions[0]?.client_age ?? null;
+  const athleteId = useMemo(
+    () => sessions.find((s) => s.athlete_id)?.athlete_id || '',
+    [sessions],
+  );
+  const bookerProfileId = useMemo(
+    () => sessions.find((s) => s.booked_by_profile_id)?.booked_by_profile_id || '',
+    [sessions],
+  );
+  const defaultSportKey = Array.isArray(coach?.sports) && coach.sports.length === 1 ? coach.sports[0] : '';
 
-  const handleStartConversation = async () => {
-    if (sessions.length === 0) {
-      toast.error('You need at least one session with this client before messaging them.');
-      return;
-    }
+  const openMessaging = () => {
     if (existingConvo) {
       navigate('/coach/messages');
       return;
     }
-    setCreatingConvo(true);
+    if (!bookerProfileId) {
+      toast.error('Messaging unlocks after this client books a session.');
+      return;
+    }
+    setMessageOpen(true);
+  };
+
+  const sendFirstMessage = async () => {
+    const content = firstMessage.trim();
+    if (!content) return;
+    setSendingMessage(true);
     try {
-      const coachFullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.full_name || user.email;
-      await conversationRepo.create({
-        type: 'coach_client',
-        participant_emails: [String(user.email), String(clientEmail)],
-        participant_names: [coachFullName, clientName],
-        coach_id: user.coach_id,
+      await conversationRepo.start({
+        recipient_profile_id: bookerProfileId,
+        first_message: content,
       });
-      toast.success('Conversation started');
+      toast.success('Message sent');
+      setMessageOpen(false);
+      setFirstMessage('');
       navigate('/coach/messages');
     } catch (err) {
-      console.error('convo create failed', err);
-      toast.error('Could not start conversation.');
+      toast.error(err?.message || 'Could not start the conversation.');
     } finally {
-      setCreatingConvo(false);
+      setSendingMessage(false);
     }
   };
 
   // Render ---------------------------------------------------------------
-  if (loading) {
+  if (loading || coachLoading) {
     return (
-      <div className="py-24 text-center">
-        <div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" />
+      <div className="space-y-4" aria-busy="true" aria-label="Loading client">
+        <div className="h-6 w-40 animate-pulse rounded bg-secondary" />
+        <div className="h-32 animate-pulse rounded-lg border border-border bg-secondary/50" />
+        <div className="h-64 animate-pulse rounded-lg border border-border bg-secondary/50" />
       </div>
     );
   }
 
-  if (sessions.length === 0 && !clientUser) {
+  if (!coach) {
+    return (
+      <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <div>
+          <p className="font-display tracking-wider text-foreground uppercase text-sm">Coach Profile Not Linked</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isAdmin
+              ? 'Your admin account is not linked to a coach record.'
+              : 'Ask an admin to link your account to a coach record.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
     return (
       <div className="space-y-4">
         <Link to="/coach/clients" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to Clients
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Clients
         </Link>
         <div className="bg-card border border-border rounded-lg p-12 text-center">
-          <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
           <h2 className="font-display text-lg tracking-wider text-foreground uppercase">No record for {clientEmail}</h2>
-          <p className="text-sm text-muted-foreground mt-1">You haven't coached this client, and no user account matches.</p>
+          <p className="text-sm text-muted-foreground mt-1">You haven't coached this client yet — their page unlocks after their first booking.</p>
         </div>
       </div>
     );
@@ -374,7 +160,7 @@ export default function CoachClientDetail() {
   return (
     <div className="space-y-6">
       <Link to="/coach/clients" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="w-4 h-4" /> Back to Clients
+        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Clients
       </Link>
 
       {/* Header card */}
@@ -382,41 +168,34 @@ export default function CoachClientDetail() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-start gap-4 min-w-0">
             <div className="w-14 h-14 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-              <UserIcon className="w-6 h-6 text-muted-foreground" />
+              <UserIcon className="w-6 h-6 text-muted-foreground" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <h1 className="font-display text-2xl font-bold tracking-wider text-foreground truncate">{clientName}</h1>
               <div className="flex items-center gap-3 mt-1 flex-wrap text-sm text-muted-foreground">
-                {age != null && <span>Age {age}{isMinor && <span className="ml-1 text-accent">· minor</span>}</span>}
-                {county && (
-                  <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {county} County</span>
-                )}
+                {age != null && <span>Age {age}</span>}
                 <span className="truncate">{clientEmail}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {sessions.length > 0 && (
-              <Button
-                onClick={handleStartConversation}
-                disabled={creatingConvo}
-                className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
-              >
-                <MessageSquare className="w-3 h-3 mr-1" />
-                {existingConvo ? 'Open Chat' : (creatingConvo ? 'Starting...' : 'Start Chat')}
-              </Button>
-            )}
+            <Button
+              onClick={openMessaging}
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+            >
+              <MessageSquare className="w-3 h-3 mr-1" aria-hidden="true" />
+              {existingConvo ? 'Open Chat' : 'Start Chat'}
+            </Button>
           </div>
         </div>
 
         {/* Summary row */}
-        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="mt-5 grid grid-cols-3 gap-2">
           {[
-            { label: 'Total', value: sessions.length },
+            { label: 'Total Sessions', value: sessions.length },
             { label: 'Completed', value: completed.length },
             { label: 'Upcoming', value: upcoming.length },
-            { label: 'Credits', value: credits.reduce((sum, c) => sum + Math.max(0, (c.total_credits || 0) - (c.used_credits || 0)), 0) },
           ].map(s => (
             <div key={s.label} className="bg-secondary/40 border border-border rounded p-3 text-center">
               <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</p>
@@ -426,118 +205,101 @@ export default function CoachClientDetail() {
         </div>
       </div>
 
-      {/* Parent / guardian (minors only) */}
-      {isMinor && clientUser && (clientUser.parent_email || clientUser.parent_phone || clientUser.parent_first_name) && (
-        <div className="bg-card border border-border rounded-lg p-5">
-          <h2 className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-3">Parent / Guardian</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            {(clientUser.parent_first_name || clientUser.parent_last_name) && (
-              <div>
-                <span className="text-muted-foreground">Name: </span>
-                <span className="text-foreground">{[clientUser.parent_first_name, clientUser.parent_last_name].filter(Boolean).join(' ')}</span>
-              </div>
-            )}
-            {clientUser.parent_email && (
-              <div>
-                <span className="text-muted-foreground">Email: </span>
-                <a href={`mailto:${clientUser.parent_email}`} className="text-accent hover:underline">{clientUser.parent_email}</a>
-              </div>
-            )}
-            {clientUser.parent_phone && (
-              <div>
-                <span className="text-muted-foreground">Phone: </span>
-                <a href={`tel:${clientUser.parent_phone}`} className="text-foreground">{clientUser.parent_phone}</a>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Credits */}
-      {credits.length > 0 && (
-        <div className="bg-card border border-border rounded-lg p-5">
-          <h2 className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-3">Active Credits</h2>
-          <div className="space-y-2">
-            {credits.map(c => {
-              const remaining = Math.max(0, (c.total_credits || 0) - (c.used_credits || 0));
-              const durLabel = c.session_duration_minutes ? `${c.session_duration_minutes} min` : null;
-              return (
-                <div key={c.id} className="flex items-center justify-between gap-2 py-2 border-b border-border last:border-0">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Zap className={`w-4 h-4 flex-shrink-0 ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`} />
-                    <div className="min-w-0">
-                      <p className="text-sm text-foreground truncate">{c.package_name || 'Credit package'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.used_credits || 0} / {c.total_credits || 0} used{durLabel ? ` · ${durLabel}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={`font-display text-lg flex-shrink-0 ${remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{remaining}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Coaching plan (coach-private; mirrors onto most relevant session) */}
-      {sessions.length > 0 && (
-        <CoachingPlan
-          sessions={sessions}
-          onSaved={(id, patch) => setSessions(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))}
-        />
-      )}
+      {/* Training toolkit — goals, plans, homework, assessments, check-ins */}
+      <TrainingToolkit coachId={coach.id} athleteId={athleteId} defaultSportKey={defaultSportKey} />
 
       {/* Session history */}
       <div>
         <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Session History</h2>
-        {sessions.length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-            No sessions with this client yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sessions.map(s => {
-              const sc = statusConfig[s.status] || statusConfig.pending;
-              const Icon = sc.icon;
-              return (
-                <div key={s.id} className="bg-card border border-border rounded-lg p-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <p className="font-display tracking-wider text-foreground">{formatLongDateET(s.date)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatTimeET(s.date, s.start_time)} · {s.duration_minutes} min · {s.county}
+        <div className="space-y-3">
+          {sessions.map(s => {
+            const sc = statusConfig[s.status] || statusConfig.pending;
+            const Icon = sc.icon;
+            const tz = s.timezone || coach.timezone || undefined;
+            return (
+              <div key={s.id} className="bg-card border border-border rounded-lg p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="font-display tracking-wider text-foreground">{formatLongDateInTz(s.date, tz)}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatTimeInTz(s.date, s.start_time, tz)} · {s.duration_minutes} min
+                    </p>
+                    {s.session_goals && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
+                        {s.session_goals}
                       </p>
-                      {s.session_goals && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
-                          {s.session_goals}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      <Badge className={`${sc.color} border text-[10px] font-display tracking-widest uppercase`}>
-                        <Icon className="w-3 h-3 mr-1" /> {sc.label}
-                      </Badge>
-                      {s.payment_status === 'paid' && (
-                        <Badge className="bg-green-500/10 text-green-400 border-green-500/20 border text-[10px] font-display tracking-widest uppercase">
-                          <Check className="w-3 h-3 mr-1" /> Paid
-                        </Badge>
-                      )}
-                    </div>
+                    )}
+                    {s.cancellation_reason && (
+                      <p className="text-xs text-destructive mt-1">Reason: {s.cancellation_reason}</p>
+                    )}
                   </div>
-
-                  {/* Notes editor — always available, even for upcoming (pre-session plan) */}
-                  <SessionNotesEditor
-                    session={s}
-                    onSaved={(id, notes) => setSessions(prev => prev.map(x => x.id === id ? { ...x, notes } : x))}
-                  />
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <Badge className={`${sc.color} border text-[10px] font-display tracking-widest uppercase`}>
+                      <Icon className="w-3 h-3 mr-1" aria-hidden="true" /> {sc.label}
+                    </Badge>
+                    {s.payment_status === 'paid' && (
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20 border text-[10px] font-display tracking-widest uppercase">
+                        <Check className="w-3 h-3 mr-1" aria-hidden="true" /> Paid
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* Session notes: sessions are server-only writable and the
+                    training function has no session-notes action yet, so
+                    editing is disabled rather than faked. */}
+                {s.notes ? (
+                  <div className="mt-3 bg-secondary/50 border border-border rounded p-3">
+                    <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-1">
+                      <StickyNote className="w-3 h-3" aria-hidden="true" /> Booking Notes
+                    </p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{s.notes}</p>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          Per-session coach notes are coming soon — use Goals, Plans, and Homework above to track structured work in the meantime.
+        </p>
       </div>
+
+      {/* First-message dialog */}
+      <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Message {clientName}</DialogTitle>
+            <DialogDescription>
+              This starts a conversation in your inbox. The client (and their guardian, for minors) can read and reply.
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label htmlFor="first-message" className="sr-only">First message</label>
+            <Textarea
+              id="first-message"
+              value={firstMessage}
+              onChange={(e) => setFirstMessage(e.target.value)}
+              rows={4}
+              placeholder="Write your message…"
+              className="bg-secondary border-border"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMessageOpen(false)} className="font-display tracking-wider uppercase">
+              Cancel
+            </Button>
+            <Button
+              onClick={sendFirstMessage}
+              disabled={!firstMessage.trim() || sendingMessage}
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+            >
+              {sendingMessage ? 'Sending…' : 'Send Message'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

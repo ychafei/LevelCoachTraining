@@ -1,63 +1,87 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Circle, AlertCircle, Rocket } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { coachRepo } from '@/api/repo';
+import { toast } from 'sonner';
 
-// Real, state-aware checklist. Drives coach onboarding from actual data
-// rather than a static 3-step list. Each step has a resolver function
-// that reads from user + coach and returns { done, blocking }.
+// Real, state-aware onboarding checklist mirroring the server-side publish
+// gate in the coachSelf function. Every signal comes from actual data:
+// the coach record, the Stripe Connect row, and the signed legal packet.
+// The 'Publish profile' action calls coachSelf.publish — the server is the
+// source of truth and its gating errors are surfaced item by item.
 
-export function computeChecklist(user, coach) {
+const MISSING_LABELS = {
+  legal_packet: 'Sign your coach legal packet',
+  stripe_connect: 'Finish Stripe Connect onboarding',
+  email_verification: 'Verify your contact email',
+  bio: 'Your bio needs at least 80 characters',
+  photo: 'Upload a profile photo',
+  sport: 'Add at least one sport',
+  availability: 'Set weekly availability',
+};
+
+function weeklyAvailabilitySet(coach) {
+  const availability = coach?.availability;
+  return !!availability && typeof availability === 'object'
+    && Object.values(availability).some((d) => d?.enabled);
+}
+
+// extras: { connectReady?: boolean, hasSportProfiles?: boolean,
+//           legalPacketSigned?: boolean|null } — null/undefined = unknown,
+// never guessed.
+export function computeChecklist(user, coach, extras = {}) {
   const items = [
     {
       key: 'linked',
       label: 'Coach profile linked to your account',
       blurb: 'An admin connects your user account to a Coach record. Clients cannot book you until this is done.',
       href: null,
-      done: !!user?.coach_id && !!coach?.id,
-      blocking: !user?.coach_id,
+      done: !!coach?.id,
+      blocking: !coach?.id,
     },
     {
       key: 'bio',
-      label: 'Write your bio',
-      blurb: 'Clients read this when choosing a coach.',
+      label: 'Write your bio (80+ characters)',
+      blurb: 'Clients read this when choosing a coach. Publishing requires at least 80 characters.',
       href: '/coach/profile',
-      done: !!(coach?.bio && coach.bio.trim().length > 20),
+      done: String(coach?.bio || '').trim().length >= 80,
       blocking: false,
     },
     {
       key: 'photo',
       label: 'Upload a profile photo',
-      blurb: 'Coaches with photos get picked more often.',
+      blurb: 'Required to publish — coaches with photos get picked more often.',
       href: '/coach/profile',
-      done: !!coach?.photo_url,
+      done: !!String(coach?.photo_url || '').trim(),
       blocking: false,
     },
     {
-      key: 'training_area',
-      label: 'Set your service area',
-      blurb: 'City, radius, and where athletes can train with you.',
-      href: '/coach/settings?section=profile',
-      done: !!((coach?.service_city && coach.service_city.trim().length > 0) || (coach?.training_area && coach.training_area.trim().length > 0)),
+      key: 'sport',
+      label: 'Add at least one sport',
+      blurb: 'Pick your sports and set per-sport specialties so athletes can find you.',
+      href: '/coach/profile',
+      done: (Array.isArray(coach?.sports) && coach.sports.length > 0) || extras.hasSportProfiles === true,
       blocking: false,
     },
     {
       key: 'availability',
       label: 'Set weekly availability',
       blurb: 'Clients can only book when you have availability set.',
-      href: '/coach/settings?section=calendar',
-      done: !!coach?.availability && Object.values(coach.availability).some(d => d?.enabled),
-      blocking: !(!!coach?.availability && Object.values(coach?.availability || {}).some(d => d?.enabled)),
+      href: '/coach/settings?section=availability',
+      done: weeklyAvailabilitySet(coach),
+      blocking: !weeklyAvailabilitySet(coach) && !!coach?.id,
     },
     {
-      key: 'payment',
+      key: 'stripe_connect',
       label: 'Complete Stripe Connect onboarding',
-      blurb: 'Stripe Connect is required for card payouts.',
+      blurb: 'A ready Connect account (charges + payouts enabled) is required for payouts and publishing.',
       href: '/coach/earnings',
-      done: !!coach?.stripe_account_id,
+      done: extras.connectReady === true,
       blocking: false,
     },
     {
-      key: 'email_verified',
+      key: 'email_verification',
       label: 'Verify your contact email',
       blurb: 'Confirms emails from clients will reach you.',
       href: '/coach/profile',
@@ -65,16 +89,54 @@ export function computeChecklist(user, coach) {
       blocking: false,
     },
   ];
-  const totalDone = items.filter(i => i.done).length;
-  const hasBlocking = items.some(i => i.blocking);
-  return { items, totalDone, total: items.length, hasBlocking, pct: Math.round((totalDone / items.length) * 100) };
+
+  if (extras.legalPacketSigned !== undefined && extras.legalPacketSigned !== null) {
+    items.push({
+      key: 'legal_packet',
+      label: 'Sign your coach legal packet',
+      blurb: 'The coach agreement and payout acknowledgement must be signed before publishing.',
+      href: null,
+      done: extras.legalPacketSigned === true,
+      blocking: false,
+    });
+  }
+
+  const totalDone = items.filter((i) => i.done).length;
+  const hasBlocking = items.some((i) => i.blocking);
+  return {
+    items,
+    totalDone,
+    total: items.length,
+    hasBlocking,
+    pct: Math.round((totalDone / items.length) * 100),
+  };
 }
 
-export default function OnboardingChecklist({ user, coach, compact = false }) {
-  const { items, totalDone, total, hasBlocking, pct } = computeChecklist(user, coach);
-  if (totalDone === total) return null; // fully set up → hide
+export default function OnboardingChecklist({ user, coach, extras = {}, compact = false, onPublished }) {
+  const { items, totalDone, total, hasBlocking, pct } = computeChecklist(user, coach, extras);
+  const [publishing, setPublishing] = useState(false);
+  const [serverMissing, setServerMissing] = useState([]);
 
-  const firstIncomplete = items.find(i => !i.done);
+  const published = coach?.published === true;
+  if (published && totalDone === total) return null; // fully set up + live → hide
+
+  const firstIncomplete = items.find((i) => !i.done);
+
+  const publish = async () => {
+    setPublishing(true);
+    setServerMissing([]);
+    try {
+      await coachRepo.publish();
+      toast.success('Your profile is live on the marketplace.');
+      onPublished?.();
+    } catch (err) {
+      const missing = Array.isArray(err?.data?.missing) ? err.data.missing : [];
+      setServerMissing(missing);
+      toast.error(err?.message || 'Could not publish your profile.');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   if (compact) {
     return (
@@ -100,15 +162,19 @@ export default function OnboardingChecklist({ user, coach, compact = false }) {
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Finish Your Profile</h2>
-          <p className="text-xs text-muted-foreground">{totalDone} of {total} complete</p>
+          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">
+            {published ? 'Profile Checklist' : 'Get Published'}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {totalDone} of {total} complete
+            {published && <span className="ml-2 text-green-600">· Live on the marketplace</span>}
+          </p>
         </div>
         <span className="font-display text-xl font-bold text-accent">{pct}%</span>
       </div>
 
-      {/* Progress bar */}
       <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-5">
         <div
           className="h-full bg-accent transition-all duration-500"
@@ -117,33 +183,34 @@ export default function OnboardingChecklist({ user, coach, compact = false }) {
       </div>
 
       <ul className="space-y-2">
-        {items.map(item => {
-          const Icon = item.done
+        {items.map((item) => {
+          const flaggedByServer = serverMissing.includes(item.key);
+          const Icon = item.done && !flaggedByServer
             ? CheckCircle2
-            : item.blocking
+            : item.blocking || flaggedByServer
               ? AlertCircle
               : Circle;
-          const iconColor = item.done
-            ? 'text-green-400'
-            : item.blocking
+          const iconColor = item.done && !flaggedByServer
+            ? 'text-green-500'
+            : item.blocking || flaggedByServer
               ? 'text-destructive'
               : 'text-muted-foreground';
 
           const content = (
             <div className="flex items-start gap-3 py-2">
-              <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${iconColor}`} />
+              <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${iconColor}`} aria-hidden="true" />
               <div className="flex-1 min-w-0">
-                <p className={`text-sm ${item.done ? 'text-muted-foreground line-through' : 'text-foreground font-medium'}`}>
+                <p className={`text-sm ${item.done && !flaggedByServer ? 'text-muted-foreground line-through' : 'text-foreground font-medium'}`}>
                   {item.label}
                 </p>
-                {!item.done && (
+                {(!item.done || flaggedByServer) && (
                   <p className="text-xs text-muted-foreground mt-0.5">{item.blurb}</p>
                 )}
               </div>
             </div>
           );
 
-          if (item.done || !item.href) {
+          if ((item.done && !flaggedByServer) || !item.href) {
             return <li key={item.key} className="px-2 -mx-2 rounded-md">{content}</li>;
           }
 
@@ -155,7 +222,33 @@ export default function OnboardingChecklist({ user, coach, compact = false }) {
             </li>
           );
         })}
+        {serverMissing
+          .filter((key) => !items.some((i) => i.key === key))
+          .map((key) => (
+            <li key={key} className="px-2 -mx-2 rounded-md">
+              <div className="flex items-start gap-3 py-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-destructive" aria-hidden="true" />
+                <p className="text-sm text-foreground font-medium">{MISSING_LABELS[key] || key}</p>
+              </div>
+            </li>
+          ))}
       </ul>
+
+      {!published && coach?.id && (
+        <div className="mt-5 pt-4 border-t border-border flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-muted-foreground max-w-sm">
+            Publishing makes your profile bookable on the marketplace. The server re-checks every requirement.
+          </p>
+          <Button
+            onClick={publish}
+            disabled={publishing}
+            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+          >
+            <Rocket className="w-4 h-4 mr-2" aria-hidden="true" />
+            {publishing ? 'Publishing…' : 'Publish Profile'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

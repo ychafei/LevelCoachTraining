@@ -192,7 +192,24 @@ async function createAccount({ databases, users, stripe, accountId, profile, own
   try {
     row = await databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), data, permissions);
   } catch (err) {
-    if (err?.code === 409) throw err;
+    if (err?.code === 409) {
+      // A concurrent createAccount won the unique (owner_type, owner_id) race.
+      // Their account is canonical: discard the one we just created and return
+      // the existing record.
+      await stripe.accounts.del(account.id).catch(() => {});
+      const existing = await findConnectedAccount(databases, ownerType, ownerId);
+      if (existing) {
+        return {
+          account_id: existing.stripe_account_id,
+          record_id: existing.$id,
+          charges_enabled: !!existing.charges_enabled,
+          payouts_enabled: !!existing.payouts_enabled,
+          details_submitted: !!existing.details_submitted,
+          already_exists: true,
+        };
+      }
+      throw err;
+    }
     row = await databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), data);
   }
   await syncOwnerAccountId(databases, ownerType, ownerId, account.id);

@@ -14,33 +14,34 @@ import {
   MapPin,
   Phone,
   ShieldCheck,
-  Target,
-  Trophy,
   User,
   Users,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
-import { athleteProfileRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import {
   CITY_OPTIONS,
   EMAIL_RE,
-  RELATIONSHIP_OPTIONS,
-  SPORT_OPTIONS,
+  buildAthleteBio,
+  buildLocationLabel,
   citySuggestions,
   normalizePhoneForStorage,
-  normalizeSport,
   requiresGuardian,
   resolveCityPlace,
-  validateCity,
   validateDob,
-  validateEmail,
+  validateLocation,
   validatePersonName,
   validatePhone,
-  validateSport,
 } from '@/lib/athleteOnboardingFields';
+import {
+  AthleteSportFields,
+  GuardianContactFields,
+  HealthAndEmergencyFields,
+  validateAthleteDetails,
+  validateGuardianContact,
+} from '@/features/onboarding/AthleteFields';
 import { homePathForRole, onboardingPath, postAuthRedirectPath } from '@/lib/roleHome';
 
 const PASSWORD_RULES = [
@@ -54,7 +55,7 @@ const PASSWORD_RULES = [
 const ACCOUNT_TYPES = [
   {
     label: 'Athlete / Client',
-    description: 'Find coaches, book sessions, message your coach, and track your training progress.',
+    description: 'Find coaches across 15 sports, book sessions, message your coach, and track your training progress.',
     icon: Users,
     href: '/create-account/athlete',
     cta: 'Create athlete account',
@@ -62,7 +63,7 @@ const ACCOUNT_TYPES = [
   },
   {
     label: 'Parent / Guardian',
-    description: 'Create a family workspace to manage child athletes, waivers, approvals, payments, and messages.',
+    description: 'Manage your child athletes from one family account: profiles, waivers, booking approvals, payments, and messages.',
     icon: ShieldCheck,
     href: '/create-account/parent',
     cta: 'Create parent account',
@@ -70,15 +71,15 @@ const ACCOUNT_TYPES = [
   },
   {
     label: 'Coach',
-    description: 'Create a free coach profile and finish verification, availability, and payments before going live.',
+    description: 'Apply to coach on LevelCoach. After review and approval you set up your profile, availability, and payouts.',
     icon: Briefcase,
     href: '/apply/private-training-coach',
-    cta: 'Create coach account',
+    cta: 'Apply as a coach',
     accent: 'emerald',
   },
   {
     label: 'Training Organization',
-    description: 'Set up your branded organization portal for coaches, athletes, programs, and payments.',
+    description: 'Set up your organization workspace for coaches, rosters, payout splits, and a branded public page.',
     icon: Building2,
     href: '/create-organization',
     cta: 'Create organization account',
@@ -146,6 +147,28 @@ export default function CreateAccount() {
   );
 }
 
+const EMPTY_SPORT_DETAILS = {
+  sportKey: '',
+  position: '',
+  level: '',
+  availability: [],
+};
+
+const EMPTY_HEALTH = {
+  healthNotes: '',
+  emergencyName: '',
+  emergencyPhone: '',
+  emergencyRelationship: '',
+};
+
+const EMPTY_GUARDIAN = {
+  parentFirstName: '',
+  parentLastName: '',
+  parentEmail: '',
+  parentPhone: '',
+  parentRelationship: '',
+};
+
 export function AthleteSignup() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -157,19 +180,16 @@ export function AthleteSignup() {
     email: '',
     phone: '',
     dob: '',
-    sport: '',
-    location: '',
+    city: '',
+    locationDetail: '',
     trainingGoal: '',
     password: '',
     confirmPassword: '',
-    parentFirstName: '',
-    parentLastName: '',
-    parentEmail: '',
-    parentPhone: '',
-    parentRelationship: '',
     terms: false,
-    marketing: false,
   });
+  const [sportDetails, setSportDetails] = useState(EMPTY_SPORT_DETAILS);
+  const [healthDetails, setHealthDetails] = useState(EMPTY_HEALTH);
+  const [guardian, setGuardian] = useState(EMPTY_GUARDIAN);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState({});
@@ -178,15 +198,15 @@ export function AthleteSignup() {
 
   const explicitNext = params.get('next');
   const needsGuardian = requiresGuardian(form.dob);
-  const locationSuggestions = useMemo(() => citySuggestions(form.location, 10), [form.location]);
+  const locationSuggestions = useMemo(() => citySuggestions(form.city, 10), [form.city]);
 
   useEffect(() => {
-    if (!isLoadingAuth && isAuthenticated && user) {
+    if (!isLoadingAuth && isAuthenticated && user && !submitting) {
       const safeNext = getSafeNextPath(explicitNext);
       const roleNext = onboardingPath(safeNext || '', 'athlete');
       navigate(user.profile_setup_complete ? postAuthRedirectPath(user, safeNext) : roleNext, { replace: true });
     }
-  }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate]);
+  }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate, submitting]);
 
   const passwordChecks = useMemo(
     () => PASSWORD_RULES.map((rule) => ({ ...rule, ok: rule.test(form.password) })),
@@ -206,8 +226,7 @@ export function AthleteSignup() {
     const lastNameError = validatePersonName(form.lastName, 'Last name');
     const phoneError = validatePhone(form.phone, 'Phone number');
     const dobError = validateDob(form.dob);
-    const sportError = validateSport(form.sport);
-    const cityError = validateCity(form.location);
+    const cityError = validateLocation(form.city);
 
     if (firstNameError) next.firstName = firstNameError;
     if (lastNameError) next.lastName = lastNameError;
@@ -215,24 +234,17 @@ export function AthleteSignup() {
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
     if (phoneError) next.phone = phoneError;
     if (dobError) next.dob = dobError;
-    if (sportError) next.sport = sportError;
-    if (cityError) next.location = cityError;
+    if (cityError) next.city = cityError;
     if (!form.password) next.password = 'Password is required.';
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
 
+    Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
+
     if (needsGuardian) {
-      const parentFirstError = validatePersonName(form.parentFirstName, 'Parent/guardian first name');
-      const parentLastError = validatePersonName(form.parentLastName, 'Parent/guardian last name');
-      const parentEmailError = validateEmail(form.parentEmail, 'Parent/guardian email');
-      const parentPhoneError = validatePhone(form.parentPhone, 'Parent/guardian phone');
-      if (parentFirstError) next.parentFirstName = parentFirstError;
-      if (parentLastError) next.parentLastName = parentLastError;
-      if (parentEmailError) next.parentEmail = parentEmailError;
-      if (parentPhoneError) next.parentPhone = parentPhoneError;
-      if (!form.parentRelationship.trim()) next.parentRelationship = 'Relationship is required.';
+      Object.assign(next, validateGuardianContact(guardian));
     }
 
     setErrors(next);
@@ -246,51 +258,41 @@ export function AthleteSignup() {
 
     try {
       setSubmitting(true);
-      const primarySport = normalizeSport(form.sport);
-      const cityPlace = resolveCityPlace(form.location);
+      const cityPlace = resolveCityPlace(form.city);
       await auth.signOut();
       await auth.signUp(form.email.trim(), form.password);
+      // All profile writes go through the accountProfile.update whitelist.
+      // is_minor is recomputed server-side from dob — never sent by the client.
       await auth.updateCurrentUser({
-        role: 'user',
         onboarding_role: 'athlete',
-        onboarding_status: 'incomplete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         phone: normalizePhoneForStorage(form.phone),
         dob: form.dob,
-        is_minor: needsGuardian,
-        parent_first_name: needsGuardian ? form.parentFirstName.trim() : '',
-        parent_last_name: needsGuardian ? form.parentLastName.trim() : '',
-        parent_email: needsGuardian ? form.parentEmail.trim() : '',
-        parent_phone: needsGuardian ? normalizePhoneForStorage(form.parentPhone) : '',
-        parent_relationship: needsGuardian ? form.parentRelationship.trim() : '',
+        parent_first_name: needsGuardian ? guardian.parentFirstName.trim() : '',
+        parent_last_name: needsGuardian ? guardian.parentLastName.trim() : '',
+        parent_email: needsGuardian ? guardian.parentEmail.trim() : '',
+        parent_phone: needsGuardian ? normalizePhoneForStorage(guardian.parentPhone) : '',
+        parent_relationship: needsGuardian ? guardian.parentRelationship.trim() : '',
         terms_accepted: true,
-        profile_setup_complete: false,
-        updates_opt_in: form.marketing,
-        bio: [
-          `Primary sport: ${primarySport}`,
-          `Preferred city: ${cityPlace?.label || ''}`,
-          form.trainingGoal.trim() ? `Training goal: ${form.trainingGoal.trim()}` : '',
-        ].filter(Boolean).join('\n'),
+        location_label: buildLocationLabel(cityPlace?.label || form.city, form.locationDetail),
+        ...(cityPlace ? { location_lat: cityPlace.lat, location_lng: cityPlace.lng } : {}),
+        bio: buildAthleteBio({
+          ...sportDetails,
+          trainingGoal: form.trainingGoal,
+          ...healthDetails,
+        }),
       });
 
-      const fresh = await refetchUser();
-      await athleteProfileRepo.create({
-        profile_id: fresh.id,
-        first_name: form.firstName.trim(),
-        last_name: form.lastName.trim(),
-        dob: form.dob,
-        sports: [primarySport],
-        skill_level: '',
-        location_label: cityPlace?.label || '',
-        location_lat: cityPlace?.lat,
-        location_lng: cityPlace?.lng,
-        health_notes: form.trainingGoal.trim(),
-      }).catch(() => {});
+      await refetchUser();
       const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'athlete');
       navigate(`${onboardingNext}${onboardingNext.includes('?') ? '&' : '?'}from=create-account`, { replace: true });
     } catch (err) {
-      setFormError(err?.message || 'Could not create your account. Please try again.');
+      if (err?.code === 409 || err?.type === 'user_already_exists') {
+        setFormError('An account with that email already exists. Sign in instead.');
+      } else {
+        setFormError(err?.message || 'Could not create your account. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -328,11 +330,8 @@ export function AthleteSignup() {
                 </p>
 
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
-                  <datalist id="athlete-signup-primary-sports">
-                    {SPORT_OPTIONS.map((sport) => <option key={sport} value={sport} />)}
-                  </datalist>
                   <datalist id="athlete-signup-city-options">
-                    {(form.location.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
+                    {(form.city.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
                       <option key={place.label} value={place.label} />
                     ))}
                   </datalist>
@@ -400,50 +399,68 @@ export function AthleteSignup() {
                     />
                   </div>
 
+                  <AthleteSportFields
+                    value={sportDetails}
+                    onChange={(next) => {
+                      setSportDetails(next);
+                      setErrors((current) => ({ ...current, sportKey: undefined, position: undefined, level: undefined, availability: undefined }));
+                    }}
+                    errors={errors}
+                    disabled={submitting}
+                    idPrefix="athlete-signup"
+                  />
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
-                      id="sport"
-                      label="Primary sport"
-                      icon={Trophy}
-                      placeholder="Select a sport"
-                      list="athlete-signup-primary-sports"
-                      value={form.sport}
-                      onChange={(event) => updateForm('sport', event.target.value)}
+                      id="athlete-city"
+                      label="Training city / state"
+                      icon={MapPin}
+                      placeholder="e.g., Troy, MI"
+                      list="athlete-signup-city-options"
+                      value={form.city}
+                      onChange={(event) => updateForm('city', event.target.value)}
                       onBlur={() => {
-                        const sport = normalizeSport(form.sport);
-                        if (sport) updateForm('sport', sport);
+                        const city = resolveCityPlace(form.city);
+                        if (city) updateForm('city', city.label);
                       }}
                       disabled={submitting}
-                      error={errors.sport}
-                      trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
+                      error={errors.city}
                     />
                     <AuthField
-                      id="location"
-                      label="Preferred training city"
+                      id="athlete-location-detail"
+                      label="Location details (optional)"
                       icon={MapPin}
-                      placeholder="Select a city"
-                      list="athlete-signup-city-options"
-                      value={form.location}
-                      onChange={(event) => updateForm('location', event.target.value)}
-                      onBlur={() => {
-                        const city = resolveCityPlace(form.location);
-                        if (city) updateForm('location', city.label);
-                      }}
+                      placeholder="Neighborhood, facility, travel range…"
+                      value={form.locationDetail}
+                      onChange={(event) => updateForm('locationDetail', event.target.value)}
                       disabled={submitting}
-                      error={errors.location}
-                      trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
+                      error={errors.locationDetail}
                     />
                   </div>
 
-                  <AuthField
-                    id="trainingGoal"
-                    label="Training goal"
-                    icon={Target}
-                    placeholder="Optional, e.g., speed, strength, confidence"
-                    value={form.trainingGoal}
-                    onChange={(event) => updateForm('trainingGoal', event.target.value)}
+                  <div>
+                    <label htmlFor="athlete-training-goal" className="mb-1.5 block text-sm font-bold text-slate-950">
+                      Training goal <span className="text-xs font-semibold text-slate-500">(optional)</span>
+                    </label>
+                    <input
+                      id="athlete-training-goal"
+                      value={form.trainingGoal}
+                      onChange={(event) => updateForm('trainingGoal', event.target.value)}
+                      disabled={submitting}
+                      placeholder="e.g., make varsity, improve first touch, get faster"
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                    />
+                  </div>
+
+                  <HealthAndEmergencyFields
+                    value={healthDetails}
+                    onChange={(next) => {
+                      setHealthDetails(next);
+                      setErrors((current) => ({ ...current, healthNotes: undefined, emergencyName: undefined, emergencyPhone: undefined, emergencyRelationship: undefined }));
+                    }}
+                    errors={errors}
                     disabled={submitting}
-                    error={errors.trainingGoal}
+                    idPrefix="athlete-signup"
                   />
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -510,11 +527,15 @@ export function AthleteSignup() {
                   </div>
 
                   {needsGuardian && (
-                    <GuardianFields
-                      form={form}
+                    <GuardianContactFields
+                      value={guardian}
+                      onChange={(next) => {
+                        setGuardian(next);
+                        setErrors((current) => ({ ...current, parentFirstName: undefined, parentLastName: undefined, parentEmail: undefined, parentPhone: undefined, parentRelationship: undefined }));
+                      }}
                       errors={errors}
-                      submitting={submitting}
-                      updateForm={updateForm}
+                      disabled={submitting}
+                      idPrefix="athlete-signup-guardian"
                     />
                   )}
 
@@ -534,18 +555,10 @@ export function AthleteSignup() {
                       </Link>
                     </CheckboxRow>
                     {errors.terms && <p className="text-xs font-semibold text-red-600">{errors.terms}</p>}
-
-                    <CheckboxRow
-                      checked={form.marketing}
-                      onChange={(checked) => updateForm('marketing', checked)}
-                      disabled={submitting}
-                    >
-                      Send me product updates, training tips, and offers (optional)
-                    </CheckboxRow>
                   </div>
 
                   {formError && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">
                       {formError}
                     </p>
                   )}
@@ -557,6 +570,9 @@ export function AthleteSignup() {
                   >
                     {submitting ? 'Creating account...' : 'Create Account & Review Setup'}
                   </button>
+                  <p className="text-center text-xs leading-5 text-slate-500">
+                    We'll email you a verification link after signup. You can finish setup before verifying.
+                  </p>
                 </form>
 
                 <div className="my-4 flex items-center gap-4">
@@ -604,8 +620,8 @@ export function ParentSignup() {
     phone: '',
     password: '',
     confirmPassword: '',
+    authority: false,
     terms: false,
-    marketing: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -616,12 +632,12 @@ export function ParentSignup() {
   const explicitNext = params.get('next');
 
   useEffect(() => {
-    if (!isLoadingAuth && isAuthenticated && user) {
+    if (!isLoadingAuth && isAuthenticated && user && !submitting) {
       const safeNext = getSafeNextPath(explicitNext);
       const roleNext = onboardingPath(safeNext || '', 'parent');
       navigate(user.profile_setup_complete ? postAuthRedirectPath(user, safeNext) : roleNext, { replace: true });
     }
-  }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate]);
+  }, [isLoadingAuth, isAuthenticated, user, explicitNext, navigate, submitting]);
 
   const passwordChecks = useMemo(
     () => PASSWORD_RULES.map((rule) => ({ ...rule, ok: rule.test(form.password) })),
@@ -648,6 +664,7 @@ export function ParentSignup() {
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    if (!form.authority) next.authority = 'You must confirm you are the parent or legal guardian.';
     if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -662,21 +679,24 @@ export function ParentSignup() {
       setSubmitting(true);
       await auth.signOut();
       await auth.signUp(form.email.trim(), form.password);
+      // Whitelist-only profile write. Onboarding completes after the
+      // add-athletes + legal packet steps on /onboarding.
       await auth.updateCurrentUser({
-        role: 'user',
         onboarding_role: 'parent',
-        onboarding_status: 'complete',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         phone: normalizePhoneForStorage(form.phone),
         terms_accepted: true,
-        profile_setup_complete: true,
-        updates_opt_in: form.marketing,
       });
-      const fresh = await refetchUser();
-      navigate(getSafeNextPath(explicitNext) || homePathForRole(fresh), { replace: true });
+      await refetchUser();
+      const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'parent');
+      navigate(`${onboardingNext}${onboardingNext.includes('?') ? '&' : '?'}from=create-account`, { replace: true });
     } catch (err) {
-      setFormError(err?.message || 'Could not create your parent account. Please try again.');
+      if (err?.code === 409 || err?.type === 'user_already_exists') {
+        setFormError('An account with that email already exists. Sign in instead.');
+      } else {
+        setFormError(err?.message || 'Could not create your parent account. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -712,6 +732,17 @@ export function ParentSignup() {
                 <p className="mt-3 text-base leading-7 text-slate-600">
                   Manage child athletes, waivers, booking approvals, payments, and coach communication from one workspace.
                 </p>
+
+                <ol className="mt-4 grid grid-cols-1 gap-2 text-xs font-semibold text-slate-600 sm:grid-cols-3">
+                  {['1. Your account', '2. Add your athletes', '3. Sign legal packet'].map((step, index) => (
+                    <li
+                      key={step}
+                      className={`rounded-md border px-3 py-2 ${index === 0 ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-slate-50'}`}
+                    >
+                      {step}
+                    </li>
+                  ))}
+                </ol>
 
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -830,6 +861,17 @@ export function ParentSignup() {
 
                   <div className="space-y-2">
                     <CheckboxRow
+                      checked={form.authority}
+                      onChange={(checked) => updateForm('authority', checked)}
+                      disabled={submitting}
+                    >
+                      I confirm that I am the parent or legal guardian of the athletes I add to this
+                      account, and that I have the legal authority to sign documents, approve bookings,
+                      and manage payments on their behalf.
+                    </CheckboxRow>
+                    {errors.authority && <p className="text-xs font-semibold text-red-600">{errors.authority}</p>}
+
+                    <CheckboxRow
                       checked={form.terms}
                       onChange={(checked) => updateForm('terms', checked)}
                       disabled={submitting}
@@ -844,18 +886,10 @@ export function ParentSignup() {
                       </Link>
                     </CheckboxRow>
                     {errors.terms && <p className="text-xs font-semibold text-red-600">{errors.terms}</p>}
-
-                    <CheckboxRow
-                      checked={form.marketing}
-                      onChange={(checked) => updateForm('marketing', checked)}
-                      disabled={submitting}
-                    >
-                      Send me product updates, training tips, and offers (optional)
-                    </CheckboxRow>
                   </div>
 
                   {formError && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">
                       {formError}
                     </p>
                   )}
@@ -865,8 +899,11 @@ export function ParentSignup() {
                     disabled={submitting}
                     className="flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Creating account...' : 'Create Family Account'}
+                    {submitting ? 'Creating account...' : 'Create Account & Add Athletes'}
                   </button>
+                  <p className="text-center text-xs leading-5 text-slate-500">
+                    Next: add each child athlete you manage, then sign their legal packet.
+                  </p>
                 </form>
 
                 <div className="my-4 flex items-center gap-4">
@@ -932,86 +969,6 @@ function AccountTypeCard({ type, href }) {
         </span>
       </span>
     </Link>
-  );
-}
-
-function GuardianFields({ form, errors, submitting, updateForm }) {
-  return (
-    <section className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-      <datalist id="athlete-signup-guardian-relationships">
-        {RELATIONSHIP_OPTIONS.map((relationship) => <option key={relationship} value={relationship} />)}
-      </datalist>
-      <div className="mb-3 flex items-start gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-blue-700 shadow-sm">
-          <ShieldCheck className="h-5 w-5" />
-        </span>
-        <div>
-          <h2 className="font-sans text-sm font-extrabold tracking-normal text-slate-950 normal-case">
-            Parent / Guardian Information
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-slate-600">Required based on date of birth.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <AuthField
-          id="parentFirstName"
-          label="First name"
-          icon={User}
-          placeholder="First name"
-          value={form.parentFirstName}
-          onChange={(event) => updateForm('parentFirstName', event.target.value)}
-          disabled={submitting}
-          error={errors.parentFirstName}
-        />
-        <AuthField
-          id="parentLastName"
-          label="Last name"
-          icon={User}
-          placeholder="Last name"
-          value={form.parentLastName}
-          onChange={(event) => updateForm('parentLastName', event.target.value)}
-          disabled={submitting}
-          error={errors.parentLastName}
-        />
-        <AuthField
-          id="parentEmail"
-          label="Email address"
-          type="email"
-          icon={Mail}
-          placeholder="parent@example.com"
-          value={form.parentEmail}
-          onChange={(event) => updateForm('parentEmail', event.target.value)}
-          disabled={submitting}
-          error={errors.parentEmail}
-        />
-        <AuthField
-          id="parentPhone"
-          label="Phone number"
-          type="tel"
-          icon={Phone}
-          placeholder="(248) 555-0123"
-          value={form.parentPhone}
-          onChange={(event) => updateForm('parentPhone', event.target.value)}
-          disabled={submitting}
-          error={errors.parentPhone}
-        />
-      </div>
-
-      <div className="mt-3">
-        <AuthField
-          id="parentRelationship"
-          label="Relationship"
-          icon={Users}
-          placeholder="Parent, guardian, family member"
-          list="athlete-signup-guardian-relationships"
-          value={form.parentRelationship}
-          onChange={(event) => updateForm('parentRelationship', event.target.value)}
-          disabled={submitting}
-          error={errors.parentRelationship}
-        />
-      </div>
-    </section>
   );
 }
 

@@ -14,6 +14,18 @@ import { useAuth } from '@/lib/AuthContext';
 import { postAuthRedirectPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+
+// auth.js throws { type: 'account_banned' } after dropping the session of a
+// suspended account — surface that distinctly from bad credentials.
+function loginErrorMessage(err, fallback) {
+  if (err?.type === 'account_banned') {
+    return `This account has been suspended and can no longer sign in. If you believe this is a mistake, contact ${SUPPORT_EMAIL}.`;
+  }
+  if (err?.code === 401) return 'Invalid email or password.';
+  if (err?.code === 429) return 'Too many attempts. Wait a minute, then try again.';
+  return err?.message || fallback;
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -56,12 +68,12 @@ export default function Login() {
           const fresh = await refetchUser();
           navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
         } catch (err) {
-          setFormError(err?.message || 'Sign-in link is invalid or expired.');
+          setFormError(loginErrorMessage(err, 'Sign-in link is invalid or expired.'));
           setSubmitting(false);
         }
       })();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const validate = () => {
@@ -86,7 +98,7 @@ export default function Login() {
       const fresh = await refetchUser();
       navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
     } catch (err) {
-      setFormError(err?.message || 'Invalid email or password.');
+      setFormError(loginErrorMessage(err, 'Invalid email or password.'));
     } finally {
       setSubmitting(false);
     }

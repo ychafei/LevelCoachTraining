@@ -52,7 +52,11 @@ export default function AdminUnsubscribes() {
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-2">UNSUBSCRIBES</h1>
-        <p className="text-muted-foreground mb-8">{records.length} total · {records.filter(r => !r.resubscribed).length} active</p>
+        <p className="text-muted-foreground mb-2">{records.length} total · {records.filter(r => !r.resubscribed).length} active</p>
+        <p className="text-xs text-muted-foreground mb-8">
+          This list is read-only: unsubscribe records are server-managed through the emailDispatch function
+          (token or signed-in owner verification). Suppression is enforced automatically on every send.
+        </p>
 
         {loading ? (
           <div className="text-center py-12"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>

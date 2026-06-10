@@ -1,26 +1,21 @@
+// Phase 1 — roles, portals, routing.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-
-function read(path) {
-  return readFileSync(join(root, path), 'utf8');
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function includes(path, snippets) {
+const failures = [];
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const check = (ok, msg) => { if (!ok) failures.push(msg); };
+const includes = (path, snippets) => {
   const content = read(path);
-  for (const snippet of snippets) {
-    assert(content.includes(snippet), `${path} is missing: ${snippet}`);
-  }
-}
+  for (const s of snippets) check(content.includes(s), `${path} is missing: ${s}`);
+};
+const excludes = (path, snippets) => {
+  const content = read(path);
+  for (const s of snippets) check(!content.includes(s), `${path} must NOT contain: ${s}`);
+};
 
-const requiredFiles = [
+for (const file of [
   'src/lib/roles.js',
   'src/pages/onboarding/OnboardingCompletion.jsx',
   'src/pages/athlete/AthletePortal.jsx',
@@ -29,11 +24,8 @@ const requiredFiles = [
   'src/pages/master-admin/MasterAdminPortal.jsx',
   'functions/bootstrapMasterAdmin/src/main.js',
   'functions/grantAdminRole/src/main.js',
-];
-
-for (const file of requiredFiles) {
-  assert(existsSync(join(root, file)), `Missing required Phase 1 file: ${file}`);
-}
+  'functions/accountProfile/src/main.js',
+]) check(existsSync(join(root, file)), `Missing required Phase 1 file: ${file}`);
 
 includes('src/App.jsx', [
   'RequireOnboardingComplete',
@@ -46,52 +38,24 @@ includes('src/App.jsx', [
   'path="/parent"',
   'path="/organization"',
   'path="/master-admin"',
+  'path="/organizations"',
+  'path="/for-athletes"',
+  'path="/for-parents"',
+  'path="/for-organizations"',
 ]);
 
-includes('src/components/guards/RouteGuards.jsx', [
-  'MASTER_ADMIN_EMAIL',
-  'canBootstrapMasterAdmin',
-  'isGuardian',
-  'isOrganizationAdmin',
-  'This feature is for athlete client accounts.',
-]);
+// Authorization is server-derived; no hardcoded owner identity in the client.
+// (Comments may mention the MASTER_ADMIN_EMAIL env var; actual addresses may not appear.)
+excludes('src/components/guards/RouteGuards.jsx', ['@gmail.com']);
+excludes('src/lib/roleHome.js', ['@gmail.com']);
 
-includes('src/pages/CreateOrganization.jsx', [
-  'organizationRepo.create',
-  'organizationMemberRepo.create',
-  "storage.uploadFile('org-logos'",
-  "onboarding_role: 'organization'",
-  "onboarding_status: 'complete'",
-  'primary_organization_id: organization.id',
-]);
+// Profiles are server-managed: the client never creates profile documents.
+excludes('src/lib/auth.js', ['createDocument(']);
+includes('src/lib/auth.js', ["'accountProfile'"]);
 
-includes('src/pages/apply/ApplyPrivateTrainingCoach.jsx', [
-  'usingExistingAccount',
-  "onboarding_role: 'coach'",
-  "onboarding_status: 'complete'",
-]);
-
-includes('src/pages/admin/AdminUsers.jsx', [
-  'isMasterAdmin',
-  'auth.grantAdminRole',
-  'Only the locked master admin',
-]);
-
-includes('functions/grantAdminRole/src/main.js', [
-  "new Set(['user', 'coach', 'admin', 'super_admin'])",
-  'actor?.master_admin_locked !== true',
-  "action: isPlatformAdminRole ? 'admin_assignment.grant' : 'admin_assignment.revoke'",
-]);
-
-includes('scripts/provision-appwrite.mjs', [
-  "'primary_organization_id'",
-  "'contact_email'",
-  "'contact_phone'",
-  "'website_url'",
-  "'instagram_handle'",
-  "'primary_sports'",
-  "'coach_count_label'",
-  "'updates_opt_in'",
-]);
-
+if (failures.length) {
+  console.error('Phase 1 verification failed:');
+  for (const f of failures) console.error(`- ${f}`);
+  process.exit(1);
+}
 console.log('Phase 1 verification passed.');

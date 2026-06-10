@@ -4,16 +4,25 @@ import { blogPostRepo } from '@/api/repo';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
 
 export default function Blog() {
+  usePageMeta({
+    title: 'Blog',
+    description: 'Training articles, coaching insights, and platform updates from the LevelCoach Training team.',
+  });
+
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    blogPostRepo.filter({ status: 'published' }, '-created_date').then(res => {
-      setPosts(res);
-      setLoading(false);
-    });
+    blogPostRepo.filter({ status: 'published' }, '-created_date')
+      .then((res) => setPosts(res))
+      .catch((err) => {
+        console.error('Blog load failed', err);
+        setPosts([]);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -24,7 +33,7 @@ export default function Blog() {
             THE BLOG
           </h1>
           <p className="text-lg text-muted-foreground">
-            Training tips, match insights, and stories from the pitch.
+            Training tips, coaching insights, and platform updates across every sport we serve.
           </p>
         </div>
 

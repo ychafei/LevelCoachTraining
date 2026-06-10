@@ -18,6 +18,11 @@ function rawBody(req) {
   return JSON.stringify(req.bodyJson || {});
 }
 
+// Claim the event for processing. Returns null when the event is a true
+// duplicate (already processed/ignored, or another invocation is actively
+// working on it). Events that previously FAILED — or stalled mid-processing
+// for over 10 minutes (e.g. a timeout) — are reclaimed so Stripe's automatic
+// retries can repair partial work; every handler below is idempotent.
 async function createWebhookEvent(db, event) {
   try {
     return await db.createDocument(DB_ID, 'stripe_webhook_events', ID.unique(), {
@@ -27,8 +32,20 @@ async function createWebhookEvent(db, event) {
       payload: JSON.stringify(event).slice(0, 100000),
     });
   } catch (err) {
-    if (err?.code === 409) return null;
-    throw err;
+    if (err?.code !== 409) throw err;
+    const existing = await firstDocument(db, 'stripe_webhook_events', [
+      Query.equal('stripe_event_id', event.id),
+    ]).catch(() => null);
+    if (!existing) return null;
+    const stalled = existing.status === 'processing'
+      && Date.now() - new Date(existing.$createdAt).getTime() > 10 * 60 * 1000;
+    if (existing.status === 'failed' || stalled) {
+      return db.updateDocument(DB_ID, 'stripe_webhook_events', existing.$id, {
+        status: 'processing',
+        error: '',
+      }).catch(() => null);
+    }
+    return null;
   }
 }
 
@@ -382,7 +399,68 @@ async function handleRefundLike(db, stripe, object) {
     webhook_processed_at: new Date().toISOString(),
   });
   if (fullRefund) await freezeCredit(db, paymentRecord.credit_id);
+  await reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmount, totalAmount);
   return true;
+}
+
+// Refunds can originate outside refundStripePayment (e.g. the Stripe
+// Dashboard). Under separate charges & transfers the payouts have already
+// left the platform, so every refund must claw back the proportional share
+// from each transfer leg or the platform eats the coach/org cut. Cumulative
+// targets are computed from the charge's amount_refunded and compared against
+// Stripe's own amount_reversed per transfer, so this is idempotent across
+// event retries AND never double-reverses refunds the admin function already
+// handled.
+async function reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmount, totalAmount) {
+  if (!(refundedAmount > 0) || !(totalAmount > 0)) return;
+  const recordMeta = parseJson(paymentRecord.metadata);
+  const plan = parsePayoutPlan(recordMeta);
+  const rows = await db.listDocuments(DB_ID, 'stripe_transfer_records', [
+    Query.equal('payment_record_id', paymentRecord.$id),
+    Query.limit(25),
+  ]).catch(() => ({ documents: [] }));
+
+  for (const record of rows.documents) {
+    if (!record.transfer_id) continue;
+    const transfer = await stripe.transfers.retrieve(record.transfer_id).catch(() => null);
+    if (!transfer) continue;
+    const target = Math.floor((Number(transfer.amount || 0) * Math.min(refundedAmount, totalAmount)) / totalAmount);
+    const alreadyReversed = Number(transfer.amount_reversed || 0);
+    const delta = target - alreadyReversed;
+    if (delta <= 0) continue;
+
+    const reversal = await stripe.transfers.createReversal(record.transfer_id, {
+      amount: delta,
+      metadata: { payment_record_id: paymentRecord.$id, source: 'stripeWebhook.refund' },
+    }, {
+      // Deterministic per cumulative target: a retried event recomputes the
+      // same target and the same key, so Stripe deduplicates the reversal.
+      idempotencyKey: `whrev_${record.$id}_${target}`,
+    }).catch((err) => {
+      console.error(`[stripeWebhook] reversal failed for ${record.transfer_id}: ${err?.message || err}`);
+      return null;
+    });
+    if (!reversal) continue;
+
+    const fullyReversed = target >= Number(transfer.amount || 0);
+    await db.updateDocument(DB_ID, 'stripe_transfer_records', record.$id, {
+      reversal_id: reversal.id,
+      status: fullyReversed ? 'reversed' : record.status || 'paid',
+    }).catch(() => {});
+    const isOrgLeg = !!plan?.org_account_id && record.destination_account_id === plan.org_account_id;
+    await writeLedgerEntry(db, {
+      payment_record_id: paymentRecord.$id,
+      type: 'transfer_reversal',
+      amount_cents: -delta,
+      currency: paymentRecord.currency || 'usd',
+      owner_type: isOrgLeg ? 'org' : 'coach',
+      owner_id: (isOrgLeg ? plan?.organization_id : plan?.coach_id) || '',
+      stripe_ref: reversal.id,
+      coach_id: plan?.coach_id || recordMeta.coach_id || '',
+      organization_id: plan?.organization_id || '',
+      metadata: JSON.stringify({ transfer_id: record.transfer_id, cumulative_target: target, source: 'webhook' }),
+    });
+  }
 }
 
 // Disputes: mark state, freeze the credit, write a ledger entry and notify the

@@ -1,229 +1,169 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
+  ArrowRight,
   Building2,
   CreditCard,
   Flag,
-  Rocket,
+  MessageCircle,
   ShieldCheck,
-  TrendingUp,
   Trophy,
   UserCheck,
   Users,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { CtaBand } from '@/features/marketing/MarketingBlocks';
 
-const platformStats = [
-  { value: '500+', label: 'Verified Coaches', icon: Users },
-  { value: '20+', label: 'Sports', icon: Trophy },
-  { value: '50,000+', label: 'Athletes Served', icon: ShieldCheck },
-  { value: '$25M+', label: 'Payments Processed', icon: CreditCard },
-];
-
-const missionCards = [
+const MISSION_CARDS = [
   {
     title: 'For athletes',
-    body: 'We help athletes find the right coach, book sessions, and reach their goals with confidence.',
+    body: 'Make it easy to find the right coach for any sport and level, book with confidence, and see real progress over time.',
+    icon: Trophy,
+  },
+  {
+    title: 'For parents',
+    body: 'Put guardians in control of training for minors — consent, bookings, payments, and message visibility included.',
     icon: UserCheck,
   },
   {
     title: 'For coaches',
-    body: 'We give coaches the tools to manage clients, run sessions, get paid, and grow their business.',
+    body: 'Give independent coaches a professional storefront, conflict-free scheduling, and automatic Stripe payouts.',
     icon: Users,
   },
   {
     title: 'For organizations',
-    body: 'We power training organizations with multi-tenant management, reporting, and streamlined operations.',
+    body: 'Let academies and clubs run whole rosters with branded pages and automated payout splits.',
     icon: Building2,
   },
 ];
 
-const safetyItems = [
+const PRINCIPLES = [
   {
-    title: 'Verified profiles',
-    body: 'All coaches go through our verification and background check process.',
+    title: 'Honest by default',
+    body: 'Ratings come only from completed sessions. Profiles show what coaches actually entered. We don\'t invent numbers, reviews, or activity.',
     icon: ShieldCheck,
   },
   {
-    title: 'Youth safety',
-    body: 'We promote a safe, respectful environment for every athlete.',
-    icon: Users,
+    title: 'Safety is enforced, not promised',
+    body: 'Guardian gates for minors, signed waivers before training, verified coach emails, and in-platform messaging are server-side rules of the system.',
+    icon: UserCheck,
   },
   {
-    title: 'Secure payments',
-    body: 'All payments are processed securely through Stripe.',
+    title: 'Money moves transparently',
+    body: 'Payments are processed by Stripe, prices are computed server-side, and every payout split is recorded in an append-only ledger.',
     icon: CreditCard,
   },
   {
-    title: 'Multi-tenant platform',
-    body: 'Built to support individual coaches and large training organizations.',
-    icon: Building2,
+    title: 'Communication stays accountable',
+    body: 'Coach-athlete messaging lives inside the platform where it can be reviewed if something is reported.',
+    icon: MessageCircle,
   },
 ];
-
-const journey = [
-  {
-    year: '2019',
-    title: 'Built for Coaches',
-    body: 'Started as an internal tool to manage private training and clients.',
-    icon: Flag,
-  },
-  {
-    year: '2021',
-    title: 'Opening the Platform',
-    body: 'Began connecting athletes with verified coaches across sports.',
-    icon: Users,
-  },
-  {
-    year: '2023',
-    title: 'Organizations Join',
-    body: 'Launched multi-tenant platform for academies and training teams.',
-    icon: Building2,
-  },
-  {
-    year: 'Today & Beyond',
-    title: 'Today & Beyond',
-    body: 'Continuing to innovate and support the future of coaching.',
-    icon: Rocket,
-  },
-];
-
-function StatItem({ stat }) {
-  return (
-    <div className="flex items-center justify-center gap-5 border-b border-slate-200 px-4 py-4 last:border-b-0 sm:justify-start md:border-b-0 md:border-r md:last:border-r-0">
-      <stat.icon className="h-9 w-9 shrink-0 text-blue-600" />
-      <div>
-        <p className="text-xl font-bold leading-none text-slate-950">{stat.value}</p>
-        <p className="mt-1 text-sm text-slate-600">{stat.label}</p>
-      </div>
-    </div>
-  );
-}
-
-function SmallCard({ item }) {
-  return (
-    <article className="flex gap-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
-        <item.icon className="h-5 w-5" />
-      </span>
-      <div>
-        <h3 className="font-sans text-sm font-bold normal-case tracking-normal text-slate-950">
-          {item.title}
-        </h3>
-        <p className="mt-2 text-xs leading-4 text-slate-700">{item.body}</p>
-      </div>
-    </article>
-  );
-}
-
-function JourneyStep({ step, index }) {
-  const Icon = step.icon;
-
-  return (
-    <div className="relative flex flex-col items-center text-center">
-      <span className="relative z-10 grid h-10 w-10 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="mt-2 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
-      {index < journey.length - 1 && (
-        <span className="absolute left-1/2 top-[56px] hidden h-px w-full bg-blue-200 lg:block" />
-      )}
-      <p className="mt-2 text-xs font-bold text-slate-950">{step.year}</p>
-      <h3 className="mt-2 font-sans text-sm font-bold normal-case tracking-normal text-slate-950">
-        {step.title}
-      </h3>
-      <p className="mt-1 max-w-[170px] text-xs leading-4 text-slate-600">{step.body}</p>
-    </div>
-  );
-}
 
 export default function About() {
+  usePageMeta({
+    title: 'About',
+    description: 'LevelCoach Training is a multi-sport coaching marketplace with Michigan roots — connecting athletes with coaches and giving coaches and organizations the tools to run their business.',
+  });
+
   return (
-    <div
-      className="text-slate-950"
-      style={{ background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 56%, #eef5ff 100%)' }}
-    >
-      <section className="mx-auto max-w-[1440px] px-4 py-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-6 lg:grid-cols-2">
-          <div className="min-w-0">
-            <div className="inline-flex items-center gap-3 rounded-full bg-blue-50 px-4 py-2 text-blue-700 ring-1 ring-blue-100">
-              <ShieldCheck className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
-            </div>
-
-            <h1 className="mt-6 max-w-[700px] font-display text-5xl font-bold uppercase leading-tight tracking-normal text-slate-950 sm:text-6xl xl:text-7xl">
-              Built to make private coaching easier to{' '}
-              <span className="text-blue-600">find, manage, and grow</span>
-            </h1>
-
-            <p className="mt-5 max-w-[650px] text-base leading-7 text-slate-700 sm:text-lg">
-              LevelCoach Training is the verified platform connecting athletes with great coaches,
-              and giving coaches and organizations the tools to run their business with confidence.
-            </p>
+    <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_56%,#eef5ff_100%)] text-slate-950">
+      <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
+        <div className="max-w-3xl">
+          <div className="inline-flex items-center gap-3 rounded-full bg-blue-50 px-4 py-2 text-blue-700 ring-1 ring-blue-100">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
           </div>
 
-          <div className="hidden min-w-0 justify-end lg:flex">
-            <img
-              src="/about-product-preview.png"
-              alt="LevelCoach coach portal and mobile profile preview"
-              className="h-auto w-full max-w-2xl object-contain"
-            />
-          </div>
+          <h1 className="mt-6 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-6xl">
+            Great coaching should be easy to{' '}
+            <span className="text-blue-600">find, book, and trust</span>
+          </h1>
+
+          <p className="mt-5 text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+            LevelCoach Training is a multi-sport coaching marketplace. Athletes and families find
+            and book private coaches across 15 sports and training disciplines; coaches and
+            training organizations get the tools to run their business — scheduling, clients,
+            progress tracking, and Stripe-powered payouts — from one platform.
+          </p>
         </div>
 
-        <section className="mt-2 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
-          {platformStats.map((stat) => (
-            <StatItem key={stat.label} stat={stat} />
-          ))}
-        </section>
-
-        <section className="mt-4 grid gap-5 lg:grid-cols-2">
-          <div>
-            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-blue-600">Our Mission</p>
-            <div className="grid gap-4 md:grid-cols-3">
-              {missionCards.map((item) => (
-                <SmallCard key={item.title} item={item} />
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-blue-600">
-              Trust & Safety First
-            </p>
-            <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              {safetyItems.map((item) => (
-                <SmallCard key={item.title} item={item} />
-              ))}
-            </div>
+        {/* Mission */}
+        <section className="mt-10" aria-labelledby="mission-heading">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our mission</p>
+          <h2 id="mission-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
+            One platform for everyone in training
+          </h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {MISSION_CARDS.map(({ title, body, icon: Icon }) => (
+              <article key={title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="grid h-10 w-10 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-3 font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+              </article>
+            ))}
           </div>
         </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-5">
-          <article className="flex flex-col items-start gap-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center lg:col-span-2">
-            <span className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
-              <TrendingUp className="h-12 w-12" />
+        {/* Principles */}
+        <section className="mt-10" aria-labelledby="principles-heading">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">What we believe</p>
+          <h2 id="principles-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
+            The principles behind the product
+          </h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {PRINCIPLES.map(({ title, body, icon: Icon }) => (
+              <article key={title} className="flex gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-600">{body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* Roots */}
+        <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="roots-heading">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+              <Flag className="h-7 w-7" aria-hidden="true" />
             </span>
             <div>
-              <h2 className="font-sans text-xl font-bold leading-8 normal-case tracking-normal text-slate-950">
-                LevelCoach Training started as a private training workflow and is growing into a
-                platform for every serious coach and athlete.
+              <h2 id="roots-heading" className="font-display text-2xl font-bold tracking-normal text-slate-950">
+                Michigan roots, multi-sport ambition
               </h2>
-              <p className="mt-4 text-sm leading-6 text-slate-600">
-                From solo coaches to large academies, our mission is to simplify coaching so you can
-                focus on what matters most: developing athletes.
+              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+                LevelCoach Training started with private soccer coaching in Michigan and grew out of
+                the day-to-day work of running real training sessions: scheduling around school and
+                club calendars, keeping parents informed, and getting coaches paid fairly. Today the
+                platform serves 15 sports and training disciplines — and everything we build still
+                has to pass the same test it did on day one: would this make a real session, with a
+                real coach and a real athlete, better?
               </p>
+              <Button asChild variant="outline" className="mt-5 rounded-lg border-blue-200 font-bold text-blue-700 hover:bg-blue-50">
+                <Link to="/how-it-works">
+                  See how the platform works
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
             </div>
-          </article>
-
-          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:col-span-3">
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our Journey</p>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {journey.map((step, index) => (
-                <JourneyStep key={`${step.year}-${step.title}`} step={step} index={index} />
-              ))}
-            </div>
-          </article>
+          </div>
         </section>
       </section>
+
+      <CtaBand
+        title="Join LevelCoach Training"
+        description="Whether you're chasing your next level or coaching others to theirs, there's a place for you here."
+        primaryCta={{ to: '/create-account', label: 'Create Free Account' }}
+        secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
+      />
     </div>
   );
 }

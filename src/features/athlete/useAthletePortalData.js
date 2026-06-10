@@ -1,0 +1,140 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { coachRepo, coachReviewRepo, sessionCreditRepo, sessionRepo, trainingRepo } from '@/api/repo';
+
+// Data hooks for the athlete portal. Reads are direct Appwrite queries —
+// per-document permissions already scope results to the caller, the extra
+// client-side filters below are defense-in-depth + relevance filtering only.
+
+function sameEmail(a, b) {
+  return !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
+}
+
+export function sessionBelongsToViewer(session, user, athleteIds) {
+  return sameEmail(session.client_email, user?.email)
+    || session.booked_by_profile_id === user?.id
+    || (session.athlete_id && athleteIds.includes(session.athlete_id));
+}
+
+export function creditBelongsToViewer(credit, user) {
+  return credit.client_profile_id
+    ? credit.client_profile_id === user?.id
+    : sameEmail(credit.client_email, user?.email);
+}
+
+export function creditsRemaining(credits) {
+  return credits.reduce(
+    (sum, credit) => sum + Math.max(0, (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0)),
+    0,
+  );
+}
+
+// All sessions readable by the caller + the coaches they reference.
+export function useMySessions(user, athleteIds = []) {
+  const queryClient = useQueryClient();
+
+  const sessionsQuery = useQuery({
+    queryKey: ['portal', 'sessions', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => sessionRepo.list('-starts_at_utc'),
+  });
+
+  const sessions = (sessionsQuery.data || []).filter(
+    (session) => sessionBelongsToViewer(session, user, athleteIds),
+  );
+
+  const coachIds = [...new Set(sessions.map((s) => s.coach_id).filter(Boolean))];
+  const coachesQuery = useQuery({
+    queryKey: ['portal', 'coaches', coachIds.join(',')],
+    enabled: coachIds.length > 0,
+    queryFn: () => coachRepo.filter({ id: coachIds }),
+  });
+
+  const coachesById = {};
+  for (const coach of coachesQuery.data || []) coachesById[coach.id] = coach;
+
+  return {
+    sessions,
+    coachesById,
+    loading: sessionsQuery.isLoading && !!user?.id,
+    error: sessionsQuery.error,
+    refresh: () => queryClient.invalidateQueries({ queryKey: ['portal', 'sessions'] }),
+  };
+}
+
+export function useMyCredits(user) {
+  const query = useQuery({
+    queryKey: ['portal', 'credits', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => sessionCreditRepo.list('-created_date'),
+  });
+  const credits = (query.data || []).filter((credit) => creditBelongsToViewer(credit, user));
+  return {
+    credits,
+    remaining: creditsRemaining(credits),
+    loading: query.isLoading && !!user?.id,
+  };
+}
+
+// Goals / plans / plan items / homework / assessments scoped to the athlete.
+export function useMyTraining(user, athleteIds = []) {
+  const queryClient = useQueryClient();
+  const enabled = !!user?.id && athleteIds.length > 0;
+  const key = athleteIds.join(',');
+
+  const goalsQuery = useQuery({
+    queryKey: ['portal', 'goals', key],
+    enabled,
+    queryFn: () => trainingRepo.listGoals({ athlete_id: athleteIds }),
+  });
+  const plansQuery = useQuery({
+    queryKey: ['portal', 'plans', key],
+    enabled,
+    queryFn: () => trainingRepo.listPlans({ athlete_id: athleteIds }),
+  });
+  const planIds = (plansQuery.data || []).map((plan) => plan.id);
+  const itemsQuery = useQuery({
+    queryKey: ['portal', 'planItems', planIds.join(',')],
+    enabled: planIds.length > 0,
+    queryFn: () => trainingRepo.listPlanItems({ plan_id: planIds }, 'week'),
+  });
+  const homeworkQuery = useQuery({
+    queryKey: ['portal', 'homework', key],
+    enabled,
+    queryFn: () => trainingRepo.listHomework({ athlete_id: athleteIds }),
+  });
+  const assessmentsQuery = useQuery({
+    queryKey: ['portal', 'assessments', key],
+    enabled,
+    queryFn: () => trainingRepo.listAssessments({ athlete_id: athleteIds }),
+  });
+
+  return {
+    goals: goalsQuery.data || [],
+    plans: plansQuery.data || [],
+    planItems: itemsQuery.data || [],
+    homework: homeworkQuery.data || [],
+    assessments: assessmentsQuery.data || [],
+    loading: enabled && (goalsQuery.isLoading || plansQuery.isLoading || homeworkQuery.isLoading || assessmentsQuery.isLoading),
+    refresh: () => {
+      queryClient.invalidateQueries({ queryKey: ['portal', 'homework'] });
+      queryClient.invalidateQueries({ queryKey: ['portal', 'goals'] });
+      queryClient.invalidateQueries({ queryKey: ['portal', 'plans'] });
+      queryClient.invalidateQueries({ queryKey: ['portal', 'planItems'] });
+      queryClient.invalidateQueries({ queryKey: ['portal', 'assessments'] });
+    },
+  };
+}
+
+// Session ids the caller has already reviewed (published reviews are
+// readable by anyone; per-doc grants cover the rest of the caller's own).
+export function useMyReviewedSessionIds(user) {
+  const query = useQuery({
+    queryKey: ['portal', 'myReviews', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => coachReviewRepo.filter({ reviewer_profile_id: user.id }).catch(() => []),
+  });
+  return {
+    reviewedSessionIds: new Set((query.data || []).map((review) => review.session_id)),
+    loading: query.isLoading && !!user?.id,
+  };
+}

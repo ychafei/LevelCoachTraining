@@ -69,12 +69,10 @@ export default function Apply() {
       </section>
 
       <ApplicationForm
-        type="general"
         title="General Application"
-        subtitle="Tell us who you are and what you want to build with LevelCoach. We read everything."
+        subtitle="Tell us who you are and what you want to build with LevelCoach. Every application is reviewed by a person; approvals arrive by email with onboarding instructions."
         promptLabel="What's on your mind? *"
         promptPlaceholder="Coaching, organization setup, partnerships, integrations — let us know."
-        fields={{ resume: true, backgroundCheck: false }}
       />
     </div>
   );

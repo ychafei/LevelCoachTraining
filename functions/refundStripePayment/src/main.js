@@ -223,7 +223,13 @@ export default async ({ req, res, error }) => {
       Query.limit(50),
     ]).catch(() => ({ documents: [] }));
 
-    const newRefundedTotal = previouslyRefunded + refundCents;
+    // Cumulative refunded total comes from Stripe (the source of truth), so a
+    // retry that slipped past the ledger replay-guard window can never
+    // double-count refunded_amount in our records.
+    const refreshedCharge = await stripe.charges.retrieve(chargeId).catch(() => null);
+    const newRefundedTotal = refreshedCharge
+      ? Number(refreshedCharge.amount_refunded || 0)
+      : previouslyRefunded + refundCents;
     const fullRefund = newRefundedTotal >= totalAmount;
     const reversals = [];
     for (const transfer of transferRows.documents) {

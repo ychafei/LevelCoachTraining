@@ -89,5 +89,6 @@ admins operate everything with a locked master-admin root of trust.
 - Coach background checks are consent-only (no vendor integration yet).
 - No automated tests beyond structural verifiers — add Playwright smoke tests.
 - Matching is message-based discovery only (legacy match requests removed).
-- Webhook retries: a failed event row blocks re-processing of that event id;
-  clear the `stripe_webhook_events` row to replay after fixing the cause.
+- Webhook retries: failed events (and events stalled in `processing` for over
+  10 minutes) are automatically reclaimed on Stripe's next retry; all handlers
+  are idempotent, so reprocessing is safe.

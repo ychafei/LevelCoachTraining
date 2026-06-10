@@ -15,17 +15,17 @@ import {
   MapPin,
   Palette,
   Phone,
-  ShieldCheck,
   UploadCloud,
   User,
   Users,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
-import { organizationMemberRepo, organizationRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
+import { callFn } from '@/lib/rpc';
 import { useAuth } from '@/lib/AuthContext';
 import { storage } from '@/lib/storage';
+import { SPORT_SELECT_OPTIONS } from '@/lib/athleteOnboardingFields';
 import { onboardingPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,10 +57,8 @@ export default function CreateOrganization() {
 
   const [form, setForm] = useState({
     organizationName: '',
-    slug: '',
     organizationType: '',
     serviceArea: '',
-    primarySports: '',
     coachCount: '',
     organizationEmail: '',
     organizationPhone: '',
@@ -75,9 +73,8 @@ export default function CreateOrganization() {
     password: '',
     confirmPassword: '',
     termsAccepted: false,
-    updatesOptIn: false,
   });
-  const [slugTouched, setSlugTouched] = useState(false);
+  const [selectedSports, setSelectedSports] = useState([]);
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
   const [logoError, setLogoError] = useState('');
@@ -127,17 +124,15 @@ export default function CreateOrganization() {
   };
 
   const updateOrganizationName = (value) => {
-    setForm((current) => ({
-      ...current,
-      organizationName: value,
-      slug: slugTouched ? current.slug : slugify(value),
-    }));
-    setErrors((current) => ({ ...current, organizationName: undefined, slug: undefined }));
+    setForm((current) => ({ ...current, organizationName: value }));
+    setErrors((current) => ({ ...current, organizationName: undefined }));
   };
 
-  const updateSlug = (value) => {
-    setSlugTouched(true);
-    updateForm('slug', slugify(value));
+  const toggleSport = (label) => {
+    setSelectedSports((current) => (
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
+    ));
+    setErrors((current) => ({ ...current, sports: undefined }));
   };
 
   const handleLogoChange = (event) => {
@@ -166,12 +161,10 @@ export default function CreateOrganization() {
 
   const validate = () => {
     const next = {};
-    if (!form.organizationName.trim()) next.organizationName = 'Organization name is required.';
-    if (!form.slug.trim()) next.slug = 'URL slug is required.';
-    else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug)) next.slug = 'Use lowercase letters, numbers, and hyphens.';
+    if (form.organizationName.trim().length < 2) next.organizationName = 'Organization name is required (2+ characters).';
     if (!form.organizationType) next.organizationType = 'Organization type is required.';
     if (!form.serviceArea.trim()) next.serviceArea = 'Service area is required.';
-    if (!form.primarySports.trim()) next.primarySports = 'At least one sport is required.';
+    if (selectedSports.length === 0) next.sports = 'Select at least one sport.';
     if (!form.coachCount) next.coachCount = 'Coach count is required.';
     if (!form.organizationEmail.trim()) next.organizationEmail = 'Organization email is required.';
     else if (!EMAIL_RE.test(form.organizationEmail.trim())) next.organizationEmail = 'Enter a valid organization email.';
@@ -215,49 +208,61 @@ export default function CreateOrganization() {
         throw new Error('Could not load the organization owner profile.');
       }
 
-      const logoUpload = logoFile ? await storage.uploadFile('org-logos', logoFile) : null;
-      const organization = await organizationRepo.create({
-        name: form.organizationName.trim(),
-        slug: form.slug.trim(),
-        type: form.organizationType,
-        status: 'draft',
-        service_area_label: form.serviceArea.trim(),
-        radius_miles: 15,
-        logo_file_id: logoUpload?.id || '',
-        brand_color: safePrimaryColor,
-        payout_model: 'organization',
-        created_by_profile_id: currentUser.id,
-        contact_email: form.organizationEmail.trim(),
-        contact_phone: form.organizationPhone.trim(),
-        website_url: form.website.trim(),
-        instagram_handle: normalizeInstagram(form.instagram),
-        primary_sports: form.primarySports.trim(),
-        coach_count_label: form.coachCount,
-        description: form.description.trim(),
-        updates_opt_in: form.updatesOptIn,
-      });
-
-      await organizationMemberRepo.create({
-        organization_id: organization.id,
-        profile_id: currentUser.id,
-        role: 'org_owner',
-        status: 'active',
-        invited_by: currentUser.id,
-        accepted_at: new Date().toISOString(),
-      });
-
+      // Owner/admin identity on the profile (accountProfile.update whitelist).
+      // onboarding_role is only writable pre-completion.
       await auth.updateCurrentUser({
-        role: 'user',
-        onboarding_role: 'organization',
-        onboarding_status: 'complete',
+        onboarding_role: currentUser.onboarding_status === 'complete' ? undefined : 'organization',
         first_name: form.adminFirstName.trim(),
         last_name: form.adminLastName.trim(),
         phone: form.adminPhone.trim(),
         terms_accepted: true,
-        profile_setup_complete: true,
-        primary_organization_id: organization.id,
-        bio: buildOrganizationBio(form, logoFile, logoUpload?.id),
       });
+
+      // Organization + org_owner membership are created server-side by the
+      // orgAdmin function (direct organizations / organization_members writes
+      // are forbidden). The server also generates the unique slug and sets
+      // primary_organization_id on the owner profile.
+      const created = await callFn('orgAdmin', {
+        action: 'create',
+        name: form.organizationName.trim(),
+        type: form.organizationType,
+        description: form.description.trim(),
+        contact_email: form.organizationEmail.trim(),
+        contact_phone: form.organizationPhone.trim(),
+        website_url: form.website.trim(),
+        service_area_label: form.serviceArea.trim(),
+        sports: selectedSports,
+      });
+      const organization = created?.organization;
+
+      // Branding extras go through orgAdmin.update — best-effort, never blocks
+      // the creation itself.
+      if (organization?.$id) {
+        try {
+          const logoUpload = logoFile ? await storage.uploadFile('org-logos', logoFile) : null;
+          await callFn('orgAdmin', {
+            action: 'update',
+            organization_id: organization.$id,
+            brand_color: safePrimaryColor,
+            instagram_handle: normalizeInstagram(form.instagram),
+            coach_count_label: form.coachCount,
+            ...(logoUpload?.id ? { logo_file_id: logoUpload.id } : {}),
+          });
+        } catch (brandingErr) {
+          console.warn('[create-organization] branding update skipped:', brandingErr?.message || brandingErr);
+        }
+      }
+
+      // Complete onboarding through the function (incomplete -> complete only).
+      try {
+        const fresh = await refetchUser();
+        await auth.updateCurrentUser({
+          onboarding_status: fresh?.onboarding_status === 'complete' ? undefined : 'complete',
+          profile_setup_complete: true,
+        });
+      } catch (completionErr) {
+        console.warn('[create-organization] completion update skipped:', completionErr?.message || completionErr);
+      }
       await refetchUser();
       setSubmitted(true);
     } catch (err) {
@@ -288,20 +293,53 @@ export default function CreateOrganization() {
   };
 
   if (submitted) {
+    const nextSteps = [
+      {
+        title: 'Connect payouts',
+        body: 'Set up Stripe Connect onboarding so the platform can route your revenue share.',
+      },
+      {
+        title: 'Sign the organization legal packet',
+        body: 'The owner signs the organization agreements before the workspace can publish.',
+      },
+      {
+        title: 'Build your roster',
+        body: 'Invite coaches by email and set their payout splits.',
+      },
+      {
+        title: 'Publish your organization',
+        body: 'Once payouts and the legal packet are complete, publish to go live publicly.',
+      },
+    ];
     return (
       <div className="min-h-screen bg-white font-sans text-slate-950">
         <Navbar />
-        <main className="flex min-h-screen items-center justify-center px-4 pt-20">
-          <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-950/10">
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="h-9 w-9" />
+        <main className="flex min-h-screen items-center justify-center px-4 py-24">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-950/10">
+            <div className="text-center">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-9 w-9" />
+              </div>
+              <h1 className="mt-6 font-sans text-3xl font-extrabold tracking-normal text-slate-950 normal-case">
+                Organization created
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Your workspace is saved as a draft. Finish these steps in the organization portal to go live:
+              </p>
             </div>
-            <h1 className="mt-6 font-sans text-3xl font-extrabold tracking-normal text-slate-950 normal-case">
-              Organization account created
-            </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Your organization setup is saved as a draft. You can continue shaping the portal before publishing it publicly.
-            </p>
+            <ol className="mt-6 space-y-3">
+              {nextSteps.map((step, index) => (
+                <li key={step.title} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-extrabold text-white">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold text-slate-950">{step.title}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-600">{step.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               <button
                 type="button"
@@ -347,31 +385,21 @@ export default function CreateOrganization() {
 
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-5">
                   <FormSection title="Organization details">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <AuthField
-                        id="organization-name"
-                        label="Organization name"
-                        icon={Building2}
-                        placeholder="Enter organization name"
-                        value={form.organizationName}
-                        onChange={(event) => updateOrganizationName(event.target.value)}
-                        error={errors.organizationName}
-                        disabled={submitting}
-                      />
-                      <AuthField
-                        id="organization-slug"
-                        label="URL slug"
-                        icon={LinkIcon}
-                        placeholder="rise-training"
-                        value={form.slug}
-                        onChange={(event) => updateSlug(event.target.value)}
-                        error={errors.slug}
-                        disabled={submitting}
-                      />
-                    </div>
+                    <AuthField
+                      id="organization-name"
+                      label="Organization name"
+                      icon={Building2}
+                      placeholder="Enter organization name"
+                      value={form.organizationName}
+                      onChange={(event) => updateOrganizationName(event.target.value)}
+                      error={errors.organizationName}
+                      disabled={submitting}
+                    />
 
-                    <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
-                      Portal URL preview: levelcoach.com/{form.slug || 'your-organization'}
+                    <p className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
+                      <LinkIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      Portal URL preview: levelcoach.com/{slugify(form.organizationName) || 'your-organization'}
+                      <span className="font-normal text-blue-700/80">(final URL is assigned when the organization is created)</span>
                     </p>
 
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -401,17 +429,35 @@ export default function CreateOrganization() {
                       />
                     </div>
 
+                    <div className="mt-4">
+                      <p className="mb-2 block text-sm font-bold text-slate-950">
+                        Sports you offer<span aria-hidden="true" className="text-red-600"> *</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2" role="group" aria-label="Sports your organization offers">
+                        {SPORT_SELECT_OPTIONS.map((option) => {
+                          const selected = selectedSports.includes(option.label);
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() => toggleSport(option.label)}
+                              disabled={submitting}
+                              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                                selected
+                                  ? 'border-blue-300 bg-blue-50 text-blue-800'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {errors.sports && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.sports}</p>}
+                    </div>
+
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <AuthField
-                        id="organization-sports"
-                        label="Primary sport or sports"
-                        icon={ShieldCheck}
-                        placeholder="e.g., Basketball, Soccer, Strength Training"
-                        value={form.primarySports}
-                        onChange={(event) => updateForm('primarySports', event.target.value)}
-                        error={errors.primarySports}
-                        disabled={submitting}
-                      />
                       <SelectField
                         id="organization-coaches"
                         label="Estimated number of coaches"
@@ -677,14 +723,6 @@ export default function CreateOrganization() {
                       , and LevelCoach Code of Conduct.
                     </CheckboxRow>
                     {errors.termsAccepted && <p className="text-xs font-semibold text-red-600">{errors.termsAccepted}</p>}
-
-                    <CheckboxRow
-                      checked={form.updatesOptIn}
-                      onChange={(checked) => updateForm('updatesOptIn', checked)}
-                      disabled={submitting}
-                    >
-                      Send me product updates and helpful tips.
-                    </CheckboxRow>
                   </div>
 
                   {formError && (
@@ -1015,26 +1053,4 @@ function normalizeInstagram(value) {
   const trimmed = value.trim();
   if (!trimmed) return '';
   return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
-}
-
-function buildOrganizationBio(form, logoFile, logoFileId = '') {
-  return [
-    form.description.trim(),
-    '',
-    '[Organization setup draft]',
-    `Organization name: ${form.organizationName.trim()}`,
-    `URL slug: ${form.slug.trim()}`,
-    `Organization type: ${form.organizationType}`,
-    `Primary sports: ${form.primarySports.trim()}`,
-    `Service area: ${form.serviceArea.trim()}`,
-    `Coach count: ${form.coachCount}`,
-    `Organization email: ${form.organizationEmail.trim()}`,
-    `Organization phone: ${form.organizationPhone.trim()}`,
-    form.website.trim() ? `Website: ${form.website.trim()}` : '',
-    form.instagram.trim() ? `Instagram: ${form.instagram.trim()}` : '',
-    `Primary brand color: ${form.primaryColor}`,
-    logoFile ? `Logo selected: ${logoFile.name}` : 'Logo selected: no',
-    logoFileId ? `Logo file id: ${logoFileId}` : '',
-    `Product updates: ${form.updatesOptIn ? 'yes' : 'no'}`,
-  ].filter(Boolean).join('\n');
 }

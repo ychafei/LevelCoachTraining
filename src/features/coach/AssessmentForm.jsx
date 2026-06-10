@@ -1,0 +1,148 @@
+import React, { useMemo, useState } from 'react';
+import { ClipboardCheck } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SPORTS_CATALOG, getSport } from '@/lib/sportsCatalog';
+import { trainingRepo } from '@/api/repo';
+import { toast } from 'sonner';
+
+// New-assessment form driven by the sport's assessment_template from the
+// sports catalog: per-skill 1-10 sliders grouped by category + a summary.
+// Saves through the `training` function (assessment.create) which validates
+// the coach↔athlete relationship server-side.
+export default function AssessmentForm({ athleteId, defaultSportKey = '', onCreated, onCancel }) {
+  const [sportKey, setSportKey] = useState(defaultSportKey || SPORTS_CATALOG[0].sport_key);
+  const [scores, setScores] = useState({});
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const sport = useMemo(() => getSport(sportKey), [sportKey]);
+  const template = sport?.assessment_template;
+
+  const setScore = (skillKey, value) => {
+    setScores((prev) => ({ ...prev, [skillKey]: value }));
+  };
+
+  const scoredCount = Object.keys(scores).length;
+
+  const save = async () => {
+    if (!athleteId) return;
+    if (scoredCount === 0) {
+      toast.error('Score at least one skill before saving.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        athlete_id: athleteId,
+        sport_key: sportKey,
+        scores,
+        notes,
+      };
+      const created = await trainingRepo.createAssessment(payload);
+      toast.success('Assessment saved');
+      setScores({});
+      setNotes('');
+      onCreated?.(created);
+    } catch (err) {
+      toast.error(err?.message || 'Could not save the assessment.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 space-y-5">
+      <div className="flex items-center gap-2">
+        <ClipboardCheck className="w-4 h-4 text-accent" aria-hidden="true" />
+        <h3 className="font-display text-sm font-bold tracking-widest uppercase text-foreground">New Assessment</h3>
+      </div>
+
+      <div>
+        <Label htmlFor="assessment-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
+        <Select
+          value={sportKey}
+          onValueChange={(value) => { setSportKey(value); setScores({}); }}
+        >
+          <SelectTrigger id="assessment-sport" className="bg-secondary border-border mt-1 w-full sm:w-72">
+            <SelectValue placeholder="Choose a sport" />
+          </SelectTrigger>
+          <SelectContent>
+            {SPORTS_CATALOG.map((s) => (
+              <SelectItem key={s.sport_key} value={s.sport_key}>{s.display_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {!template ? (
+        <p className="text-sm text-muted-foreground">This sport has no assessment template.</p>
+      ) : (
+        <div className="space-y-5">
+          {template.categories.map((category) => (
+            <fieldset key={category.key} className="border border-border rounded-lg p-4">
+              <legend className="px-2 text-xs font-display tracking-widest uppercase text-accent">{category.label}</legend>
+              <div className="space-y-4">
+                {category.skills.map((skill) => {
+                  const value = scores[skill.key];
+                  return (
+                    <div key={skill.key}>
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <Label htmlFor={`skill-${skill.key}`} className="text-sm text-foreground" title={skill.description}>
+                          {skill.label}
+                        </Label>
+                        <span className="font-display text-sm font-bold text-foreground w-14 text-right" aria-hidden="true">
+                          {value ? `${value}/10` : '—'}
+                        </span>
+                      </div>
+                      <Slider
+                        id={`skill-${skill.key}`}
+                        min={1}
+                        max={10}
+                        step={1}
+                        value={[value || 5]}
+                        onValueChange={([v]) => setScore(skill.key, v)}
+                        aria-label={`${skill.label} score, 1 to 10${value ? `, currently ${value}` : ', not scored yet'}`}
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground/80">{skill.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+
+          <div>
+            <Label htmlFor="assessment-notes" className="font-display tracking-wider uppercase text-xs">Summary</Label>
+            <Textarea
+              id="assessment-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="Overall takeaways, biggest growth areas, and what to focus on next."
+              className="bg-secondary border-border mt-1"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            {onCancel && (
+              <Button variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">
+                Cancel
+              </Button>
+            )}
+            <Button
+              onClick={save}
+              disabled={saving || scoredCount === 0}
+              className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+            >
+              {saving ? 'Saving…' : `Save Assessment (${scoredCount} skill${scoredCount === 1 ? '' : 's'} scored)`}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

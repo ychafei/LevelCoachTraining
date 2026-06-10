@@ -6,248 +6,189 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
-  CheckSquare,
   ChevronRight,
   ClipboardList,
   CreditCard,
-  HelpCircle,
+  FileText,
   LifeBuoy,
   Mail,
-  MessageCircle,
-  Phone,
   Search,
   ShieldCheck,
   Trophy,
-  TrendingUp,
   UserCheck,
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
+
+const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
 
 const audiences = [
-  { id: 'athletes', label: 'Athletes', icon: Users },
+  { id: 'athletes', label: 'Athletes', icon: Trophy },
   { id: 'parents', label: 'Parents', icon: UserCheck },
   { id: 'coaches', label: 'Coaches', icon: LifeBuoy },
   { id: 'organizations', label: 'Organizations', icon: Building2 },
 ];
 
+// Every destination below is a real page on this site — no dead-end guides,
+// phone lines, or chat widgets.
 const resourcesByAudience = {
   athletes: [
     {
-      title: 'Training Guides',
-      description: 'Step-by-step guides to improve your training, set goals, and maximize your potential.',
-      icon: ClipboardList,
-      href: '/blog',
+      title: 'Find a Coach',
+      description: 'Search published coaches by sport, location, level, availability, price, and specialty.',
+      icon: Search,
+      href: '/coaches',
     },
     {
-      title: 'Coach Hiring Checklist',
-      description: 'Use our checklist to find, evaluate, and hire the right coach for your goals.',
-      icon: CheckSquare,
+      title: 'How Booking Works',
+      description: 'The full athlete journey: search, sign once, book with credits, train, and track progress.',
+      icon: ClipboardList,
       href: '/how-it-works',
     },
     {
-      title: 'Youth Safety',
-      description: 'Learn how we verify coaches and prioritize safety for young athletes and families.',
-      icon: ShieldCheck,
-      href: '/parent-consent',
+      title: 'Training for Athletes',
+      description: 'What you get on LevelCoach: real reviews, live availability, and skill assessments.',
+      icon: Trophy,
+      href: '/for-athletes',
     },
     {
-      title: 'Payments & Booking',
-      description: 'How payments, packages, and booking work on the LevelCoach platform.',
-      icon: CreditCard,
-      href: '/for-coaches#coach-pricing',
+      title: 'Blog',
+      description: 'Training articles and platform updates from the LevelCoach team.',
+      icon: BookOpen,
+      href: '/blog',
     },
     {
-      title: 'Platform Help',
-      description: 'Find answers to common questions and get the most out of LevelCoach.',
-      icon: HelpCircle,
-      href: '#support',
-    },
-    {
-      title: 'Growing a Training Business',
-      description: 'Resources and best practices for coaches and training organizations.',
-      icon: TrendingUp,
-      href: '/for-coaches',
+      title: 'Terms of Service',
+      description: 'Booking, credits, cancellation windows, and conduct rules in plain language.',
+      icon: FileText,
+      href: '/terms',
     },
   ],
   parents: [
     {
-      title: 'Choosing a Coach',
-      description: 'Questions to ask before booking private training for a young athlete.',
-      icon: CheckSquare,
-      href: '/how-it-works',
-    },
-    {
-      title: 'Parent Account Setup',
-      description: 'How parent profiles, athlete details, and booking communication should work.',
-      icon: UserCheck,
-      href: '/dashboard',
-    },
-    {
-      title: 'Youth Safety',
-      description: 'Understand verification, consent, and safer training expectations.',
+      title: 'Safety for Parents',
+      description: 'Guardian-controlled booking, signed waivers, and message visibility for minors.',
       icon: ShieldCheck,
-      href: '/parent-consent',
+      href: '/for-parents',
     },
     {
-      title: 'Packages & Payments',
-      description: 'A simple overview of packages, refunds, credits, and secure payment flow.',
-      icon: CreditCard,
-      href: '/for-coaches#coach-pricing',
+      title: 'Find a Coach for Your Athlete',
+      description: 'Compare coaches by sport, age group, location, and reviews from completed sessions.',
+      icon: Search,
+      href: '/coaches',
     },
     {
-      title: 'Training Progress',
-      description: 'How to track notes, messages, and progress after each session.',
-      icon: TrendingUp,
+      title: 'Browse Organizations',
+      description: 'Academies and clubs with published coach rosters you can book from.',
+      icon: Building2,
+      href: '/organizations',
+    },
+    {
+      title: 'How It Works',
+      description: 'Step-by-step: create a parent account, sign once per child, book and follow progress.',
+      icon: ClipboardList,
       href: '/how-it-works',
     },
     {
-      title: 'Support Center',
-      description: 'Get help with bookings, account setup, billing, and safety questions.',
-      icon: LifeBuoy,
-      href: '#support',
+      title: 'Privacy Policy',
+      description: 'What we collect, how athlete data is protected, and your data rights.',
+      icon: FileText,
+      href: '/privacy',
     },
   ],
   coaches: [
     {
-      title: 'Coach Profile Guide',
-      description: 'Build a clear public coaching profile with training types, locations, and bio.',
-      icon: ClipboardList,
-      href: '/apply/private-training-coach',
+      title: 'Coaching on LevelCoach',
+      description: 'Marketplace visibility, scheduling, client tools, and Stripe Connect payouts.',
+      icon: Users,
+      href: '/for-coaches',
     },
     {
-      title: 'Availability Setup',
-      description: 'Plan weekly availability, session windows, and booking readiness.',
-      icon: CalendarDays,
-      href: '/apply/private-training-coach',
-    },
-    {
-      title: 'Verification Basics',
-      description: 'What coaches should prepare before publishing publicly or coaching youth athletes.',
-      icon: ShieldCheck,
-      href: '/apply/private-training-coach',
-    },
-    {
-      title: 'Getting Paid',
-      description: 'How subscriptions, paid bookings, and Stripe readiness fit together.',
+      title: 'Fees & Payouts',
+      description: 'The transparent fee model: 15% default platform fee, org splits, and Stripe transfers.',
       icon: BadgeDollarSign,
       href: '/for-coaches#coach-pricing',
     },
     {
-      title: 'Client Management',
-      description: 'Organize athletes, sessions, messages, notes, and progress from one portal.',
-      icon: Users,
-      href: '/for-coaches',
+      title: 'Apply to Coach',
+      description: 'Submit your application — sports, experience, and service area. Every application is reviewed.',
+      icon: ClipboardList,
+      href: '/apply/private-training-coach',
     },
     {
-      title: 'Growth Playbook',
-      description: 'Best practices for building a private training business on LevelCoach.',
-      icon: TrendingUp,
-      href: '/for-coaches',
+      title: 'The Coach Journey',
+      description: 'Apply, complete the publish checklist, go live, and get paid — explained end to end.',
+      icon: CalendarDays,
+      href: '/how-it-works',
+    },
+    {
+      title: 'Blog',
+      description: 'Training articles and platform updates from the LevelCoach team.',
+      icon: BookOpen,
+      href: '/blog',
     },
   ],
   organizations: [
     {
-      title: 'Organization Portal',
-      description: 'See how branded portals help academies manage coaches, athletes, and operations.',
+      title: 'Organizations on LevelCoach',
+      description: 'Roster management, automated payout splits, branded pages, and compliance gates.',
       icon: Building2,
-      href: '/for-coaches',
+      href: '/for-organizations',
     },
     {
-      title: 'Coach Roster Setup',
-      description: 'Prepare staff roles, visibility, service areas, and coaching profiles.',
-      icon: Users,
-      href: '/for-coaches',
+      title: 'Create an Organization',
+      description: 'Set up your academy or club, invite coaches, and configure payout rules.',
+      icon: ClipboardList,
+      href: '/apply/organization',
     },
     {
-      title: 'Branding Checklist',
-      description: 'Logo, color, slug, service area, and public profile items to prepare.',
-      icon: CheckSquare,
-      href: '/apply/private-training-coach',
+      title: 'See Active Organizations',
+      description: 'Browse the public directory of organizations already running on the platform.',
+      icon: Search,
+      href: '/organizations',
     },
     {
-      title: 'Payments & Payouts',
-      description: 'Understand subscription plans, Stripe readiness, and operating requirements.',
+      title: 'Payout Splits Explained',
+      description: 'How the default 60/25/15 split works and how each leg is paid via Stripe.',
       icon: CreditCard,
-      href: '/for-coaches#coach-pricing',
+      href: '/for-organizations',
     },
     {
-      title: 'Program Operations',
-      description: 'Coordinate sessions, packages, messages, and athlete pipeline management.',
+      title: 'How It Works',
+      description: 'The full organization journey from creation to automated payouts.',
       icon: CalendarDays,
-      href: '/for-coaches',
-    },
-    {
-      title: 'Academy Growth',
-      description: 'Resources for scaling training programs across multiple coaches and locations.',
-      icon: Trophy,
-      href: '/for-coaches',
+      href: '/how-it-works',
     },
   ],
 };
 
 const quickLinks = [
-  {
-    title: 'How LevelCoach Works',
-    description: 'Understand the platform',
-    icon: ClipboardList,
-    href: '/how-it-works',
-  },
-  {
-    title: 'Coach Verification',
-    description: 'Our vetting process',
-    icon: ShieldCheck,
-    href: '#support',
-  },
-  {
-    title: 'Fees & Pricing',
-    description: 'Transparent and simple',
-    icon: BadgeDollarSign,
-    href: '/for-coaches#coach-pricing',
-  },
-  {
-    title: 'Platform Updates',
-    description: "What's new",
-    icon: CalendarDays,
-    href: '/blog',
-  },
-];
-
-const trustItems = [
-  {
-    title: 'Trusted & Secure',
-    description: 'Verified coaches and secure platform',
-    icon: ShieldCheck,
-  },
-  {
-    title: 'Built for Every Athlete',
-    description: 'All sports, all levels, all goals',
-    icon: Users,
-  },
-  {
-    title: 'Backed by Coaches',
-    description: 'Designed by training professionals',
-    icon: Trophy,
-  },
+  { title: 'How LevelCoach Works', description: 'Understand the platform', icon: ClipboardList, href: '/how-it-works' },
+  { title: 'Find a Coach', description: 'Search the marketplace', icon: Search, href: '/coaches' },
+  { title: 'Fees & Payouts', description: 'The coach fee model', icon: BadgeDollarSign, href: '/for-coaches#coach-pricing' },
+  { title: 'Blog', description: 'Articles & updates', icon: BookOpen, href: '/blog' },
+  { title: 'Terms of Service', description: 'Platform rules', icon: FileText, href: '/terms' },
+  { title: 'Privacy Policy', description: 'Your data rights', icon: ShieldCheck, href: '/privacy' },
 ];
 
 function ResourceCard({ resource }) {
   return (
     <Link
       to={resource.href}
-      className="group flex min-h-[144px] gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-600/10"
+      className="group flex min-h-[144px] gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-600/10 focus-visible:ring-2 focus-visible:ring-blue-600"
     >
       <span className="grid h-14 w-14 shrink-0 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
-        <resource.icon className="h-7 w-7" />
+        <resource.icon className="h-7 w-7" aria-hidden="true" />
       </span>
       <span className="min-w-0 pt-1">
-        <span className="block font-sans text-base font-bold normal-case tracking-normal text-slate-950">
+        <span className="block font-display text-base font-bold tracking-normal text-slate-950">
           {resource.title}
         </span>
         <span className="mt-2 block line-clamp-3 text-sm leading-5 text-slate-600">{resource.description}</span>
         <span className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-blue-600">
-          Explore
-          <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+          Open
+          <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />
         </span>
       </span>
     </Link>
@@ -256,20 +197,21 @@ function ResourceCard({ resource }) {
 
 function AudienceTabs({ activeAudience, onChange }) {
   return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
+    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4" role="tablist" aria-label="Resource audience">
       {audiences.map((audience) => (
         <button
           key={audience.id}
           type="button"
+          role="tab"
+          aria-selected={activeAudience === audience.id}
           onClick={() => onChange(audience.id)}
-          className={`flex min-h-[50px] items-center justify-center gap-3 border-slate-200 px-4 text-sm font-bold transition md:border-r md:last:border-r-0 ${
+          className={`flex min-h-[50px] items-center justify-center gap-3 border-slate-200 px-4 text-sm font-bold transition focus-visible:ring-2 focus-visible:ring-blue-600 md:border-r md:last:border-r-0 ${
             activeAudience === audience.id
               ? 'border border-blue-400 bg-blue-50 text-blue-700 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.2)] md:border-blue-400'
               : 'text-slate-950 hover:bg-slate-50 hover:text-blue-700'
           }`}
-          aria-pressed={activeAudience === audience.id}
         >
-          <audience.icon className="h-5 w-5" />
+          <audience.icon className="h-5 w-5" aria-hidden="true" />
           {audience.label}
         </button>
       ))}
@@ -278,15 +220,18 @@ function AudienceTabs({ activeAudience, onChange }) {
 }
 
 export default function Resources() {
+  usePageMeta({
+    title: 'Resources',
+    description: 'Guides to finding a coach, booking safely, coaching on LevelCoach, and running a training organization — plus the blog and support contact.',
+  });
+
   const [activeAudience, setActiveAudience] = useState('athletes');
   const [query, setQuery] = useState('');
 
   const filteredResources = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const resources = resourcesByAudience[activeAudience];
-
     if (!normalized) return resources;
-
     return resources.filter((resource) =>
       `${resource.title} ${resource.description}`.toLowerCase().includes(normalized)
     );
@@ -294,42 +239,33 @@ export default function Resources() {
 
   return (
     <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_48%,#eef5ff_100%)] text-slate-950">
-      <section className="mx-auto max-w-[1380px] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-10 lg:grid-cols-[0.54fr_0.46fr]">
-          <div>
-            <div className="mb-7 inline-flex items-center gap-3 text-xl font-semibold text-slate-800">
-              <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-600 text-white">
-                <BookOpen className="h-3.5 w-3.5" />
-              </span>
-              Resources
-            </div>
-            <h1 className="max-w-[680px] font-sans text-4xl font-bold leading-[1.08] normal-case tracking-normal text-slate-950 sm:text-5xl lg:text-6xl">
-              Resources for better training decisions
-            </h1>
-            <p className="mt-6 max-w-[650px] text-lg leading-8 text-slate-600">
-              Expert guides, checklists, and tools to help you find the right coach,
-              improve your training, and grow your business.
-            </p>
+      <section className="mx-auto max-w-[1380px] px-4 py-10 sm:px-6 lg:px-8">
+        <div className="max-w-[680px]">
+          <div className="mb-6 inline-flex items-center gap-3 text-xl font-semibold text-slate-800">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-600 text-white">
+              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+            Resources
           </div>
-          <div className="hidden justify-end lg:flex">
-            <img
-              src="/resources-hero-preview.png"
-              alt="LevelCoach help center and payments preview"
-              className="w-full max-w-[520px] object-contain"
-            />
-          </div>
+          <h1 className="font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
+            Resources for better training decisions
+          </h1>
+          <p className="mt-5 text-lg leading-8 text-slate-600">
+            Everything here links to a real page on LevelCoach — platform guides, the marketplace,
+            legal documents, and the blog.
+          </p>
         </div>
 
-        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,0.73fr)_minmax(300px,0.27fr)]">
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.73fr)_minmax(300px,0.27fr)]">
           <main>
             <label className="relative block max-w-[650px]">
-              <span className="sr-only">Search guides, articles, and help</span>
-              <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-600" />
+              <span className="sr-only">Search resources</span>
+              <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-600" aria-hidden="true" />
               <input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search guides, articles, and help"
+                placeholder="Search resources"
                 className="h-[50px] w-full rounded-lg border border-slate-200 bg-white pl-14 pr-5 text-base text-slate-950 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               />
             </label>
@@ -346,7 +282,7 @@ export default function Resources() {
 
             {filteredResources.length === 0 && (
               <div className="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-                <p className="font-sans text-lg font-bold normal-case tracking-normal text-slate-950">
+                <p className="font-display text-lg font-bold tracking-normal text-slate-950">
                   No resources found
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
@@ -354,28 +290,11 @@ export default function Resources() {
                 </p>
               </div>
             )}
-
-            <section className="mt-5 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-3">
-              {trustItems.map((item) => (
-                <div
-                  key={item.title}
-                  className="flex items-center gap-4 border-b border-slate-200 px-6 py-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
-                >
-                  <item.icon className="h-7 w-7 shrink-0 text-blue-600" />
-                  <div>
-                    <p className="font-sans text-base font-bold normal-case tracking-normal text-slate-950">
-                      {item.title}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-600">{item.description}</p>
-                  </div>
-                </div>
-              ))}
-            </section>
           </main>
 
           <aside className="space-y-4">
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="font-sans text-xl font-bold normal-case tracking-normal text-slate-950">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" aria-label="Quick links">
+              <h2 className="font-display text-xl font-bold tracking-normal text-slate-950">
                 Quick Links
               </h2>
               <div className="mt-4 space-y-3">
@@ -383,55 +302,44 @@ export default function Resources() {
                   <Link
                     key={link.title}
                     to={link.href}
-                    className="group flex items-center gap-4 rounded-lg transition hover:bg-slate-50"
+                    className="group flex items-center gap-4 rounded-lg p-1 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-600"
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-blue-600">
-                      <link.icon className="h-5 w-5" />
+                      <link.icon className="h-5 w-5" aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-slate-950">{link.title}</span>
                       <span className="block text-xs text-slate-600">{link.description}</span>
                     </span>
-                    <ChevronRight className="h-5 w-5 text-slate-600 transition group-hover:translate-x-1 group-hover:text-blue-600" />
+                    <ChevronRight className="h-5 w-5 text-slate-600 transition group-hover:translate-x-1 group-hover:text-blue-600" aria-hidden="true" />
                   </Link>
                 ))}
               </div>
             </section>
 
-            <section id="support" className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
-              <h2 className="font-sans text-xl font-bold normal-case tracking-normal text-slate-950">
+            <section id="support" className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 shadow-sm" aria-label="Contact support">
+              <h2 className="font-display text-xl font-bold tracking-normal text-slate-950">
                 Contact Support
               </h2>
-              <p className="mt-1.5 max-w-[280px] text-xs leading-5 text-slate-700">
-                Our team is here to help you every step of the way.
+              <p className="mt-1.5 text-xs leading-5 text-slate-700">
+                Questions about bookings, accounts, payments, or safety? Email us and a member of
+                the team will get back to you.
               </p>
 
-              <div className="mt-4 space-y-3 text-sm font-medium text-blue-700">
-                <a href="mailto:support@levelcoach.com" className="flex items-center gap-3 hover:text-blue-800">
-                  <Mail className="h-5 w-5" />
-                  support@levelcoach.com
-                </a>
-                <div className="flex items-center gap-3">
-                  <MessageCircle className="h-5 w-5" />
-                  <span>Live chat</span>
-                  <span className="ml-1 flex items-center gap-2 text-emerald-600">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Available
-                  </span>
-                </div>
-                <a href="tel:2485550123" className="flex items-center gap-3 hover:text-blue-800">
-                  <Phone className="h-5 w-5" />
-                  (248) 555-0123
-                </a>
-              </div>
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="mt-4 flex items-center gap-3 break-all text-sm font-medium text-blue-700 hover:text-blue-800"
+              >
+                <Mail className="h-5 w-5 shrink-0" aria-hidden="true" />
+                {SUPPORT_EMAIL}
+              </a>
 
               <Button
                 asChild
                 className="mt-4 h-10 w-full rounded-lg bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700"
               >
-                <a href="mailto:support@levelcoach.com">Contact Support</a>
+                <a href={`mailto:${SUPPORT_EMAIL}`}>Email Support</a>
               </Button>
-              <p className="mt-3 text-center text-xs text-slate-600">Mon - Fri, 9:00 AM - 6:00 PM ET</p>
             </section>
           </aside>
         </div>

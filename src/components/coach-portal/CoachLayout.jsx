@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import {
-  Bell,
   CalendarDays,
   CheckSquare,
   ChevronDown,
@@ -11,7 +9,6 @@ import {
   LayoutDashboard,
   Menu,
   MessageSquare,
-  Search,
   Settings,
   Star,
   UserRound,
@@ -21,18 +18,9 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { cn } from '@/lib/utils';
 import { coachRepo } from '@/api/repo';
+import NotificationsBell from '@/features/coach/NotificationsBell';
 
 const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
-
-const sidebarTrend = [
-  { value: 12 },
-  { value: 24 },
-  { value: 20 },
-  { value: 37 },
-  { value: 34 },
-  { value: 58 },
-  { value: 92 },
-];
 
 const navItems = [
   { label: 'Dashboard', to: '/coach', icon: LayoutDashboard, isActive: ({ pathname, hash }) => pathname === '/coach' && !hash },
@@ -59,24 +47,25 @@ const navItems = [
 
 function getDisplayName(user) {
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
-  return name || user?.full_name || 'Marcus Johnson';
+  return name || user?.full_name || user?.name || user?.email || 'Coach';
 }
 
 function getInitials(name) {
-  return name
-    .split(' ')
+  const initials = String(name || '')
+    .split(/\s+/)
     .map((part) => part[0])
     .filter(Boolean)
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  return initials || 'C';
 }
 
 function SidebarNav({ onSelect }) {
   const location = useLocation();
 
   return (
-    <nav className="space-y-1.5">
+    <nav className="space-y-1.5" aria-label="Coach portal">
       {navItems.map(({ icon: Icon, ...item }) => {
         const active = item.isActive(location);
         return (
@@ -84,14 +73,15 @@ function SidebarNav({ onSelect }) {
             key={item.label}
             to={item.to}
             onClick={onSelect}
+            aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex h-12 items-center gap-3 rounded-lg px-4 text-[15px] font-semibold transition-colors',
+              'flex h-12 items-center gap-3 rounded-lg px-4 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               active
                 ? 'bg-blue-600 text-white shadow-[0_10px_28px_rgba(37,99,235,0.35)]'
                 : 'text-slate-200 hover:bg-white/10 hover:text-white'
             )}
           >
-            <Icon className="h-5 w-5 shrink-0" />
+            <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 truncate">{item.label}</span>
           </Link>
         );
@@ -116,54 +106,22 @@ function SidebarContent({ onSelect }) {
       </Link>
 
       <SidebarNav onSelect={onSelect} />
-
-      <div className="mt-auto rounded-lg border border-white/15 bg-[#0b1c38] p-5 text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
-        <p className="text-xl font-extrabold text-blue-400">LEVEL UP</p>
-        <p className="mt-2 text-[17px] font-semibold leading-snug text-white">
-          Your coaching.
-          <br />
-          Your athletes.
-          <br />
-          Your legacy.
-        </p>
-        <div className="mt-5 h-20">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={sidebarTrend} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="sidebarTrendFill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#2563eb"
-                strokeWidth={3}
-                fill="url(#sidebarTrendFill)"
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
     </div>
   );
 }
 
 function Topbar({ mobileOpen, setMobileOpen }) {
   const { user, logout } = useAuth();
-  const location = useLocation();
-  const [query, setQuery] = useState('');
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [coachProfile, setCoachProfile] = useState(null);
   const displayName = useMemo(() => getDisplayName(user), [user]);
   const initials = getInitials(displayName);
   const avatarUrl = coachProfile?.photo_url || user?.photo_url || '';
+  const accountId = user?.account_id || '';
+  const coachId = user?.coach_id || '';
 
   useEffect(() => {
-    if (!user?.coach_id) {
+    if (!accountId && !coachId) {
       setCoachProfile(null);
       return undefined;
     }
@@ -171,7 +129,12 @@ function Topbar({ mobileOpen, setMobileOpen }) {
     let cancelled = false;
     (async () => {
       try {
-        const row = await coachRepo.get(user.coach_id);
+        let row = null;
+        if (accountId) {
+          const rows = await coachRepo.filter({ user_id: accountId }).catch(() => []);
+          row = rows[0] || null;
+        }
+        if (!row && coachId) row = await coachRepo.get(coachId).catch(() => null);
         if (!cancelled) setCoachProfile(row);
       } catch (err) {
         console.warn('Coach topbar profile load failed', err?.message || err);
@@ -179,23 +142,18 @@ function Topbar({ mobileOpen, setMobileOpen }) {
     })();
 
     return () => { cancelled = true; };
-  }, [user?.coach_id, location.pathname]);
+  }, [accountId, coachId]);
 
   useEffect(() => {
-    if (!user?.coach_id) return undefined;
-
     const handleCoachProfileUpdated = (event) => {
       const nextCoach = event.detail?.coach;
       if (!nextCoach) return;
-      const nextId = nextCoach.id || nextCoach.$id;
-      if (nextId === user.coach_id) {
-        setCoachProfile((prev) => ({ ...(prev || {}), ...nextCoach }));
-      }
+      setCoachProfile((prev) => ({ ...(prev || {}), ...nextCoach }));
     };
 
     window.addEventListener(COACH_PROFILE_UPDATED_EVENT, handleCoachProfileUpdated);
     return () => window.removeEventListener(COACH_PROFILE_UPDATED_EVENT, handleCoachProfileUpdated);
-  }, [user?.coach_id]);
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06142c] text-white">
@@ -203,72 +161,24 @@ function Topbar({ mobileOpen, setMobileOpen }) {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 text-white lg:hidden"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 text-white lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           aria-label={mobileOpen ? 'Close coach menu' : 'Open coach menu'}
+          aria-expanded={mobileOpen}
         >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
         </button>
 
-        <label className="relative hidden w-full max-w-[520px] sm:block">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search..."
-            className="h-12 w-full rounded-lg border border-white/20 bg-white/5 px-12 text-sm text-white placeholder:text-slate-300 outline-none transition focus:border-blue-400 focus:bg-white/10"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs text-slate-300 hover:text-white"
-            >
-              Clear
-            </button>
-          )}
-        </label>
-
         <div className="ml-auto flex items-center gap-3">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setNotificationsOpen((open) => !open);
-                setProfileOpen(false);
-              }}
-              className="relative inline-flex h-11 w-11 items-center justify-center rounded-lg text-white hover:bg-white/10"
-              aria-label="Open notifications"
-            >
-              <Bell className="h-6 w-6" />
-              <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-red-500 text-[11px] font-bold text-white">
-                3
-              </span>
-            </button>
-            {notificationsOpen && (
-              <div className="absolute right-0 top-full mt-3 w-80 rounded-lg border border-slate-200 bg-white p-3 text-slate-950 shadow-xl">
-                <p className="px-2 pb-2 text-sm font-bold">Notifications</p>
-                {['Sarah confirmed Thursday at 8:00 AM', 'Stripe payout lands tomorrow', 'Ethan shared a progress note'].map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className="block w-full rounded-md px-2 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <NotificationsBell />
 
           <div className="relative">
             <button
               type="button"
-              onClick={() => {
-                setProfileOpen((open) => !open);
-                setNotificationsOpen(false);
-              }}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10"
+              onClick={() => setProfileOpen((open) => !open)}
+              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Open coach account menu"
+              aria-expanded={profileOpen}
+              aria-haspopup="true"
             >
               <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-sm font-bold text-white">
                 {avatarUrl ? (
@@ -285,18 +195,26 @@ function Topbar({ mobileOpen, setMobileOpen }) {
                 <span className="block text-sm font-bold leading-5">{displayName}</span>
                 <span className="block text-xs text-slate-300">Coach</span>
               </span>
-              <ChevronDown className="hidden h-4 w-4 text-slate-300 sm:block" />
+              <ChevronDown className="hidden h-4 w-4 text-slate-300 sm:block" aria-hidden="true" />
             </button>
             {profileOpen && (
               <div className="absolute right-0 top-full mt-3 w-64 rounded-lg border border-slate-200 bg-white p-2 text-slate-950 shadow-xl">
                 <div className="px-3 py-2">
                   <p className="text-sm font-bold">{displayName}</p>
-                  <p className="text-xs text-slate-500">{user?.email || `${initials}@levelcoach.training`}</p>
+                  {user?.email && <p className="text-xs text-slate-500 truncate">{user.email}</p>}
                 </div>
-                <Link to="/coach/profile" className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                <Link
+                  to="/coach/profile"
+                  onClick={() => setProfileOpen(false)}
+                  className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                >
                   Profile Builder
                 </Link>
-                <Link to="/coach/settings" className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                <Link
+                  to="/coach/settings"
+                  onClick={() => setProfileOpen(false)}
+                  className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                >
                   Account Settings
                 </Link>
                 <button

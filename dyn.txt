@@ -1,0 +1,33 @@
+DYN_TO	src/pages/Apply.jsx:39	to
+DYN_TO	src/pages/Book.jsx:1314	model.profileHref
+DYN_TO	src/pages/CoachDetail.jsx:296	bookHref
+DYN_TO	src/pages/CoachDetail.jsx:520	bookHref
+DYN_TO	src/pages/CreateAccount.jsx:953	href
+DYN_NAV	src/pages/CreateAccount.jsx:98	homePathForRole(user
+DYN_NAV	src/pages/CreateAccount.jsx:207	user.profile_setup_complete ? postAuthRedirectPath(user
+DYN_NAV	src/pages/CreateAccount.jsx:638	user.profile_setup_complete ? postAuthRedirectPath(user
+DYN_NAV	src/pages/CreateOrganization.jsx:285	onboardingPath('/create-organization'
+DYN_TO	src/pages/HowItWorks.jsx:146	journey.cta.to
+DYN_TO	src/pages/Landing.jsx:281	to
+DYN_NAV	src/pages/Landing.jsx:105	params.toString(
+DYN_NAV	src/pages/Login.jsx:49	postAuthRedirectPath(user
+DYN_NAV	src/pages/Login.jsx:69	postAuthRedirectPath(fresh
+DYN_NAV	src/pages/Login.jsx:99	postAuthRedirectPath(fresh
+DYN_TO	src/pages/Resources.jsx:178	resource.href
+DYN_TO	src/pages/Resources.jsx:304	link.href
+DYN_NAV	src/pages/VerifyEmail.jsx:29	homePathForRole(user
+DYN_TO	src/pages/admin/AdminPanel.jsx:104	to
+DYN_TO	src/pages/admin/AdminPanel.jsx:349	path
+DYN_TO	src/pages/apply/ApplyPrivateTrainingCoach.jsx:678	primary.to
+DYN_TO	src/pages/coach/CoachOverview.jsx:62	href
+DYN_TO	src/pages/coach/CoachOverview.jsx:83	href
+DYN_TO	src/pages/master-admin/MasterAdminPortal.jsx:524	href
+DYN_TO	src/pages/onboarding/OnboardingCompletion.jsx:111	safeNext(params.get('next')) || homePathForRole(user)
+DYN_NAV	src/pages/onboarding/OnboardingCompletion.jsx:131	selectedRole === 'coach_applicant' ? '/apply/private-training-coach' : '/create-
+DYN_NAV	src/pages/onboarding/OnboardingCompletion.jsx:141	safeNext(params.get('next'
+DYN_TO	src/features/athlete/AthleteOverview.jsx:345	action.href
+DYN_TO	src/features/athlete/portalShared.jsx:108	cta.href
+DYN_TO	src/features/marketing/MarketingBlocks.jsx:31	primaryCta.to
+DYN_TO	src/features/marketing/MarketingBlocks.jsx:39	secondaryCta.to
+DYN_TO	src/features/marketing/MarketingBlocks.jsx:142	primaryCta.to
+DYN_TO	src/features/marketing/MarketingBlocks.jsx:150	secondaryCta.to

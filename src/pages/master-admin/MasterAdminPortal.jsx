@@ -5,8 +5,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { adminAssignmentRepo, auditLogRepo, profileRepo } from '@/api/repo';
-import { AlertTriangle, FileText, History, Lock, MailCheck, Shield, ShieldCheck, Users } from 'lucide-react';
+import { adminAssignmentRepo, auditLogRepo, coachRepo, profileRepo } from '@/api/repo';
+import { AlertTriangle, FileText, History, Lock, MailCheck, Percent, Shield, ShieldCheck, Users } from 'lucide-react';
+import { toast } from 'sonner';
+
+const DEFAULT_PLATFORM_FEE_BPS = 1500; // mirrors server env PLATFORM_FEE_BPS default
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
@@ -21,6 +24,127 @@ function displayName(profile) {
     || profile?.full_name
     || profile?.email
     || 'Unknown user';
+}
+
+// Per-coach platform fee override (superadmin only — enforced again by
+// adminOps.setCoachFee server-side). Percent in the UI, basis points on the wire.
+function CoachFeeSection() {
+  const [coaches, setCoaches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [drafts, setDrafts] = useState({});
+  const [savingId, setSavingId] = useState('');
+
+  useEffect(() => {
+    coachRepo.list()
+      .then(setCoaches)
+      .catch(() => setCoaches([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return coaches
+      .filter((coach) => {
+        if (!q) return true;
+        const name = [coach.first_name, coach.last_name].filter(Boolean).join(' ');
+        return `${name} ${coach.email || ''}`.toLowerCase().includes(q);
+      })
+      .slice(0, 15);
+  }, [coaches, search]);
+
+  const save = async (coach) => {
+    const raw = drafts[coach.id];
+    const bps = Math.round(Number(raw) * 100);
+    if (!Number.isInteger(bps) || bps < 0 || bps > 5000) {
+      toast.error('Platform fee must be between 0% and 50%.');
+      return;
+    }
+    setSavingId(coach.id);
+    try {
+      await coachRepo.adminSetFee(coach.id, bps);
+      setCoaches((prev) => prev.map((c) => (c.id === coach.id ? { ...c, platform_fee_bps: bps } : c)));
+      setDrafts((prev) => { const next = { ...prev }; delete next[coach.id]; return next; });
+      toast.success(`Platform fee for ${coach.first_name || 'coach'} set to ${(bps / 100).toLocaleString()}%`);
+    } catch (err) {
+      toast.error(err?.message || 'Could not set the platform fee.');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  return (
+    <section className="mt-7 rounded-lg border border-border bg-card p-5 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Percent className="h-5 w-5 text-accent" aria-hidden="true" />
+        <h2 className="font-display text-xl font-bold tracking-tight text-foreground">Platform fee overrides</h2>
+      </div>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+        The platform default fee is {(DEFAULT_PLATFORM_FEE_BPS / 100).toLocaleString()}%. Per-coach overrides
+        apply to new checkouts only and require super admin authority (verified server-side).
+      </p>
+      <div className="mt-4 max-w-md">
+        <label htmlFor="fee-coach-search" className="sr-only">Search coaches</label>
+        <Input
+          id="fee-coach-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search coaches by name or email"
+          className="bg-background"
+        />
+      </div>
+      <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+        {loading ? (
+          <p className="p-4 text-sm text-muted-foreground">Loading coaches...</p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            {coaches.length === 0 ? 'No coaches exist yet.' : 'No coaches match the search.'}
+          </p>
+        ) : visible.map((coach) => {
+          const currentBps = Number.isInteger(coach.platform_fee_bps) ? coach.platform_fee_bps : null;
+          const draft = drafts[coach.id];
+          return (
+            <div key={coach.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-semibold text-foreground">
+                  {[coach.first_name, coach.last_name].filter(Boolean).join(' ') || coach.email}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {coach.email} · current fee: {currentBps === null
+                    ? `platform default (${(DEFAULT_PLATFORM_FEE_BPS / 100).toLocaleString()}%)`
+                    : `${(currentBps / 100).toLocaleString()}%`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor={`fee-${coach.id}`} className="sr-only">{`Platform fee percent for ${coach.email}`}</label>
+                <Input
+                  id={`fee-${coach.id}`}
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.25"
+                  inputMode="decimal"
+                  value={draft ?? (currentBps === null ? '' : String(currentBps / 100))}
+                  placeholder={(DEFAULT_PLATFORM_FEE_BPS / 100).toString()}
+                  onChange={(event) => setDrafts((prev) => ({ ...prev, [coach.id]: event.target.value }))}
+                  className="w-24 bg-background"
+                />
+                <span className="text-sm text-muted-foreground" aria-hidden="true">%</span>
+                <Button
+                  size="sm"
+                  onClick={() => save(coach)}
+                  disabled={savingId === coach.id || draft === undefined || draft === ''}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  {savingId === coach.id ? 'Saving...' : 'Set fee'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 export default function MasterAdminPortal() {
@@ -193,7 +317,8 @@ export default function MasterAdminPortal() {
           <div className="mt-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-5">
             <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Bootstrap Required</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Run the server-side bootstrap after this account email is verified.
+              Run the server-side bootstrap after this account email is verified. The server only accepts the
+              bootstrap from the authorized owner account configured in its environment.
             </p>
             <div className="mt-4 rounded-lg border border-border bg-card/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -365,6 +490,8 @@ export default function MasterAdminPortal() {
             )}
           </div>
         </section>
+
+        {user?.is_super_admin && <CoachFeeSection />}
 
         <section className="mt-7 rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2">

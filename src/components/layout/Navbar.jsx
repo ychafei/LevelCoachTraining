@@ -14,28 +14,38 @@ import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
-  const { user, isAuthenticated, isAdmin, isCoach, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, isCoach, isOrganizationAdmin, logout } = useAuth();
   const authenticated = isAuthenticated;
   const location = useLocation();
   const navigate = useNavigate();
   const isGuestPlatform = !authenticated || !user;
 
   const getNavLinks = () => {
-    // Guests: marketplace/product navigation.
+    // Guests: full marketplace/product navigation.
     if (!authenticated || !user) {
       return [
         { label: 'Find a Coach', path: '/coaches' },
+        { label: 'Organizations', path: '/organizations' },
         { label: 'How It Works', path: '/how-it-works' },
-        { label: 'For Coaches', path: '/for-coaches' },
+        {
+          label: 'For You',
+          path: '/for-you',
+          items: [
+            { label: 'For Athletes', path: '/for-athletes' },
+            { label: 'For Parents', path: '/for-parents' },
+            { label: 'For Coaches', path: '/for-coaches' },
+            { label: 'For Organizations', path: '/for-organizations' },
+          ],
+        },
         {
           label: 'Resources',
           path: '/resources',
           items: [
             { label: 'Resource Center', path: '/resources' },
             { label: 'Blog', path: '/blog' },
+            { label: 'About', path: '/about' },
           ],
         },
-        { label: 'About', path: '/about' },
       ];
     }
 
@@ -52,10 +62,19 @@ export default function Navbar() {
       return [{ label: 'Coaching Portal', path: '/coach', icon: Briefcase }];
     }
 
-    // Clients: account nav.
+    // Organization admins: org portal + marketplace.
+    if (isOrganizationAdmin) {
+      return [
+        { label: 'Organization', path: '/organization', icon: Briefcase },
+        { label: 'Find a Coach', path: '/coaches' },
+        { label: 'Messages', path: '/messages' },
+      ];
+    }
+
+    // Clients (athletes / parents): account nav.
     return [
       { label: 'Dashboard', path: '/dashboard' },
-      { label: 'Book', path: '/coaches' },
+      { label: 'Find a Coach', path: '/coaches' },
       { label: 'Matching', path: '/matching' },
       { label: 'Messages', path: '/messages' },
     ];
@@ -69,6 +88,10 @@ export default function Navbar() {
     if (pathname === '/') return location.pathname === '/';
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
+
+  // A dropdown group is active when any of its items is the current page.
+  const isGroupActive = (link) =>
+    link.items ? link.items.some((item) => isActive(item.path)) : isActive(link.path);
 
   const handleNavClick = (path) => {
     const hash = path.includes('#') ? path.split('#')[1] : '';
@@ -109,11 +132,11 @@ export default function Navbar() {
                     className={`px-4 py-2 transition-colors outline-none focus:outline-none flex items-center gap-1.5 whitespace-nowrap ${
                       isGuestPlatform
                         ? `border-b-2 text-sm font-semibold tracking-normal ${
-                            isActive(link.path)
+                            isGroupActive(link)
                               ? 'border-blue-600 text-blue-700'
                               : 'border-transparent text-slate-950 hover:text-blue-700'
                           }`
-                        : isActive(link.path)
+                        : isGroupActive(link)
                           ? 'font-display text-sm tracking-wide uppercase text-accent'
                           : 'font-display text-sm tracking-wide uppercase text-muted-foreground hover:text-foreground'
                     }`}
@@ -249,12 +272,13 @@ export default function Navbar() {
                 <div key={link.path}>
                   <button
                     onClick={() => toggleMobileExpand(link.path)}
+                    aria-expanded={!!mobileExpanded[link.path]}
                     className={`w-full flex items-center justify-between px-4 py-3 text-sm font-display tracking-wide uppercase rounded-md transition-colors ${
                       isGuestPlatform
-                        ? isActive(link.path)
+                        ? isGroupActive(link)
                           ? 'text-blue-700 bg-blue-50'
                           : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
-                        : isActive(link.path)
+                        : isGroupActive(link)
                           ? 'text-accent bg-secondary'
                           : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
                     }`}

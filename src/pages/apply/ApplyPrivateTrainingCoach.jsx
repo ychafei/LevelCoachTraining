@@ -1,37 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   CalendarCheck,
   CheckCircle2,
   ChevronDown,
+  Clock3,
   Eye,
   EyeOff,
-  FileUp,
-  Grid2X2,
+  Link as LinkIcon,
   Lock,
   Mail,
   MapPin,
-  Monitor,
   Phone,
   ShieldCheck,
   User,
   Users,
+  XCircle,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
+import { callFn } from '@/lib/rpc';
 import { useAuth } from '@/lib/AuthContext';
-import { coachRepo } from '@/api/repo/coachRepo';
+import { coachApplicationRepo } from '@/api/repo';
+import { SPORT_SELECT_OPTIONS, EMAIL_RE, normalizePhoneForStorage } from '@/lib/athleteOnboardingFields';
+import { WhatHappensNext } from '@/components/apply/ApplicationForm';
 import { onboardingPath } from '@/lib/roleHome';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const SESSION_TYPES = [
-  { id: '1-on-1', label: '1-on-1', icon: User },
-  { id: 'Small Group', label: 'Small Group', icon: Users },
-  { id: 'Team Training', label: 'Team Training', icon: Users },
-  { id: 'Virtual', label: 'Virtual', icon: Monitor },
-];
+const COUNTY_OPTIONS = ['Oakland', 'Macomb', 'Wayne', 'Other'];
 
 const PASSWORD_RULES = [
   { id: 'length', label: '8+ characters', test: (value) => value.length >= 8 },
@@ -42,8 +38,7 @@ const PASSWORD_RULES = [
 ];
 
 export default function ApplyPrivateTrainingCoach() {
-  const navigate = useNavigate();
-  const { isAuthenticated, isLoadingAuth, user, refetchUser } = useAuth();
+  const { isAuthenticated, isLoadingAuth, user, refetchUser, isCoach } = useAuth();
 
   const [form, setForm] = useState({
     firstName: '',
@@ -53,24 +48,25 @@ export default function ApplyPrivateTrainingCoach() {
     dob: '',
     password: '',
     confirmPassword: '',
-    displayName: '',
-    sportsCoached: '',
-    trainingSpecialties: '',
     serviceArea: '',
-    shortBio: '',
+    county: '',
     yearsExperience: '',
-    certifications: '',
+    credentials: '',
+    experience: '',
+    resumeUrl: '',
+    backgroundCheckConsent: false,
     termsAccepted: false,
-    verificationConsent: false,
+    website: '', // honeypot — hidden from real users
   });
-  const [sessionTypes, setSessionTypes] = useState(['1-on-1', 'Small Group', 'Team Training', 'Virtual']);
+  const [sports, setSports] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [existingApplication, setExistingApplication] = useState(null);
+  const [checkingExisting, setCheckingExisting] = useState(false);
 
   const age = useMemo(() => calculateAge(form.dob), [form.dob]);
   const passwordChecks = useMemo(
@@ -78,9 +74,8 @@ export default function ApplyPrivateTrainingCoach() {
     [form.password],
   );
   const passwordValid = passwordChecks.every((check) => check.ok);
-  const passwordsMatch = form.confirmPassword.length > 0 && form.password === form.confirmPassword;
-  const bioCount = form.shortBio.length;
   const usingExistingAccount = isAuthenticated && !!user;
+  const wantsAccount = !usingExistingAccount && form.password.length > 0;
 
   useEffect(() => {
     if (!user) return;
@@ -90,13 +85,41 @@ export default function ApplyPrivateTrainingCoach() {
       lastName: current.lastName || user.last_name || splitLastName(user.name),
       email: user.email || current.email,
       phone: current.phone || user.phone || '',
-      dob: current.dob || user.dob || '',
+      dob: current.dob || (user.dob ? String(user.dob).slice(0, 10) : ''),
     }));
   }, [user]);
+
+  // Applicants with an account get a per-document read grant on their own
+  // application — show its status instead of the blank form.
+  useEffect(() => {
+    if (!user?.email) {
+      setExistingApplication(null);
+      return;
+    }
+    let cancelled = false;
+    setCheckingExisting(true);
+    coachApplicationRepo.filter({ email: String(user.email).toLowerCase() }, '-created_date')
+      .then((rows) => {
+        if (!cancelled) setExistingApplication(rows?.[0] || null);
+      })
+      .catch(() => {
+        if (!cancelled) setExistingApplication(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingExisting(false);
+      });
+  }, [user?.email]);
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  const toggleSport = (label) => {
+    setSports((current) => (
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
+    ));
+    setErrors((current) => ({ ...current, sports: undefined }));
   };
 
   const validate = () => {
@@ -108,22 +131,19 @@ export default function ApplyPrivateTrainingCoach() {
     if (!form.phone.trim()) next.phone = 'Phone number is required.';
     if (!form.dob) next.dob = 'Date of birth is required.';
     else if (age === null) next.dob = 'Enter a valid date of birth.';
-    else if (age < 18) next.dob = 'Coach account owners must be 18 or older.';
-    if (!usingExistingAccount) {
-      if (!form.password) next.password = 'Password is required.';
-      else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
-      if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
-      else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    else if (age < 18) next.dob = 'Coaches must be 18 or older.';
+    if (wantsAccount) {
+      if (!passwordValid) next.password = 'Password does not meet the requirements below.';
+      if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     }
-    if (!form.displayName.trim()) next.displayName = 'Display name is required.';
-    if (!form.sportsCoached.trim()) next.sportsCoached = 'Sport is required.';
-    if (!form.trainingSpecialties.trim()) next.trainingSpecialties = 'Training specialty is required.';
+    if (sports.length === 0) next.sports = 'Select at least one sport you coach.';
     if (!form.serviceArea.trim()) next.serviceArea = 'Service area is required.';
-    if (sessionTypes.length === 0) next.sessionTypes = 'Select at least one session type.';
-    if (!form.shortBio.trim()) next.shortBio = 'Short bio is required.';
-    if (!form.yearsExperience) next.yearsExperience = 'Years of experience is required.';
+    if (form.experience.trim().length < 20) next.experience = 'Tell us a bit more (at least 20 characters).';
+    if (form.resumeUrl.trim() && !/^https?:\/\//i.test(form.resumeUrl.trim())) {
+      next.resumeUrl = 'Use a full link, like https://…';
+    }
+    if (!form.backgroundCheckConsent) next.backgroundCheckConsent = 'Background check consent is required to apply.';
     if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Terms of Service and Privacy Policy.';
-    if (!form.verificationConsent) next.verificationConsent = 'Verification consent is required.';
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -134,66 +154,70 @@ export default function ApplyPrivateTrainingCoach() {
     setFormError(null);
     if (!validate()) return;
 
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      let currentUser = user;
-      if (!usingExistingAccount) {
+      // 1. Optionally create / use an account so the application is linked to
+      //    it (per-document read grant + faster approval linking).
+      let hasAccount = usingExistingAccount;
+      if (!usingExistingAccount && wantsAccount) {
         await auth.signOut();
-        currentUser = await auth.signUp(form.email.trim(), form.password);
-      } else {
-        currentUser = await refetchUser();
-      }
-      if (!currentUser?.id) {
-        throw new Error('Could not load your coach applicant profile.');
+        await auth.signUp(form.email.trim(), form.password);
+        hasAccount = true;
       }
 
-      currentUser = await auth.updateCurrentUser({
-        role: 'coach',
-        onboarding_role: 'coach',
-        onboarding_status: 'complete',
+      // 2. Submit the application through the `applications` function
+      //    (validates, rate-limits, honeypot, audit).
+      const background = [
+        `Sports coached: ${sports.join(', ')}`,
+        `Service area: ${form.serviceArea.trim()}`,
+        form.yearsExperience ? `Years of experience: ${form.yearsExperience}` : '',
+        form.credentials.trim() ? `Credentials & certifications:\n${form.credentials.trim()}` : '',
+        `Coaching experience & background:\n${form.experience.trim()}`,
+      ].filter(Boolean).join('\n\n');
+
+      await callFn('applications', {
+        action: 'submit',
+        website: form.website, // honeypot
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
+        email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         dob: form.dob,
-        terms_accepted: true,
-        profile_setup_complete: false,
+        ...(form.county && form.county !== 'Other' ? { county: form.county } : {}),
+        coaching_background: background,
+        resume_url: form.resumeUrl.trim(),
+        background_check_consent: true,
       });
 
-      const coach = await coachRepo.create({
-        first_name: form.firstName.trim(),
-        last_name: form.lastName.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        county: inferCounty(form.serviceArea),
-        training_area: form.serviceArea.trim(),
-        bio: buildCoachBio(form),
-        quote: form.displayName.trim(),
-        specializations: buildSpecializations(form, sessionTypes),
-        is_active: false,
-        is_head_coach: false,
-        display_order: 999,
-        availability: {},
-        platform_fee_type: 'none',
-        platform_fee_value: 0,
-        user_id: currentUser.account_id || currentUser.id,
-      });
+      // 3. Best-effort profile bookkeeping through the whitelist (never blocks
+      //    the application itself).
+      if (hasAccount) {
+        try {
+          const fresh = await refetchUser();
+          if (fresh && fresh.onboarding_status !== 'complete') {
+            await auth.updateCurrentUser({
+              onboarding_role: 'coach_applicant',
+              onboarding_status: 'complete',
+              profile_setup_complete: true,
+              first_name: form.firstName.trim(),
+              last_name: form.lastName.trim(),
+              phone: normalizePhoneForStorage(form.phone),
+              dob: form.dob,
+              terms_accepted: true,
+            });
+            await refetchUser();
+          }
+        } catch (profileErr) {
+          console.warn('[apply] profile bookkeeping skipped:', profileErr?.message || profileErr);
+        }
+      }
 
-      await auth.updateCurrentUser({
-        role: 'coach',
-        onboarding_role: 'coach',
-        onboarding_status: 'complete',
-        coach_id: coach.id,
-        profile_setup_complete: false,
-      });
-      await refetchUser();
       setSubmitted(true);
     } catch (err) {
-      const code = err?.code;
-      const type = err?.type;
-      if (code === 409 || type === 'user_already_exists') {
-        setFormError('An account with that email already exists. Sign in instead.');
+      if (err?.code === 409 || err?.type === 'user_already_exists') {
+        setFormError('An account with that email already exists. Sign in first, then submit your application.');
       } else {
-        setFormError(err?.message || 'Could not create your coach account.');
+        setFormError(err?.message || 'Could not submit your coach application.');
       }
     } finally {
       setSubmitting(false);
@@ -203,10 +227,6 @@ export default function ApplyPrivateTrainingCoach() {
   const handleGoogle = async () => {
     setFormError(null);
     try {
-      if (usingExistingAccount) {
-        navigate(onboardingPath('/apply/private-training-coach', 'coach_applicant'));
-        return;
-      }
       await auth.signOut();
       auth.createOAuthSession('google', onboardingPath('/apply/private-training-coach', 'coach_applicant'));
     } catch (err) {
@@ -214,41 +234,59 @@ export default function ApplyPrivateTrainingCoach() {
     }
   };
 
-  if (submitted) {
+  // ---- Status screens -------------------------------------------------------
+
+  if (isCoach && user?.role === 'coach') {
     return (
-      <div className="min-h-screen bg-white font-sans text-slate-950">
-        <Navbar />
-        <main className="flex min-h-screen items-center justify-center px-4 pt-20">
-          <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-950/10">
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="h-9 w-9" />
-            </div>
-            <h1 className="mt-6 font-sans text-3xl font-extrabold tracking-normal text-slate-950 normal-case">
-              Coach account created
-            </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Your draft coach profile is saved. You can finish verification, availability, and payments before going live.
-            </p>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => navigate('/coach')}
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
-              >
-                Open coach portal
-              </button>
-              <Link
-                to="/"
-                className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              >
-                Back to platform
-              </Link>
-            </div>
-          </div>
-        </main>
-      </div>
+      <StatusShell
+        icon={<CheckCircle2 className="h-9 w-9" />}
+        tone="emerald"
+        title="You're already a coach"
+        body="Your coach account is active. Manage your profile, availability, legal packet, and payouts from the coach portal."
+        primary={{ to: '/coach', label: 'Open coach portal' }}
+      />
     );
   }
+
+  if (submitted || existingApplication?.status === 'pending') {
+    return (
+      <StatusShell
+        icon={<Clock3 className="h-9 w-9" />}
+        tone="blue"
+        title="Application received"
+        body={`Thanks${form.firstName ? `, ${form.firstName.trim()}` : ''}! Your coach application is in review. We'll email ${form.email || existingApplication?.email || 'you'} with the decision.`}
+        primary={{ to: '/', label: 'Back to platform' }}
+      >
+        <WhatHappensNext />
+      </StatusShell>
+    );
+  }
+
+  if (existingApplication?.status === 'accepted') {
+    return (
+      <StatusShell
+        icon={<CheckCircle2 className="h-9 w-9" />}
+        tone="emerald"
+        title="Your application was approved"
+        body="Welcome aboard. Head to the coach portal to complete your profile, sign the coach legal packet, set availability, and connect payouts."
+        primary={{ to: '/coach', label: 'Start coach onboarding' }}
+      />
+    );
+  }
+
+  if (existingApplication?.status === 'rejected') {
+    return (
+      <StatusShell
+        icon={<XCircle className="h-9 w-9" />}
+        tone="slate"
+        title="Application update"
+        body="We weren't able to move forward with your previous application. You're welcome to apply again with updated experience or credentials."
+        primary={{ onClick: () => setExistingApplication(null), label: 'Apply again' }}
+      />
+    );
+  }
+
+  // ---- Application form -----------------------------------------------------
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-950">
@@ -261,17 +299,35 @@ export default function ApplyPrivateTrainingCoach() {
               <div className="mx-auto w-full max-w-xl">
                 <div className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">
                   <Users className="h-4 w-4" />
-                  Coach
+                  Coach Application
                 </div>
 
                 <h1 className="mt-4 font-sans text-3xl font-extrabold leading-tight tracking-normal text-slate-950 normal-case sm:text-4xl">
-                  Create your coach account
+                  Apply to coach on LevelCoach
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Build your profile, manage athletes, and grow your training business.
+                  Applications are reviewed by our team. Once approved, you'll set up your public
+                  profile, availability, legal packet, and payouts before going live.
                 </p>
 
+                {checkingExisting && (
+                  <div className="mt-4 h-10 animate-pulse rounded-md bg-slate-100" aria-busy="true" aria-label="Checking for an existing application" />
+                )}
+
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
+                  {/* Honeypot — hidden from real users. */}
+                  <div className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
+                    <label htmlFor="coach-apply-website">Website</label>
+                    <input
+                      id="coach-apply-website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.website}
+                      onChange={(event) => updateForm('website', event.target.value)}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="coach-first-name"
@@ -332,30 +388,31 @@ export default function ApplyPrivateTrainingCoach() {
                       disabled={submitting}
                     />
                     <AuthField
-                      id="coach-display-name"
-                      label="Coach display name or profile name"
-                      icon={User}
-                      placeholder="e.g., Elite Hoops Training"
-                      value={form.displayName}
-                      onChange={(event) => updateForm('displayName', event.target.value)}
-                      error={errors.displayName}
+                      id="coach-years"
+                      label="Years of coaching experience"
+                      type="number"
+                      min="0"
+                      icon={CalendarCheck}
+                      placeholder="e.g., 5"
+                      value={form.yearsExperience}
+                      onChange={(event) => updateForm('yearsExperience', event.target.value)}
                       disabled={submitting}
                     />
                   </div>
 
                   {usingExistingAccount ? (
                     <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
-                      You are signed in as {user.email}. This coach application will be attached to your current account.
+                      You are signed in as {user.email}. This application will be linked to your current account.
                     </p>
                   ) : (
                     <>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <AuthField
                           id="coach-password"
-                          label="Password"
+                          label="Password (optional)"
                           type={showPassword ? 'text' : 'password'}
                           icon={Lock}
-                          placeholder="Create a strong password"
+                          placeholder="Create one to track your application"
                           value={form.password}
                           onChange={(event) => updateForm('password', event.target.value)}
                           error={errors.password}
@@ -380,7 +437,7 @@ export default function ApplyPrivateTrainingCoach() {
                           value={form.confirmPassword}
                           onChange={(event) => updateForm('confirmPassword', event.target.value)}
                           error={errors.confirmPassword}
-                          disabled={submitting}
+                          disabled={submitting || !form.password}
                           trailing={
                             <button
                               type="button"
@@ -393,168 +450,133 @@ export default function ApplyPrivateTrainingCoach() {
                           }
                         />
                       </div>
-
-                      <div className="flex flex-wrap gap-1.5">
-                        {passwordChecks.map((check) => (
-                          <span
-                            key={check.id}
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                              check.ok
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-slate-200 bg-slate-50 text-slate-500'
-                            }`}
-                          >
-                            <CheckCircle2 className="h-3 w-3" />
-                            {check.label}
-                          </span>
-                        ))}
-                        {form.confirmPassword && (
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
-                              passwordsMatch
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-red-200 bg-red-50 text-red-700'
-                            }`}
-                          >
-                            <CheckCircle2 className="h-3 w-3" />
-                            {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
-                          </span>
-                        )}
-                      </div>
+                      {wantsAccount && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {passwordChecks.map((check) => (
+                            <span
+                              key={check.id}
+                              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold ${
+                                check.ok
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : 'border-slate-200 bg-slate-50 text-slate-500'
+                              }`}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {check.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs leading-5 text-slate-500">
+                        You can apply without a password — we'll email you either way. Creating one lets
+                        you sign in and track your application status.
+                      </p>
                     </>
                   )}
 
+                  <div>
+                    <p className="mb-2 block text-sm font-bold text-slate-950">
+                      Sports you coach<span aria-hidden="true" className="text-red-600"> *</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Sports you coach">
+                      {SPORT_SELECT_OPTIONS.map((option) => {
+                        const selected = sports.includes(option.label);
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => toggleSport(option.label)}
+                            disabled={submitting}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                              selected
+                                ? 'border-blue-300 bg-blue-50 text-blue-800'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {errors.sports && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.sports}</p>}
+                  </div>
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
-                      id="coach-sports"
-                      label="Sports coached"
-                      icon={Grid2X2}
-                      placeholder="Select sports"
-                      value={form.sportsCoached}
-                      onChange={(event) => updateForm('sportsCoached', event.target.value)}
-                      error={errors.sportsCoached}
-                      disabled={submitting}
-                      trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
-                    />
-                    <AuthField
-                      id="coach-location"
+                      id="coach-service-area"
                       label="Primary location / service area"
                       icon={MapPin}
-                      placeholder="City, State or ZIP"
+                      placeholder="City, State or ZIP + radius"
                       value={form.serviceArea}
                       onChange={(event) => updateForm('serviceArea', event.target.value)}
                       error={errors.serviceArea}
                       disabled={submitting}
                     />
+                    <SelectField
+                      id="coach-county"
+                      label="County (optional)"
+                      icon={MapPin}
+                      value={form.county}
+                      onChange={(event) => updateForm('county', event.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="">Select county</option>
+                      {COUNTY_OPTIONS.map((county) => (
+                        <option key={county} value={county}>{county}</option>
+                      ))}
+                    </SelectField>
                   </div>
 
-                  <AuthField
-                    id="coach-specialties"
-                    label="Training specialties"
-                    icon={ShieldCheck}
-                    placeholder="Select specialties"
-                    value={form.trainingSpecialties}
-                    onChange={(event) => updateForm('trainingSpecialties', event.target.value)}
-                    error={errors.trainingSpecialties}
+                  <TextAreaField
+                    id="coach-credentials"
+                    label="Credentials & certifications"
+                    rows={3}
+                    placeholder="Licenses, certifications, playing/coaching credentials, education…"
+                    value={form.credentials}
+                    onChange={(event) => updateForm('credentials', event.target.value)}
                     disabled={submitting}
-                    trailing={<ChevronDown className="h-4 w-4 text-slate-500" />}
                   />
 
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-slate-950">
-                      Session types offered
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {SESSION_TYPES.map(({ id, label, icon: Icon }) => {
-                        const selected = sessionTypes.includes(id);
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() =>
-                              setSessionTypes((current) =>
-                                selected ? current.filter((item) => item !== id) : [...current, id],
-                              )
-                            }
-                            className={`flex h-10 items-center justify-center gap-2 rounded-md border text-sm font-bold transition ${
-                              selected
-                                ? 'border-blue-200 bg-blue-50 text-slate-900'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200'
-                            }`}
-                          >
-                            <Icon className="h-4 w-4 text-blue-700" />
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.sessionTypes && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.sessionTypes}</p>}
-                  </div>
+                  <TextAreaField
+                    id="coach-experience"
+                    label="Coaching experience & background"
+                    required
+                    rows={5}
+                    placeholder="Who you've coached, for how long, your training philosophy, and notable results…"
+                    value={form.experience}
+                    onChange={(event) => updateForm('experience', event.target.value)}
+                    error={errors.experience}
+                    disabled={submitting}
+                  />
 
-                  <div>
-                    <label htmlFor="coach-bio" className="mb-2 block text-sm font-bold text-slate-950">
-                      Short bio
-                    </label>
-                    <textarea
-                      id="coach-bio"
-                      maxLength={500}
-                      rows={3}
-                      placeholder="Tell athletes about your coaching philosophy, experience, and what makes you unique..."
-                      value={form.shortBio}
-                      onChange={(event) => updateForm('shortBio', event.target.value)}
-                      disabled={submitting}
-                      className={`min-h-20 w-full resize-none rounded-md border bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-slate-400 focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${
-                        errors.shortBio
-                          ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
-                          : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
-                      }`}
-                    />
-                    <div className="mt-1 flex items-center justify-between gap-3">
-                      {errors.shortBio ? (
-                        <p className="text-xs font-semibold text-red-600">{errors.shortBio}</p>
-                      ) : (
-                        <span />
-                      )}
-                      <p className="text-xs font-semibold text-slate-400">{bioCount} / 500</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
-                      id="coach-years"
-                      label="Years of experience"
-                      type="number"
-                      min="0"
-                      icon={CalendarCheck}
-                      placeholder="e.g., 5"
-                      value={form.yearsExperience}
-                      onChange={(event) => updateForm('yearsExperience', event.target.value)}
-                      error={errors.yearsExperience}
-                      disabled={submitting}
-                    />
-                    <AuthField
-                      id="coach-certifications"
-                      label="Certifications"
-                      icon={ShieldCheck}
-                      placeholder="e.g., NASM, USA Basketball"
-                      value={form.certifications}
-                      onChange={(event) => updateForm('certifications', event.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-
-                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50/60">
-                    <FileUp className="h-4 w-4 text-blue-700" />
-                    <input
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      className="hidden"
-                      onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
-                    />
-                    {uploadFile ? uploadFile.name : 'Optional upload: certification, license, resume, PDF, PNG, or JPG'}
-                  </label>
+                  <AuthField
+                    id="coach-resume-url"
+                    label="Resume / portfolio link (optional)"
+                    type="url"
+                    icon={LinkIcon}
+                    placeholder="https://…"
+                    value={form.resumeUrl}
+                    onChange={(event) => updateForm('resumeUrl', event.target.value)}
+                    error={errors.resumeUrl}
+                    disabled={submitting}
+                  />
 
                   <div className="space-y-2">
+                    <CheckboxRow
+                      checked={form.backgroundCheckConsent}
+                      onChange={(checked) => updateForm('backgroundCheckConsent', checked)}
+                      disabled={submitting}
+                    >
+                      <span className="inline-flex items-start gap-1.5">
+                        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+                        <span>
+                          I consent to a background check as part of the application process. <span className="text-red-600">*</span>
+                        </span>
+                      </span>
+                    </CheckboxRow>
+                    {errors.backgroundCheckConsent && <p className="text-xs font-semibold text-red-600">{errors.backgroundCheckConsent}</p>}
+
                     <CheckboxRow
                       checked={form.termsAccepted}
                       onChange={(checked) => updateForm('termsAccepted', checked)}
@@ -568,22 +590,13 @@ export default function ApplyPrivateTrainingCoach() {
                       <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
                         Privacy Policy
                       </Link>
-                      .
+                      . <span className="text-red-600">*</span>
                     </CheckboxRow>
                     {errors.termsAccepted && <p className="text-xs font-semibold text-red-600">{errors.termsAccepted}</p>}
-
-                    <CheckboxRow
-                      checked={form.verificationConsent}
-                      onChange={(checked) => updateForm('verificationConsent', checked)}
-                      disabled={submitting}
-                    >
-                      I consent to verification and background checks to help build trust on LevelCoach.
-                    </CheckboxRow>
-                    {errors.verificationConsent && <p className="text-xs font-semibold text-red-600">{errors.verificationConsent}</p>}
                   </div>
 
                   {formError && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">
                       {formError}
                     </p>
                   )}
@@ -593,19 +606,24 @@ export default function ApplyPrivateTrainingCoach() {
                     disabled={submitting}
                     className="flex h-10 w-full items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting
-                      ? 'Creating coach profile...'
-                      : usingExistingAccount
-                        ? 'Create Coach Profile'
-                        : 'Create Coach Account'}
+                    {submitting ? 'Submitting application...' : 'Submit Coach Application'}
                   </button>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">What happens next</p>
+                    <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-xs leading-5 text-slate-600">
+                      <li>Our team reviews your application.</li>
+                      <li>If approved, you get an approval email at this address.</li>
+                      <li>Sign in to complete coach onboarding: profile, legal packet, availability, and payouts.</li>
+                    </ol>
+                  </div>
                 </form>
 
                 {!usingExistingAccount && (
                   <>
                     <div className="my-3 flex items-center gap-4">
                       <span className="h-px flex-1 bg-slate-200" />
-                      <span className="text-xs font-medium text-slate-500">or sign up with</span>
+                      <span className="text-xs font-medium text-slate-500">or start with</span>
                       <span className="h-px flex-1 bg-slate-200" />
                     </div>
 
@@ -634,6 +652,53 @@ export default function ApplyPrivateTrainingCoach() {
       </main>
 
       <AuthFooter />
+    </div>
+  );
+}
+
+function StatusShell({ icon, tone, title, body, primary, children }) {
+  const tones = {
+    emerald: 'bg-emerald-50 text-emerald-600',
+    blue: 'bg-blue-50 text-blue-600',
+    slate: 'bg-slate-100 text-slate-600',
+  };
+  return (
+    <div className="min-h-screen bg-white font-sans text-slate-950">
+      <Navbar />
+      <main className="flex min-h-screen items-center justify-center px-4 py-24">
+        <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-950/10">
+          <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${tones[tone] || tones.blue}`}>
+            {icon}
+          </div>
+          <h1 className="mt-6 font-sans text-3xl font-extrabold tracking-normal text-slate-950 normal-case">{title}</h1>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">{body}</p>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            {primary?.to ? (
+              <Link
+                to={primary.to}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
+              >
+                {primary.label}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={primary?.onClick}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
+              >
+                {primary?.label}
+              </button>
+            )}
+            <Link
+              to="/"
+              className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Back to platform
+            </Link>
+          </div>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
@@ -669,6 +734,56 @@ function AuthField({
         />
         {trailing && <div className="absolute right-3 top-1/2 -translate-y-1/2">{trailing}</div>}
       </div>
+      {error && <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function SelectField({ id, label, icon: Icon, error, children, onChange, ...selectProps }) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-sm font-bold text-slate-950">
+        {label}
+      </label>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <select
+          id={id}
+          onChange={onChange}
+          className={`h-9 w-full appearance-none rounded-md border bg-white pl-10 pr-10 text-sm text-slate-950 transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${
+            error
+              ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
+              : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
+          }`}
+          aria-invalid={error ? 'true' : undefined}
+          {...selectProps}
+        >
+          {children}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+      </div>
+      {error && <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function TextAreaField({ id, label, required = false, error, onChange, ...textAreaProps }) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-sm font-bold text-slate-950">
+        {label}{required && <span aria-hidden="true" className="text-red-600"> *</span>}
+      </label>
+      <textarea
+        id={id}
+        onChange={onChange}
+        className={`w-full resize-none rounded-md border bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-slate-400 focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${
+          error
+            ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
+            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
+        }`}
+        aria-invalid={error ? 'true' : undefined}
+        {...textAreaProps}
+      />
       {error && <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>}
     </div>
   );
@@ -715,35 +830,6 @@ function AuthFooter() {
       </div>
     </footer>
   );
-}
-
-function buildSpecializations(form, sessionTypes) {
-  return [
-    form.sportsCoached.trim(),
-    form.trainingSpecialties.trim(),
-    ...sessionTypes,
-    form.certifications.trim(),
-    `${form.yearsExperience} years experience`,
-  ].filter(Boolean);
-}
-
-function buildCoachBio(form) {
-  return [
-    form.shortBio.trim(),
-    '',
-    `Display name: ${form.displayName.trim()}`,
-    `Sports coached: ${form.sportsCoached.trim()}`,
-    `Training specialties: ${form.trainingSpecialties.trim()}`,
-    `Years of experience: ${form.yearsExperience}`,
-    form.certifications.trim() ? `Certifications/licenses: ${form.certifications.trim()}` : '',
-  ].filter(Boolean).join('\n');
-}
-
-function inferCounty(serviceArea) {
-  const value = serviceArea.toLowerCase();
-  if (value.includes('macomb')) return 'Macomb';
-  if (value.includes('wayne') || value.includes('detroit')) return 'Wayne';
-  return 'Oakland';
 }
 
 function splitFirstName(name) {

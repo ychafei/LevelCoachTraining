@@ -20,14 +20,18 @@ const RAW_PLACES = [
   ['Metro Detroit, MI', 'region', 42.4650, -83.1000, ['detroit metro', 'southeast michigan']],
 ];
 
-export const METRO_DETROIT_PLACES = RAW_PLACES.map(([label, type, lat, lng, aliases]) => ({
-  label,
-  type,
-  lat,
-  lng,
-  aliases,
-  searchText: [label, type, ...(aliases || [])].join(' ').toLowerCase(),
-}));
+export const METRO_DETROIT_PLACES = RAW_PLACES.map((entry) => {
+  const [label, type, lat, lng, aliases] =
+    /** @type {[string, string, number, number, string[]]} */ (entry);
+  return {
+    label,
+    type,
+    lat,
+    lng,
+    aliases,
+    searchText: [label, type, ...(aliases || [])].join(' ').toLowerCase(),
+  };
+});
 
 function normalize(value) {
   return String(value || '')

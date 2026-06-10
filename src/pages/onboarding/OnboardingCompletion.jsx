@@ -5,26 +5,32 @@ import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import {
   CITY_OPTIONS,
-  RELATIONSHIP_OPTIONS,
-  SPORT_OPTIONS,
+  buildAthleteBio,
+  buildLocationLabel,
   citySuggestions,
   normalizePhoneForStorage,
-  normalizeSport,
+  parseAthleteBio,
   requiresGuardian,
   resolveCityPlace,
-  validateCity,
   validateDob,
-  validateEmail,
+  validateLocation,
   validatePersonName,
   validatePhone,
-  validateSport,
 } from '@/lib/athleteOnboardingFields';
+import {
+  AthleteSportFields,
+  GuardianContactFields,
+  HealthAndEmergencyFields,
+  validateAthleteDetails,
+  validateGuardianContact,
+} from '@/features/onboarding/AthleteFields';
+import EmailVerificationBanner from '@/features/onboarding/EmailVerificationBanner';
+import ParentAthletesStep from '@/features/onboarding/ParentAthletesStep';
+import GuardianLegalStep from '@/features/onboarding/GuardianLegalStep';
 import { homePathForRole } from '@/lib/roleHome';
-import { athleteProfileRepo } from '@/api/repo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 
 const ROLE_CARDS = [
   { id: 'athlete', title: 'Athlete', body: 'Book coaches, manage sessions, and track training.', icon: UserRound },
@@ -54,58 +60,9 @@ function normalizeRequestedRole(role) {
   return ROLE_IDS.has(role) ? role : '';
 }
 
-function onboardingErrors(form, role) {
-  const next = {};
-  if (role !== 'athlete' && role !== 'parent') return next;
-
-  const firstNameError = validatePersonName(form.first_name, 'First name');
-  const lastNameError = validatePersonName(form.last_name, 'Last name');
-  const phoneError = validatePhone(form.phone, 'Phone');
-
-  if (firstNameError) next.first_name = firstNameError;
-  if (lastNameError) next.last_name = lastNameError;
-  if (phoneError) next.phone = phoneError;
-
-  if (role === 'athlete') {
-    const dobError = validateDob(form.dob);
-    const sportError = validateSport(form.sport);
-    const cityError = validateCity(form.location);
-
-    if (dobError) next.dob = dobError;
-    if (sportError) next.sport = sportError;
-    if (cityError) next.location = cityError;
-
-    if (requiresGuardian(form.dob)) {
-      const parentFirstError = validatePersonName(form.parent_first_name, 'Parent/guardian first name');
-      const parentLastError = validatePersonName(form.parent_last_name, 'Parent/guardian last name');
-      const parentEmailError = validateEmail(form.parent_email, 'Parent/guardian email');
-      const parentPhoneError = validatePhone(form.parent_phone, 'Parent/guardian phone');
-      if (parentFirstError) next.parent_first_name = parentFirstError;
-      if (parentLastError) next.parent_last_name = parentLastError;
-      if (parentEmailError) next.parent_email = parentEmailError;
-      if (parentPhoneError) next.parent_phone = parentPhoneError;
-      if (!form.parent_relationship.trim()) next.parent_relationship = 'Relationship is required.';
-    }
-  }
-
-  return next;
-}
-
-function firstSport(profile) {
-  if (Array.isArray(profile?.sports) && profile.sports[0]) return profile.sports[0];
-  if (typeof profile?.sports === 'string') return profile.sports.split(',')[0]?.trim() || '';
-  return '';
-}
-
-async function upsertAthleteProfile(existingProfile, payload) {
-  if (existingProfile?.id) {
-    try {
-      return await athleteProfileRepo.update(existingProfile.id, payload);
-    } catch {
-      return athleteProfileRepo.create(payload);
-    }
-  }
-  return athleteProfileRepo.create(payload);
+function splitLocationLabel(label) {
+  const [city = '', detail = ''] = String(label || '').split('—').map((part) => part.trim());
+  return { city, detail };
 }
 
 export default function OnboardingCompletion() {
@@ -121,30 +78,8 @@ export default function OnboardingCompletion() {
   } = useAuth();
   const requestedRole = normalizeRequestedRole(params.get('role'));
   const [selectedRole, setSelectedRole] = useState(requestedRole || normalizeRequestedRole(user?.onboarding_role) || '');
-  const name = useMemo(() => splitName(user), [user]);
-  const [form, setForm] = useState({
-    first_name: name.first,
-    last_name: name.last,
-    phone: user?.phone || '',
-    dob: user?.dob || '',
-    sport: '',
-    location: '',
-    notes: '',
-    parent_first_name: user?.parent_first_name || '',
-    parent_last_name: user?.parent_last_name || '',
-    parent_email: user?.parent_email || '',
-    parent_phone: user?.parent_phone || '',
-    parent_relationship: user?.parent_relationship || '',
-  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [touched, setTouched] = useState({});
-  const [existingAthleteProfile, setExistingAthleteProfile] = useState(null);
-  const [loadingAthleteProfile, setLoadingAthleteProfile] = useState(false);
-
-  const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const markTouched = (key) => setTouched((current) => ({ ...current, [key]: true }));
 
   useEffect(() => {
     if (requestedRole && requestedRole !== selectedRole) setSelectedRole(requestedRole);
@@ -154,92 +89,15 @@ export default function OnboardingCompletion() {
     }
   }, [requestedRole, selectedRole, user?.onboarding_role]);
 
-  useEffect(() => {
-    if (!user) return;
-    const nextName = splitName(user);
-    setForm((current) => ({
-      ...current,
-      first_name: current.first_name || nextName.first,
-      last_name: current.last_name || nextName.last,
-      phone: current.phone || user.phone || '',
-      dob: current.dob || user.dob || '',
-      parent_first_name: current.parent_first_name || user.parent_first_name || '',
-      parent_last_name: current.parent_last_name || user.parent_last_name || '',
-      parent_email: current.parent_email || user.parent_email || '',
-      parent_phone: current.parent_phone || user.parent_phone || '',
-      parent_relationship: current.parent_relationship || user.parent_relationship || '',
-    }));
-  }, [user]);
-
-  useEffect(() => {
-    if (!user?.id || selectedRole !== 'athlete') return;
-    let cancelled = false;
-    setLoadingAthleteProfile(true);
-    athleteProfileRepo.filter({ profile_id: user.id })
-      .then((profiles) => {
-        if (cancelled) return;
-        const profile = profiles?.[0] || null;
-        setExistingAthleteProfile(profile);
-        if (!profile) return;
-        setForm((current) => ({
-          ...current,
-          first_name: current.first_name || profile.first_name || '',
-          last_name: current.last_name || profile.last_name || '',
-          dob: current.dob || profile.dob || '',
-          sport: current.sport || firstSport(profile),
-          location: current.location || profile.location_label || '',
-          notes: current.notes || profile.health_notes || '',
-        }));
-      })
-      .catch(() => {
-        if (!cancelled) setExistingAthleteProfile(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingAthleteProfile(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedRole, user?.id]);
-
-  const validationErrors = useMemo(
-    () => onboardingErrors(form, selectedRole),
-    [form, selectedRole],
-  );
-  const guardianRequired = selectedRole === 'athlete' && requiresGuardian(form.dob);
-  const locationSuggestions = useMemo(() => citySuggestions(form.location, 10), [form.location]);
   const selectedRoleCard = ROLE_CARDS.find((role) => role.id === selectedRole);
   const SelectedRoleIcon = selectedRoleCard?.icon || UserRound;
   const roleLocked = Boolean(selectedRole && (requestedRole || normalizeRequestedRole(user?.onboarding_role)));
   const fromCreateAccount = params.get('from') === 'create-account';
-  const reviewingSavedAthleteInfo = selectedRole === 'athlete'
-    && (fromCreateAccount || !!existingAthleteProfile);
-  const heading = reviewingSavedAthleteInfo ? 'Review your LevelCoach athlete account' : 'Finish your LevelCoach account';
-  const introCopy = reviewingSavedAthleteInfo
-    ? 'We carried over the details from account creation. Review them, fix anything that looks off, then confirm setup before legal documents and protected booking unlock.'
-    : 'Choose the role for this account before entering any dashboard. This keeps OAuth and password signups on the right production path.';
-  const profileStepBody = selectedRole === 'coach_applicant'
-    ? 'Complete coach application'
-    : selectedRole === 'organization'
-      ? 'Complete organization form'
-      : reviewingSavedAthleteInfo
-        ? 'Review saved details'
-        : 'Required fields below';
-  const submitLabel = reviewingSavedAthleteInfo ? 'Confirm setup' : 'Complete setup';
-  const canSave = (selectedRole === 'athlete' || selectedRole === 'parent')
-    && !loadingAthleteProfile
-    && Object.keys(validationErrors).length === 0;
-  const fieldError = (key) => {
-    const value = String(form[key] || '').trim();
-    if (!validationErrors[key]) return '';
-    if (submitted || touched[key] || value) return validationErrors[key];
-    return '';
-  };
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-10 pt-24 text-slate-950">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" aria-label="Loading" />
       </div>
     );
   }
@@ -258,20 +116,19 @@ export default function OnboardingCompletion() {
     setError('');
   };
 
+  // Coach applicants and organizations resume their specialized flows.
+  // onboarding_role is in the accountProfile.update whitelist pre-completion.
   const continueSpecializedFlow = async () => {
     if (selectedRole !== 'coach_applicant' && selectedRole !== 'organization') return;
     setSaving(true);
     setError('');
     try {
-      if (selectedRole === 'coach_applicant') {
-        await auth.updateCurrentUser({ onboarding_role: 'coach_applicant', onboarding_status: 'incomplete' });
-        await refetchUser();
-        navigate('/apply/private-training-coach', { replace: true });
-        return;
+      // onboarding_role is whitelisted in accountProfile.update pre-completion only.
+      if (user?.onboarding_status !== 'complete' && user?.onboarding_role !== selectedRole) {
+        await auth.updateCurrentUser({ onboarding_role: selectedRole });
       }
-      await auth.updateCurrentUser({ onboarding_role: 'organization', onboarding_status: 'incomplete' });
       await refetchUser();
-      navigate('/create-organization', { replace: true });
+      navigate(selectedRole === 'coach_applicant' ? '/apply/private-training-coach' : '/create-organization', { replace: true });
     } catch (err) {
       setError(err?.message || 'Could not save your onboarding path.');
     } finally {
@@ -279,97 +136,29 @@ export default function OnboardingCompletion() {
     }
   };
 
-  const finish = async (event) => {
-    event.preventDefault();
-    setSubmitted(true);
-    if (!canSave) {
-      setError('Fix the highlighted fields before completing setup.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      const primarySport = normalizeSport(form.sport);
-      const cityPlace = selectedRole === 'athlete' ? resolveCityPlace(form.location) : null;
-      const minor = selectedRole === 'athlete' && requiresGuardian(form.dob);
-      const patch = {
-        role: 'user',
-        onboarding_role: selectedRole,
-        onboarding_status: 'complete',
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        phone: normalizePhoneForStorage(form.phone),
-        dob: form.dob || undefined,
-        is_minor: minor,
-        parent_first_name: minor ? form.parent_first_name.trim() : '',
-        parent_last_name: minor ? form.parent_last_name.trim() : '',
-        parent_email: minor ? form.parent_email.trim() : '',
-        parent_phone: minor ? normalizePhoneForStorage(form.parent_phone) : '',
-        parent_relationship: minor ? form.parent_relationship.trim() : '',
-        profile_setup_complete: true,
-        bio: selectedRole === 'athlete'
-          ? [`Primary sport: ${primarySport}`, `Preferred city: ${cityPlace?.label || ''}`, form.notes.trim()].filter(Boolean).join('\n')
-          : form.notes.trim(),
-      };
-      await auth.updateCurrentUser(patch);
-      if (selectedRole === 'athlete') {
-        const athleteProfilePayload = {
-          profile_id: user.id,
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          dob: form.dob,
-          sports: [primarySport],
-          skill_level: '',
-          location_label: cityPlace?.label || '',
-          location_lat: cityPlace?.lat,
-          location_lng: cityPlace?.lng,
-          health_notes: form.notes.trim(),
-        };
-        const savedAthleteProfile = await upsertAthleteProfile(existingAthleteProfile, athleteProfilePayload);
-        setExistingAthleteProfile(savedAthleteProfile);
-      }
-      const fresh = await refetchUser();
-      navigate(safeNext(params.get('next')) || homePathForRole(fresh), { replace: true });
-    } catch (err) {
-      setError(err?.message || 'Could not complete onboarding.');
-    } finally {
-      setSaving(false);
-    }
+  const finishNavigate = async () => {
+    const fresh = await refetchUser();
+    navigate(safeNext(params.get('next')) || homePathForRole(fresh), { replace: true });
   };
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 pt-24 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
+        <EmailVerificationBanner user={user} className="mb-5" />
+
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">
             <ShieldCheck className="h-4 w-4" />
             Required Setup
           </div>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-normal sm:text-4xl">{heading}</h1>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-normal sm:text-4xl">
+            {fromCreateAccount ? 'Finish setting up your account' : 'Finish your LevelCoach account'}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            {introCopy}
+            {fromCreateAccount
+              ? 'A few more steps and your account is ready. Review what we saved, complete the remaining steps, and confirm.'
+              : 'Choose the role for this account before entering any dashboard. This keeps OAuth and password signups on the right production path.'}
           </p>
-        </div>
-
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <SetupStepCard
-            icon={Users}
-            title="Role"
-            body={selectedRole ? selectedRoleCard?.title : 'Choose account role'}
-            complete={!!selectedRole}
-          />
-          <SetupStepCard
-            icon={UserRound}
-            title="Profile"
-            body={profileStepBody}
-            complete={false}
-          />
-          <SetupStepCard
-            icon={FileText}
-            title="Legal Packet"
-            body="Required documents are shown after role setup"
-            complete={false}
-          />
         </div>
 
         {roleLocked ? (
@@ -409,8 +198,8 @@ export default function OnboardingCompletion() {
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   {selectedRole === 'coach_applicant'
-                    ? 'Your coach role is not active until the application, legal packet, compliance checklist, and Stripe payout setup are complete or approved.'
-                    : 'Your organization workspace is not publishable until the organization form, legal packet, admin scope, and Stripe payout setup are complete.'}
+                    ? 'Your coach role is not active until the application is reviewed and approved, then the legal packet, profile, and Stripe payout setup are complete.'
+                    : 'Your organization workspace is not publishable until the organization form, legal packet, and Stripe payout setup are complete.'}
                 </p>
               </div>
               <Button onClick={continueSpecializedFlow} disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
@@ -418,50 +207,386 @@ export default function OnboardingCompletion() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
-            {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
+            {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{error}</p>}
           </div>
         )}
 
-        {(selectedRole === 'athlete' || selectedRole === 'parent') && (
-          <form onSubmit={finish} className="mt-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <datalist id="levelcoach-primary-sports">
-              {SPORT_OPTIONS.map((sport) => <option key={sport} value={sport} />)}
-            </datalist>
-            <datalist id="levelcoach-city-options">
-              {(form.location.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
-                <option key={place.label} value={place.label} />
-              ))}
-            </datalist>
-            <datalist id="levelcoach-guardian-relationships">
-              {RELATIONSHIP_OPTIONS.map((relationship) => <option key={relationship} value={relationship} />)}
-            </datalist>
-            {reviewingSavedAthleteInfo && (
-              <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Saved from account creation</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-700">
-                      Your details are already filled in. Edit any field below if something is wrong, then confirm setup.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById('first-name')?.focus()}
-                    className="border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50"
-                  >
-                    Edit details
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="grid gap-4 sm:grid-cols-2">
+        {selectedRole === 'athlete' && (
+          <AthleteOnboardingForm user={user} fromCreateAccount={fromCreateAccount} onFinished={finishNavigate} />
+        )}
+
+        {selectedRole === 'parent' && (
+          <ParentOnboardingSteps user={user} onFinished={finishNavigate} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Athlete flow — review/confirm details, then complete onboarding through the
+// accountProfile function (whitelist-only; is_minor recomputed server-side).
+// ---------------------------------------------------------------------------
+
+function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
+  const name = useMemo(() => splitName(user), [user]);
+  const parsedBio = useMemo(() => parseAthleteBio(user?.bio), [user?.bio]);
+  const savedLocation = useMemo(() => splitLocationLabel(user?.location_label), [user?.location_label]);
+
+  const [form, setForm] = useState({
+    first_name: name.first,
+    last_name: name.last,
+    phone: user?.phone || '',
+    dob: user?.dob ? String(user.dob).slice(0, 10) : '',
+    city: savedLocation.city,
+    locationDetail: savedLocation.detail,
+    trainingGoal: parsedBio.trainingGoal,
+  });
+  const [sportDetails, setSportDetails] = useState({
+    sportKey: parsedBio.sportKey,
+    position: parsedBio.position,
+    level: parsedBio.level,
+    availability: parsedBio.availability,
+  });
+  const [healthDetails, setHealthDetails] = useState({
+    healthNotes: parsedBio.healthNotes,
+    emergencyName: parsedBio.emergencyName,
+    emergencyPhone: parsedBio.emergencyPhone,
+    emergencyRelationship: parsedBio.emergencyRelationship,
+  });
+  const [guardian, setGuardian] = useState({
+    parentFirstName: user?.parent_first_name || '',
+    parentLastName: user?.parent_last_name || '',
+    parentEmail: user?.parent_email || '',
+    parentPhone: user?.parent_phone || '',
+    parentRelationship: user?.parent_relationship || '',
+  });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const guardianRequired = requiresGuardian(form.dob);
+  const locationSuggestions = useMemo(() => citySuggestions(form.city, 10), [form.city]);
+
+  const updateForm = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  const validate = () => {
+    const next = {};
+    const firstNameError = validatePersonName(form.first_name, 'First name');
+    const lastNameError = validatePersonName(form.last_name, 'Last name');
+    const phoneError = validatePhone(form.phone, 'Phone');
+    const dobError = validateDob(form.dob);
+    const cityError = validateLocation(form.city);
+    if (firstNameError) next.first_name = firstNameError;
+    if (lastNameError) next.last_name = lastNameError;
+    if (phoneError) next.phone = phoneError;
+    if (dobError) next.dob = dobError;
+    if (cityError) next.city = cityError;
+    Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
+    if (guardianRequired) Object.assign(next, validateGuardianContact(guardian));
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const finish = async (event) => {
+    event.preventDefault();
+    setFormError('');
+    if (!validate()) {
+      setFormError('Fix the highlighted fields before completing setup.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const cityPlace = resolveCityPlace(form.city);
+      // onboarding_role / onboarding_status are only writable pre-completion;
+      // skip them for profiles that already crossed that transition.
+      const alreadyComplete = user?.onboarding_status === 'complete';
+      await auth.updateCurrentUser({
+        onboarding_role: alreadyComplete ? undefined : 'athlete',
+        onboarding_status: alreadyComplete ? undefined : 'complete',
+        profile_setup_complete: true,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        phone: normalizePhoneForStorage(form.phone),
+        dob: form.dob,
+        parent_first_name: guardianRequired ? guardian.parentFirstName.trim() : '',
+        parent_last_name: guardianRequired ? guardian.parentLastName.trim() : '',
+        parent_email: guardianRequired ? guardian.parentEmail.trim() : '',
+        parent_phone: guardianRequired ? normalizePhoneForStorage(guardian.parentPhone) : '',
+        parent_relationship: guardianRequired ? guardian.parentRelationship.trim() : '',
+        location_label: buildLocationLabel(cityPlace?.label || form.city, form.locationDetail),
+        ...(cityPlace ? { location_lat: cityPlace.lat, location_lng: cityPlace.lng } : {}),
+        bio: buildAthleteBio({
+          ...sportDetails,
+          trainingGoal: form.trainingGoal,
+          ...healthDetails,
+        }),
+      });
+      await onFinished();
+    } catch (err) {
+      setFormError(err?.message || 'Could not complete onboarding.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={finish} className="mt-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm" noValidate>
+      <datalist id="levelcoach-city-options">
+        {(form.city.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
+          <option key={place.label} value={place.label} />
+        ))}
+      </datalist>
+
+      {fromCreateAccount && (
+        <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Saved from account creation</p>
+          <p className="mt-1 text-sm leading-6 text-slate-700">
+            Your details are already filled in. Edit anything that looks off, then confirm setup.
+          </p>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="First name"
+          value={form.first_name}
+          onChange={(value) => updateForm('first_name', value)}
+          error={errors.first_name}
+          autoComplete="given-name"
+          required
+        />
+        <Field
+          label="Last name"
+          value={form.last_name}
+          onChange={(value) => updateForm('last_name', value)}
+          error={errors.last_name}
+          autoComplete="family-name"
+          required
+        />
+        <Field
+          label="Phone"
+          type="tel"
+          value={form.phone}
+          onChange={(value) => updateForm('phone', value)}
+          error={errors.phone}
+          autoComplete="tel"
+          placeholder="(248) 555-0123"
+          required
+        />
+        <Field
+          label="Date of birth"
+          type="date"
+          value={form.dob}
+          onChange={(value) => updateForm('dob', value)}
+          error={errors.dob}
+          required
+        />
+        <Field
+          label="Training city / state"
+          value={form.city}
+          onChange={(value) => updateForm('city', value)}
+          onBlur={() => {
+            const city = resolveCityPlace(form.city);
+            if (city) updateForm('city', city.label);
+          }}
+          error={errors.city}
+          list="levelcoach-city-options"
+          placeholder="e.g., Troy, MI"
+          required
+        />
+        <Field
+          label="Location details (optional)"
+          value={form.locationDetail}
+          onChange={(value) => updateForm('locationDetail', value)}
+          placeholder="Neighborhood, facility, travel range…"
+        />
+      </div>
+
+      <div className="mt-5">
+        <AthleteSportFields
+          value={sportDetails}
+          onChange={(next) => {
+            setSportDetails(next);
+            setErrors((current) => ({ ...current, sportKey: undefined, position: undefined, level: undefined, availability: undefined }));
+          }}
+          errors={errors}
+          disabled={saving}
+          idPrefix="onboarding-athlete"
+        />
+      </div>
+
+      <div className="mt-5">
+        <Field
+          label="Training goal (optional)"
+          value={form.trainingGoal}
+          onChange={(value) => updateForm('trainingGoal', value)}
+          placeholder="e.g., make varsity, improve first touch, get faster"
+        />
+      </div>
+
+      <div className="mt-5">
+        <HealthAndEmergencyFields
+          value={healthDetails}
+          onChange={(next) => {
+            setHealthDetails(next);
+            setErrors((current) => ({ ...current, healthNotes: undefined, emergencyName: undefined, emergencyPhone: undefined, emergencyRelationship: undefined }));
+          }}
+          errors={errors}
+          disabled={saving}
+          idPrefix="onboarding-athlete"
+        />
+      </div>
+
+      {guardianRequired && (
+        <div className="mt-5">
+          <GuardianContactFields
+            value={guardian}
+            onChange={(next) => {
+              setGuardian(next);
+              setErrors((current) => ({ ...current, parentFirstName: undefined, parentLastName: undefined, parentEmail: undefined, parentPhone: undefined, parentRelationship: undefined }));
+            }}
+            errors={errors}
+            disabled={saving}
+            idPrefix="onboarding-guardian"
+          />
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          {guardianRequired
+            ? 'Because you are under 18, your parent or guardian signs your legal packet and manages bookings and payments from their parent account.'
+            : 'After setup, the required legal packet appears before protected booking and portal actions.'}
+        </p>
+        <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+          {saving ? 'Saving...' : fromCreateAccount ? 'Confirm setup' : 'Complete setup'}
+        </Button>
+      </div>
+      {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Parent flow — identity, add athletes (family function), guardian legal
+// packet per child, then completion via accountProfile.
+// ---------------------------------------------------------------------------
+
+const PARENT_STEPS = [
+  { id: 'details', label: 'Your details', icon: UserRound },
+  { id: 'athletes', label: 'Your athletes', icon: Users },
+  { id: 'legal', label: 'Legal packet', icon: FileText },
+];
+
+function ParentOnboardingSteps({ user, onFinished }) {
+  const name = useMemo(() => splitName(user), [user]);
+  const detailsAlreadySaved = user?.onboarding_role === 'parent' && !!user?.first_name && !!user?.phone;
+  const [stage, setStage] = useState(detailsAlreadySaved ? 'athletes' : 'details');
+  const [form, setForm] = useState({
+    first_name: name.first,
+    last_name: name.last,
+    phone: user?.phone || '',
+  });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [athletes, setAthletes] = useState([]);
+  const [legalComplete, setLegalComplete] = useState(false);
+
+  const stageIndex = PARENT_STEPS.findIndex((step) => step.id === stage);
+
+  const updateForm = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  const saveDetails = async (event) => {
+    event.preventDefault();
+    setFormError('');
+    const next = {};
+    const firstNameError = validatePersonName(form.first_name, 'First name');
+    const lastNameError = validatePersonName(form.last_name, 'Last name');
+    const phoneError = validatePhone(form.phone, 'Phone');
+    if (firstNameError) next.first_name = firstNameError;
+    if (lastNameError) next.last_name = lastNameError;
+    if (phoneError) next.phone = phoneError;
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
+    setSaving(true);
+    try {
+      await auth.updateCurrentUser({
+        onboarding_role: 'parent',
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        phone: normalizePhoneForStorage(form.phone),
+        terms_accepted: true,
+      });
+      setStage('athletes');
+    } catch (err) {
+      setFormError(err?.message || 'Could not save your details.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const completeOnboarding = async () => {
+    setSaving(true);
+    setFormError('');
+    try {
+      await auth.updateCurrentUser({
+        onboarding_status: user?.onboarding_status === 'complete' ? undefined : 'complete',
+        profile_setup_complete: true,
+      });
+      await onFinished();
+    } catch (err) {
+      setFormError(err?.message || 'Could not complete onboarding.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-5">
+      <ol className="grid grid-cols-3 gap-2" aria-label="Parent setup steps">
+        {PARENT_STEPS.map((step, index) => {
+          const Icon = step.icon;
+          const state = index < stageIndex ? 'done' : index === stageIndex ? 'current' : 'todo';
+          return (
+            <li
+              key={step.id}
+              aria-current={state === 'current' ? 'step' : undefined}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold ${
+                state === 'current'
+                  ? 'border-blue-300 bg-blue-50 text-blue-800'
+                  : state === 'done'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-white text-slate-500'
+              }`}
+            >
+              {state === 'done' ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+              <span className="truncate">{index + 1}. {step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        {stage === 'details' && (
+          <form onSubmit={saveDetails} noValidate>
+            <h2 className="text-lg font-extrabold text-slate-950">Your details</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              This is the account that manages bookings, payments, and legal documents for your athletes.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field
                 label="First name"
                 value={form.first_name}
                 onChange={(value) => updateForm('first_name', value)}
-                onBlur={() => markTouched('first_name')}
-                error={fieldError('first_name')}
+                error={errors.first_name}
                 autoComplete="given-name"
                 required
               />
@@ -469,8 +594,7 @@ export default function OnboardingCompletion() {
                 label="Last name"
                 value={form.last_name}
                 onChange={(value) => updateForm('last_name', value)}
-                onBlur={() => markTouched('last_name')}
-                error={fieldError('last_name')}
+                error={errors.last_name}
                 autoComplete="family-name"
                 required
               />
@@ -479,141 +603,82 @@ export default function OnboardingCompletion() {
                 type="tel"
                 value={form.phone}
                 onChange={(value) => updateForm('phone', value)}
-                onBlur={() => markTouched('phone')}
-                error={fieldError('phone')}
+                error={errors.phone}
                 autoComplete="tel"
                 placeholder="(248) 555-0123"
                 required
               />
-              {selectedRole === 'athlete' && (
-                <Field
-                  label="Date of birth"
-                  type="date"
-                  value={form.dob}
-                  onChange={(value) => updateForm('dob', value)}
-                  onBlur={() => markTouched('dob')}
-                  error={fieldError('dob')}
-                  required
-                />
-              )}
-              {selectedRole === 'athlete' && (
-                <>
-                  <Field
-                    label="Primary sport"
-                    value={form.sport}
-                    onChange={(value) => updateForm('sport', value)}
-                    onBlur={() => {
-                      const sport = normalizeSport(form.sport);
-                      if (sport) updateForm('sport', sport);
-                      markTouched('sport');
-                    }}
-                    error={fieldError('sport')}
-                    list="levelcoach-primary-sports"
-                    placeholder="Select a sport"
-                    required
-                  />
-                  <Field
-                    label="Preferred training location"
-                    value={form.location}
-                    onChange={(value) => updateForm('location', value)}
-                    onBlur={() => {
-                      const city = resolveCityPlace(form.location);
-                      if (city) updateForm('location', city.label);
-                      markTouched('location');
-                    }}
-                    error={fieldError('location')}
-                    list="levelcoach-city-options"
-                    placeholder="Select a city"
-                    required
-                  />
-                </>
-              )}
             </div>
-            {guardianRequired && (
-              <section className="mt-5 rounded-lg border border-blue-100 bg-blue-50/70 p-4">
-                <div className="mb-4 flex items-start gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-white text-blue-700 shadow-sm">
-                    <ShieldCheck className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-base font-extrabold text-slate-950">Parent / Guardian information</h2>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">
-                      Required because this athlete is under 18. This contact is stored on the profile for legal packet routing and coach safety context.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="Parent/guardian first name"
-                    value={form.parent_first_name}
-                    onChange={(value) => updateForm('parent_first_name', value)}
-                    onBlur={() => markTouched('parent_first_name')}
-                    error={fieldError('parent_first_name')}
-                    autoComplete="given-name"
-                    required
-                  />
-                  <Field
-                    label="Parent/guardian last name"
-                    value={form.parent_last_name}
-                    onChange={(value) => updateForm('parent_last_name', value)}
-                    onBlur={() => markTouched('parent_last_name')}
-                    error={fieldError('parent_last_name')}
-                    autoComplete="family-name"
-                    required
-                  />
-                  <Field
-                    label="Parent/guardian email"
-                    type="email"
-                    value={form.parent_email}
-                    onChange={(value) => updateForm('parent_email', value)}
-                    onBlur={() => markTouched('parent_email')}
-                    error={fieldError('parent_email')}
-                    autoComplete="email"
-                    placeholder="parent@example.com"
-                    required
-                  />
-                  <Field
-                    label="Parent/guardian phone"
-                    type="tel"
-                    value={form.parent_phone}
-                    onChange={(value) => updateForm('parent_phone', value)}
-                    onBlur={() => markTouched('parent_phone')}
-                    error={fieldError('parent_phone')}
-                    autoComplete="tel"
-                    placeholder="(248) 555-0123"
-                    required
-                  />
-                  <Field
-                    label="Relationship"
-                    value={form.parent_relationship}
-                    onChange={(value) => updateForm('parent_relationship', value)}
-                    onBlur={() => markTouched('parent_relationship')}
-                    error={fieldError('parent_relationship')}
-                    list="levelcoach-guardian-relationships"
-                    placeholder="Parent, guardian, family member"
-                    required
-                  />
-                </div>
-              </section>
-            )}
-            <div className="mt-4">
-              <Label className="text-sm font-bold text-slate-900">Notes</Label>
-              <Textarea
-                value={form.notes}
-                onChange={(event) => updateForm('notes', event.target.value)}
-                className="mt-1 border-slate-300 bg-white text-slate-950"
-                rows={3}
-                placeholder={selectedRole === 'athlete' ? 'Anything coaches should know?' : 'Optional household or support notes'}
-              />
-            </div>
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-slate-500">After setup, the required legal packet appears before protected booking and portal actions.</p>
-              <Button type="submit" disabled={!canSave || saving} className="bg-blue-600 text-white hover:bg-blue-700">
-                {saving ? 'Saving...' : submitLabel}
+            <div className="mt-5 flex justify-end">
+              <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+                {saving ? 'Saving...' : 'Continue to athletes'}
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
-            {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
+            {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}
           </form>
+        )}
+
+        {stage === 'athletes' && (
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-950">Add your athletes</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Each athlete gets their own profile linked to your guardian account. Booking, payment,
+              and messaging permissions default to parent-managed — adjust them anytime.
+            </p>
+            <div className="mt-4">
+              <ParentAthletesStep onFamilyChange={setAthletes} />
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <Button type="button" variant="outline" onClick={() => setStage('details')} disabled={saving}>
+                Back
+              </Button>
+              <div className="flex items-center gap-3">
+                {athletes.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={completeOnboarding}
+                    disabled={saving}
+                    className="text-xs font-semibold text-slate-500 underline-offset-4 hover:underline disabled:opacity-60"
+                  >
+                    Skip for now and finish
+                  </button>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => setStage('legal')}
+                  disabled={saving || athletes.length === 0}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Continue to legal packet
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}
+          </div>
+        )}
+
+        {stage === 'legal' && (
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-950">Guardian legal packet</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Sign the required documents for each athlete. Booking stays locked for an athlete until
+              their packet is signed — you can also finish now and sign later from your parent portal.
+            </p>
+            <div className="mt-4">
+              <GuardianLegalStep athletes={athletes} onAllComplete={setLegalComplete} />
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <Button type="button" variant="outline" onClick={() => setStage('athletes')} disabled={saving}>
+                Back
+              </Button>
+              <Button type="button" onClick={completeOnboarding} disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+                {saving ? 'Finishing...' : legalComplete ? 'Finish setup' : 'Finish setup (sign later)'}
+              </Button>
+            </div>
+            {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}
+          </div>
         )}
       </div>
     </div>
@@ -634,19 +699,6 @@ function RoleCard({ role, selected, onChoose }) {
       <h2 className="mt-3 text-base font-bold">{role.title}</h2>
       <p className="mt-1 text-xs leading-5 text-slate-600">{role.body}</p>
     </button>
-  );
-}
-
-function SetupStepCard({ icon: Icon, title, body, complete }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <Icon className="h-5 w-5 text-blue-600" />
-        {complete && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-      </div>
-      <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-950">{body}</p>
-    </div>
   );
 }
 

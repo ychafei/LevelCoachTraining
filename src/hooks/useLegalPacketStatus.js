@@ -22,7 +22,7 @@ export function useLegalPacketStatus(options) {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const next = await getLegalPacketStatus({ user, signerRole, athleteId, coachId, organizationId });
-      setState({ ...next, loading: false, error: '' });
+      setState({ hasTemplates: false, ...next, loading: false, error: '' });
       return next;
     } catch (err) {
       setState((current) => ({

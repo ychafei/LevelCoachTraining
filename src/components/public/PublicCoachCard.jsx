@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   BadgeCheck,
+  Building2,
   CalendarDays,
   Clock,
   MapPin,
@@ -11,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { coachBookHref, publicCoachDisplay } from '@/lib/publicCoach';
 
+// No presence dot: we have no real online/offline signal, so we don't fake one.
 export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const model = publicCoachDisplay(coach);
   const sizeClass = {
@@ -19,7 +21,6 @@ export function CoachAvatar({ coach, size = 'lg', className = '' }) {
     lg: 'h-14 w-14 text-base',
     xl: 'h-20 w-20 text-xl',
   }[size] || 'h-14 w-14 text-base';
-  const dotClass = size === 'xl' ? 'h-4 w-4 border-[3px]' : 'h-3.5 w-3.5 border-[2.5px]';
 
   return (
     <div className={`relative shrink-0 self-start overflow-visible rounded-full ${sizeClass} ${className}`}>
@@ -34,7 +35,6 @@ export function CoachAvatar({ coach, size = 'lg', className = '' }) {
           {model.initials}
         </div>
       )}
-      <span className={`absolute bottom-0 right-0 rounded-full border-white bg-emerald-500 ${dotClass}`} />
     </div>
   );
 }
@@ -55,9 +55,15 @@ export default function PublicCoachCard({
   bookingParams = {},
 }) {
   const model = publicCoachDisplay(coach, { packages });
-  const visibleSpecs = model.specializations.length
-    ? model.specializations.slice(0, compact ? 2 : 4)
+  // Sports chips (humanized sport keys) followed by specialties; deduped.
+  const sportChips = model.sports.map((sport) => String(sport).replace(/_/g, ' '));
+  const allChips = [...sportChips, ...model.specializations].filter(
+    (chip, index, arr) => arr.findIndex((c) => c.toLowerCase() === chip.toLowerCase()) === index,
+  );
+  const visibleSpecs = allChips.length
+    ? allChips.slice(0, compact ? 2 : 4)
     : [model.primarySport].filter(Boolean);
+  const hasOrg = !!model.organization?.name;
   const profileHref = hrefWithParams(model.profileHref, bookingParams);
   const bookHref = coachBookHref(model.raw, { intro: '1', ...bookingParams });
   const displayDistance = distanceMiles === null || distanceMiles === undefined ? null : Number(distanceMiles);
@@ -88,7 +94,16 @@ export default function PublicCoachCard({
               )}
             </div>
 
-            <p className="mt-0.5 text-sm font-semibold text-slate-700">{model.organizationName}</p>
+            {hasOrg ? (
+              <p className="mt-1">
+                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-700 ring-1 ring-violet-100">
+                  <Building2 className="h-3 w-3" aria-hidden="true" />
+                  {model.organization.name}
+                </span>
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm font-semibold text-slate-700">{model.organizationName}</p>
+            )}
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 text-blue-700">
@@ -130,7 +145,7 @@ export default function PublicCoachCard({
               {visibleSpecs.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-100"
+                  className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold capitalize text-blue-700 ring-1 ring-blue-100"
                 >
                   {tag}
                 </span>

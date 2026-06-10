@@ -450,9 +450,9 @@ async function sessionAuthority(db, users, accountId, profile, session) {
 async function restoreCredit(db, creditId, error) {
   if (!creditId) return;
   try {
-    const credit = await db.getDocument(DB_ID, 'session_credits', creditId);
-    const used = Math.max(0, (Number(credit.used_credits) || 0) - 1);
-    await db.updateDocument(DB_ID, 'session_credits', creditId, { used_credits: used });
+    // Atomic bounded decrement: floor at 0 so concurrent restores can never
+    // free more credits than were consumed.
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', 1, 0);
   } catch (err) {
     error?.(`Credit restore failed: ${err?.message || err}`);
   }
@@ -542,6 +542,9 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     ? credit.client_profile_id === profile.$id
     : String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase();
   if (!ownsCredit) return res.json({ error: 'This credit does not belong to you.' }, 403);
+  if (credit.coach_id && credit.coach_id !== coach.$id) {
+    return res.json({ error: 'This credit was purchased for a different coach.' }, 400);
+  }
   const total = Number(credit.total_credits) || 0;
   const used = Number(credit.used_credits) || 0;
   if (total - used <= 0) return res.json({ error: 'No remaining credits on this package.' }, 409);
@@ -550,8 +553,14 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     return res.json({ error: `This credit is for ${creditDuration}-minute sessions.` }, 400);
   }
 
-  // Decrement the credit before creating the session, then verify after.
-  await db.updateDocument(DB_ID, 'session_credits', creditId, { used_credits: used + 1 });
+  // Consume the credit atomically before creating the session. The bounded
+  // increment (max = total_credits) makes concurrent double-spend impossible:
+  // the loser's increment fails instead of overwriting the winner's.
+  try {
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', 1, total);
+  } catch {
+    return res.json({ error: 'No remaining credits on this package.' }, 409);
+  }
 
   const guardianAccounts = await guardianAccountsForAthlete(db, athlete?.$id);
   let athleteAccount = '';
@@ -588,16 +597,6 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   } catch (err) {
     await restoreCredit(db, creditId, error);
     throw err;
-  }
-
-  // Oversubscription guard: re-read the credit after creating the session.
-  const recheck = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
-  if (recheck && (Number(recheck.used_credits) || 0) > (Number(recheck.total_credits) || 0)) {
-    await db.deleteDocument(DB_ID, 'sessions', session.$id).catch(() => {});
-    await db.updateDocument(DB_ID, 'session_credits', creditId, {
-      used_credits: Math.max(0, (Number(recheck.used_credits) || 0) - 1),
-    }).catch(() => {});
-    return res.json({ error: 'That credit was just used by another booking.' }, 409);
   }
 
   const when = formatStart(slot.startUtcIso, slot.timezone);

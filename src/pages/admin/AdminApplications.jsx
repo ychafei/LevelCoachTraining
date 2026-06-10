@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { coachApplicationRepo } from '@/api/repo';
+import { callFn } from '@/lib/rpc';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
-import { logAdminAction } from '@/lib/audit';
 
 const statusColor = {
   pending: 'bg-accent/10 text-accent border-accent/20',
@@ -31,34 +35,91 @@ const typeLabel = {
   general: 'General',
 };
 
+// Approve/reject through the applications function — approval creates the
+// coach record, assigns the coach label, and emails the applicant server-side.
+function DecisionDialog({ app, decision, onClose, onDone }) {
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const approving = decision === 'approve';
+
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const result = await callFn('applications', {
+        action: 'review',
+        application_id: app.id,
+        decision,
+        notes: notes.trim(),
+      });
+      toast.success(approving
+        ? 'Application approved — coach record created'
+        : 'Application rejected');
+      onDone(result?.status || (approving ? 'accepted' : 'rejected'));
+    } catch (err) {
+      toast.error(err?.message || 'Could not review this application.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="font-display tracking-wider">
+            {approving ? 'APPROVE APPLICATION' : 'REJECT APPLICATION'}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {`${app.first_name || ''} ${app.last_name || ''}`.trim() || app.email} · {app.email}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {approving
+            ? 'Approval creates an unpublished coach record, links a verified account when one exists, and emails the applicant.'
+            : 'The applicant receives a rejection email. This decision is final for this application.'}
+        </p>
+        <div>
+          <Label htmlFor="review-notes" className="font-display tracking-wider uppercase text-xs">Review notes (internal)</Label>
+          <Textarea
+            id="review-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            maxLength={1000}
+            placeholder="Optional — stored on the audit log entry."
+            className="mt-1 bg-secondary border-border"
+          />
+        </div>
+        <Button
+          onClick={submit}
+          disabled={saving}
+          className={`mt-2 w-full font-display tracking-wider uppercase ${
+            approving
+              ? 'bg-accent text-accent-foreground hover:bg-accent/90'
+              : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+          }`}
+        >
+          {saving ? 'Submitting...' : approving ? 'Approve & create coach' : 'Reject application'}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminApplications() {
-  const { user, isAdmin } = useCurrentUser();
+  const { isAdmin } = useCurrentUser();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
+  const [decisionTarget, setDecisionTarget] = useState(null);
 
   useEffect(() => {
-    coachApplicationRepo.list('-created_date').then(data => { setApps(data); setLoading(false); });
+    coachApplicationRepo.list('-created_date')
+      .then(data => { setApps(data); })
+      .catch((err) => toast.error(err?.message || 'Could not load applications.'))
+      .finally(() => setLoading(false));
   }, []);
-
-  const update = async (id, status) => {
-    const previous = apps.find(a => a.id === id);
-    await coachApplicationRepo.update(id, { status });
-    setApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-    await logAdminAction({
-      actor: user,
-      action: 'application.status_change',
-      entityType: 'CoachApplication',
-      entityId: id,
-      before: { status: previous?.status || 'pending' },
-      after: { status },
-      metadata: {
-        applicant_email: previous?.email,
-        applicant_name: `${previous?.first_name || ''} ${previous?.last_name || ''}`.trim(),
-      },
-    });
-    toast.success('Status updated');
-  };
 
   const visible = typeFilter === 'all'
     ? apps
@@ -119,7 +180,7 @@ export default function AdminApplications() {
             <a href={row.resume_url} target="_blank" rel="noreferrer" className="text-xs text-accent underline mt-1 inline-block">View Resume</a>
           )}
           <p className="text-[10px] text-muted-foreground mt-1">
-            BG Check: {row.background_check_consent ? '✓' : '✗'}
+            BG Check: {row.background_check_consent ? 'consented' : 'missing'}
           </p>
         </div>
       ),
@@ -135,20 +196,32 @@ export default function AdminApplications() {
     },
     {
       key: 'action',
-      header: 'Change',
-      cell: (row) => (
-        <Select value={row.status} onValueChange={v => update(row.id, v)}>
-          <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="reviewed">Reviewed</SelectItem>
-            <SelectItem value="accepted">Accepted</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
-      ),
+      header: 'Review',
+      cell: (row) => {
+        if (['accepted', 'rejected'].includes(row.status)) {
+          return <span className="text-xs text-muted-foreground">Decided</span>;
+        }
+        return (
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDecisionTarget({ app: row, decision: 'approve' })}
+              className="h-7 text-xs text-green-400 hover:text-green-400 hover:bg-green-500/10"
+            >
+              <CheckCircle2 className="w-3 h-3 mr-1" aria-hidden="true" /> Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDecisionTarget({ app: row, decision: 'reject' })}
+              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <XCircle className="w-3 h-3 mr-1" aria-hidden="true" /> Reject
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -159,7 +232,7 @@ export default function AdminApplications() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">APPLICATIONS</h1>
 
-        <div className="flex items-center gap-1 mb-6 border-b border-border overflow-x-auto">
+        <div className="flex items-center gap-1 mb-6 border-b border-border overflow-x-auto" role="tablist" aria-label="Filter by application type">
           {TYPE_TABS.map(t => {
             const count = t.value === 'all'
               ? apps.length
@@ -168,8 +241,11 @@ export default function AdminApplications() {
             return (
               <button
                 key={t.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
                 onClick={() => setTypeFilter(t.value)}
-                className={`px-4 py-2 text-xs font-display tracking-wider uppercase transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`px-4 py-2 text-xs font-display tracking-wider uppercase transition-colors border-b-2 -mb-px whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   active
                     ? 'border-accent text-accent'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -182,7 +258,11 @@ export default function AdminApplications() {
         </div>
 
         {loading ? (
-          <div className="text-center py-12"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>
+          <div className="space-y-3 py-6" aria-busy="true" aria-label="Loading applications">
+            <div className="h-12 animate-pulse rounded bg-secondary/50" />
+            <div className="h-12 animate-pulse rounded bg-secondary/50" />
+            <div className="h-12 w-2/3 animate-pulse rounded bg-secondary/50" />
+          </div>
         ) : (
           <DataTable
             columns={columns}
@@ -193,6 +273,18 @@ export default function AdminApplications() {
           />
         )}
       </div>
+
+      {decisionTarget && (
+        <DecisionDialog
+          app={decisionTarget.app}
+          decision={decisionTarget.decision}
+          onClose={() => setDecisionTarget(null)}
+          onDone={(status) => {
+            setApps(prev => prev.map(a => a.id === decisionTarget.app.id ? { ...a, status } : a));
+            setDecisionTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,105 +1,47 @@
-import { existsSync, readFileSync } from 'node:fs';
+// Phase 5 — role-specific onboarding & applications.
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const read = (path) => readFileSync(join(root, path), 'utf8');
-
-let failures = 0;
-
-function ok(message) {
-  console.log(`ok - ${message}`);
-}
-
-function fail(message) {
-  failures += 1;
-  console.error(`not ok - ${message}`);
-}
-
-function includes(path, snippets) {
+const failures = [];
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const check = (ok, msg) => { if (!ok) failures.push(msg); };
+const includes = (path, snippets) => {
   const content = read(path);
-  for (const snippet of snippets) {
-    if (content.includes(snippet)) ok(`${path} includes ${snippet}`);
-    else fail(`${path} is missing ${snippet}`);
-  }
-}
+  for (const s of snippets) check(content.includes(s), `${path} is missing: ${s}`);
+};
 
-function excludes(path, snippets) {
-  const content = read(path);
-  for (const snippet of snippets) {
-    if (!content.includes(snippet)) ok(`${path} excludes ${snippet}`);
-    else fail(`${path} still contains ${snippet}`);
-  }
-}
-
-const requiredFiles = [
-  'src/pages/onboarding/OnboardingCompletion.jsx',
+for (const file of [
+  'functions/applications/src/main.js',
+  'functions/family/src/main.js',
   'src/pages/CreateAccount.jsx',
-  'src/pages/Login.jsx',
-  'src/lib/roles.js',
-  'src/lib/roleHome.js',
-];
+  'src/pages/onboarding/OnboardingCompletion.jsx',
+  'src/pages/CreateOrganization.jsx',
+  'src/pages/apply/ApplyPrivateTrainingCoach.jsx',
+]) check(existsSync(join(root, file)), `Missing required Phase 5 file: ${file}`);
 
-for (const file of requiredFiles) {
-  if (existsSync(join(root, file))) ok(`${file} exists`);
-  else fail(`${file} is missing`);
-}
-
-includes('src/lib/roles.js', [
-  "user.profile_setup_complete === true ? 'athlete' : ''",
-  '&& !!profileRole(user)',
+// Coach applications: anonymous-capable, abuse-resistant, consent-gated.
+includes('functions/applications/src/main.js', [
+  'website',                   // honeypot
+  'background_check_consent',
 ]);
 
-includes('src/lib/roleHome.js', [
-  'onboardingPath',
-  'postAuthRedirectPath',
-  'isMasterAdminBootstrapAccount',
-  "return '/master-admin'",
-  "requestedNext?.startsWith('/onboarding')",
-]);
+// Parent onboarding creates structured children via the family function.
+includes('functions/family/src/main.js', ['addChild', 'guardian_athletes', 'authority_attested_at']);
+includes('src/features/onboarding/ParentAthletesStep.jsx', ["'family'", 'addChild']);
+includes('src/pages/CreateAccount.jsx', ['guardian']);
 
-includes('src/pages/Login.jsx', [
-  'postAuthRedirectPath',
-  'navigate(postAuthRedirectPath(fresh, safeNext)',
-]);
+// Role selection + completion flow via the server profile function.
+includes('src/pages/onboarding/OnboardingCompletion.jsx', ['onboarding_role']);
 
-includes('src/pages/CreateAccount.jsx', [
-  'ParentSignup',
-  "'/create-account/parent'",
-  "onboardingPath(getSafeNextPath(explicitNext) || '', 'athlete')",
-  "onboardingPath(getSafeNextPath(explicitNext) || '', 'parent')",
-  "onboarding_role: 'parent'",
-]);
+// Org creation is server-backed (no direct organizations writes).
+const org = read('src/pages/CreateOrganization.jsx');
+check(org.includes('orgAdmin') || org.includes("organizationRepo.create"), 'CreateOrganization must create orgs via the orgAdmin function path');
+check(!org.includes('createDocument('), 'CreateOrganization must not write collections directly');
 
-includes('src/App.jsx', [
-  'ParentSignup',
-  'RoleHomeRoute',
-  'path="/dashboard" element={<RoleHomeRoute />}',
-  'path="/create-account/parent"',
-]);
-
-includes('src/pages/onboarding/OnboardingCompletion.jsx', [
-  "params.get('role')",
-  'Resume setup',
-  'continueSpecializedFlow',
-  "'coach_applicant'",
-  "'organization'",
-  'required legal packet appears',
-]);
-excludes('src/pages/onboarding/OnboardingCompletion.jsx', [
-  'Legal packet completion will be enforced in Phase 2.',
-]);
-
-includes('src/pages/apply/ApplyPrivateTrainingCoach.jsx', [
-  "onboardingPath('/apply/private-training-coach', 'coach_applicant')",
-]);
-
-includes('src/pages/CreateOrganization.jsx', [
-  "onboardingPath('/create-organization', 'organization')",
-]);
-
-if (failures > 0) {
-  console.error(`Phase 5 verification failed with ${failures} issue(s).`);
+if (failures.length) {
+  console.error('Phase 5 verification failed:');
+  for (const f of failures) console.error(`- ${f}`);
   process.exit(1);
 }
-
 console.log('Phase 5 verification passed.');

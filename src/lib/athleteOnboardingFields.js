@@ -1,19 +1,38 @@
 import { findPlaceSuggestions, METRO_DETROIT_PLACES, resolvePlace } from '@/lib/metroDetroitPlaces';
+import { getSport, sportOptions } from '@/lib/sportsCatalog';
 
-export const SPORT_OPTIONS = [
-  'Soccer',
-  'Basketball',
-  'Football',
-  'Baseball',
-  'Volleyball',
-  'Tennis',
-  'Lacrosse',
-  'Hockey',
-  'Softball',
-  'Golf',
-  'Track',
-  'Strength',
-  'Speed',
+// Catalog-driven options (ARCHITECTURE.md §6). Values are sport_key strings;
+// labels are display names.
+export const SPORT_SELECT_OPTIONS = sportOptions();
+
+export function sportLabelForKey(key) {
+  return getSport(key)?.display_name || '';
+}
+
+export function sportKeyForLabel(label) {
+  const wanted = String(label || '').trim().toLowerCase();
+  if (!wanted) return '';
+  const match = SPORT_SELECT_OPTIONS.find(
+    (option) => option.label.toLowerCase() === wanted || option.value === wanted,
+  );
+  return match?.value || '';
+}
+
+export function positionsForSport(sportKey) {
+  return getSport(sportKey)?.positions || [];
+}
+
+export function levelsForSport(sportKey) {
+  return getSport(sportKey)?.levels || [];
+}
+
+export const AVAILABILITY_OPTIONS = [
+  'Weekday mornings',
+  'Weekday afternoons',
+  'Weekday evenings',
+  'Weekend mornings',
+  'Weekend afternoons',
+  'Weekend evenings',
 ];
 
 export const RELATIONSHIP_OPTIONS = [
@@ -104,14 +123,9 @@ export function requiresGuardian(dob) {
   return age !== null && age < 18;
 }
 
-export function normalizeSport(value) {
-  const wanted = normalizeForCompare(value);
-  return SPORT_OPTIONS.find((sport) => normalizeForCompare(sport) === wanted) || '';
-}
-
-export function validateSport(value) {
+export function validateSportKey(value) {
   if (!compact(value)) return 'Primary sport is required.';
-  if (!normalizeSport(value)) return 'Choose a sport from the approved list.';
+  if (!getSport(value)) return 'Choose a sport from the list.';
   return '';
 }
 
@@ -132,14 +146,109 @@ export function resolveCityPlace(value) {
   return resolved?.type === 'city' ? resolved : null;
 }
 
-export function validateCity(value, label = 'Preferred training location') {
+// Location is city/state plus optional free-text detail. Free text is allowed —
+// suggestions only add lat/lng when the city resolves to a known place.
+export function validateLocation(value, label = 'Training city or area') {
   if (!compact(value)) return `${label} is required.`;
-  if (!resolveCityPlace(value)) return `${label} must be a supported city.`;
   return '';
+}
+
+export function buildLocationLabel(city, detail = '') {
+  const cityText = compact(city);
+  const detailText = compact(detail);
+  return [cityText, detailText].filter(Boolean).join(' — ').slice(0, 500);
 }
 
 export function validateEmail(value, label = 'Email address') {
   if (!compact(value)) return `${label} is required.`;
   if (!EMAIL_RE.test(compact(value))) return `Enter a valid ${label.toLowerCase()}.`;
   return '';
+}
+
+// ---------------------------------------------------------------------------
+// Athlete training profile <-> profiles.bio
+//
+// profiles has no structured columns for sport/position/level/availability/
+// health/emergency-contact data, and athlete_profiles is server-only writable
+// (guardian-managed via the `family` function). For self-managed athletes the
+// accountProfile.update whitelist only exposes `bio`, so we store a labeled,
+// human-readable block (NOT JSON) that we can also parse back for editing.
+// The profile document is private (owner + admin read only).
+// ---------------------------------------------------------------------------
+
+const BIO_HEADER = '[Athlete training profile]';
+
+function singleLine(value, max = 2000) {
+  return compact(value).replace(/\s*\n+\s*/g, ' / ').slice(0, max);
+}
+
+export function buildAthleteBio({
+  sportKey = '',
+  position = '',
+  level = '',
+  availability = [],
+  trainingGoal = '',
+  healthNotes = '',
+  emergencyName = '',
+  emergencyPhone = '',
+  emergencyRelationship = '',
+} = {}) {
+  const sportName = sportLabelForKey(sportKey);
+  const emergency = [compact(emergencyName), compact(emergencyPhone), compact(emergencyRelationship)]
+    .filter(Boolean)
+    .join(' | ');
+  const lines = [
+    BIO_HEADER,
+    sportName ? `Sport: ${sportName} [${sportKey}]` : '',
+    compact(position) ? `Position: ${singleLine(position, 200)}` : '',
+    compact(level) ? `Level: ${singleLine(level, 200)}` : '',
+    availability.length > 0 ? `Availability: ${availability.map((slot) => singleLine(slot, 80)).join('; ')}` : '',
+    compact(trainingGoal) ? `Training goal: ${singleLine(trainingGoal)}` : '',
+    compact(healthNotes) ? `Health notes (private): ${singleLine(healthNotes, 4000)}` : '',
+    emergency ? `Emergency contact: ${emergency}` : '',
+  ].filter(Boolean);
+  return lines.join('\n').slice(0, 19000);
+}
+
+export function parseAthleteBio(bio) {
+  const result = {
+    sportKey: '',
+    position: '',
+    level: '',
+    availability: [],
+    trainingGoal: '',
+    healthNotes: '',
+    emergencyName: '',
+    emergencyPhone: '',
+    emergencyRelationship: '',
+  };
+  const text = String(bio || '');
+  if (!text) return result;
+
+  const line = (label) => {
+    const match = new RegExp(`^${label}:\\s*(.+)$`, 'mi').exec(text);
+    return match ? match[1].trim() : '';
+  };
+
+  const sportLine = line('Sport');
+  if (sportLine) {
+    const keyMatch = /\[([\w-]+)\]\s*$/.exec(sportLine);
+    result.sportKey = keyMatch ? keyMatch[1] : sportKeyForLabel(sportLine);
+  }
+  result.position = line('Position');
+  result.level = line('Level');
+  const availability = line('Availability');
+  if (availability) {
+    result.availability = availability.split(';').map((slot) => slot.trim()).filter(Boolean);
+  }
+  result.trainingGoal = line('Training goal');
+  result.healthNotes = line('Health notes \\(private\\)');
+  const emergency = line('Emergency contact');
+  if (emergency) {
+    const [name = '', phone = '', relationship = ''] = emergency.split('|').map((part) => part.trim());
+    result.emergencyName = name;
+    result.emergencyPhone = phone;
+    result.emergencyRelationship = relationship;
+  }
+  return result;
 }

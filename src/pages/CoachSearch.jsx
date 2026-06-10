@@ -1,101 +1,203 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
+  Building2,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  GraduationCap,
   MapPin,
+  RefreshCcw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Tag,
   Trophy,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PublicCoachCard from '@/components/public/PublicCoachCard';
-import { matchesCoachSearch, normalizePublicCoach } from '@/lib/publicCoach';
+import { normalizePublicCoach, publicCoachDisplay } from '@/lib/publicCoach';
 import {
   coachDistanceMiles,
+  coachServiceRadiusMiles,
   findPlaceSuggestions,
   placeFromParams,
   resolvePlace,
 } from '@/lib/metroDetroitPlaces';
-import { rpc } from '@/lib/rpc';
+import { callFn } from '@/lib/rpc';
 import { pricingPackageRepo } from '@/api/repo';
+import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
 
-const SPORTS = ['All sports', 'Soccer', 'Basketball', 'Football', 'Baseball', 'Volleyball', 'Strength', 'Speed'];
-const AVAILABILITY = ['Any time', 'This week', 'Evenings', 'Weekends'];
+const PAGE_SIZE = 12;
 const RADII = ['10', '15', '25', '50', '100'];
 const EXPANSION_RADII = [10, 15, 25, 50, 100];
+const AVAILABILITY_OPTIONS = ['Any time', 'Has set availability', 'Weekends', 'Evenings'];
+const AGE_GROUPS = ['Any age group', 'Youth', 'Middle School', 'High School', 'College', 'Adult'];
+const PRICE_BANDS = [
+  { value: 'any', label: 'Any price' },
+  { value: 'under_50', label: 'Under $50', min: 0, max: 4999 },
+  { value: '50_75', label: '$50 – $75', min: 5000, max: 7500 },
+  { value: '75_100', label: '$75 – $100', min: 7501, max: 10000 },
+  { value: 'over_100', label: '$100+', min: 10001, max: Infinity },
+];
+const SESSION_TYPES = [
+  { value: 'any', label: 'Any session type' },
+  { value: 'facility', label: 'Coach facility' },
+  { value: 'travels', label: 'Coach travels' },
+  { value: 'hybrid', label: 'Facility or travel' },
+  { value: 'online', label: 'Online training' },
+];
+const SORT_OPTIONS = [
+  { value: 'featured', label: 'Featured' },
+  { value: 'rating', label: 'Highest rated' },
+  { value: 'price_asc', label: 'Price: low to high' },
+  { value: 'price_desc', label: 'Price: high to low' },
+];
+const LEVELS = ['Any level', ...Array.from(new Set(SPORTS_CATALOG.flatMap((sport) => sport.levels)))];
 
-function valueFromParams(params, key, fallback) {
-  return params.get(key) || fallback;
+// Accepts a sport_key ("soccer") or a display name ("Soccer") so links from
+// the landing page, sitemap, and older bookmarks all resolve.
+function resolveSportFilter(value) {
+  const term = String(value || '').trim().toLowerCase();
+  if (!term || term === 'all' || term === 'all sports') return null;
+  return SPORTS_CATALOG.find(
+    (sport) => sport.sport_key === term || sport.display_name.toLowerCase() === term,
+  ) || { sport_key: term, display_name: String(value).trim() };
 }
 
-function radiusFromParams(params) {
-  const raw = Number(params.get('radius') || params.get('location_radius') || 15);
-  return Number.isFinite(raw) && raw > 0 ? String(raw) : '15';
-}
-
-function bookingParams(place, radius) {
-  if (!place) return {};
+function filtersFromParams(params) {
   return {
-    location_label: place.label,
-    location_lat: String(place.lat),
-    location_lng: String(place.lng),
-    location_radius: String(radius || 15),
+    sport: params.get('sport') || '',
+    location: params.get('location') || params.get('location_label') || '',
+    radius: (() => {
+      const raw = Number(params.get('radius') || params.get('location_radius') || 15);
+      return Number.isFinite(raw) && raw > 0 ? String(raw) : '15';
+    })(),
+    availability: params.get('availability') || 'Any time',
+    level: params.get('level') || 'Any level',
+    age: params.get('age') || 'Any age group',
+    org: params.get('org') || 'any',
+    price: params.get('price') || 'any',
+    specialty: params.get('specialty') || '',
+    type: params.get('type') || 'any',
+    sort: params.get('sort') || 'featured',
   };
 }
 
+function haystackFor(model) {
+  return [
+    model.displayName,
+    model.organizationName,
+    model.primarySport,
+    model.locationLabel,
+    model.countyLabel,
+    model.serviceCity,
+    model.serviceState,
+    model.serviceZip,
+    model.serviceVenue,
+    model.headline,
+    model.bio,
+    ...model.specializations,
+    ...model.ageGroups,
+    ...model.trainingFormats,
+    ...model.sports,
+    ...model.servedAreas,
+  ].join(' ').toLowerCase();
+}
+
+function minutesOf(value) {
+  const [h, m] = String(value || '').split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+}
+
+function enabledDays(availability = {}) {
+  return Object.keys(availability).filter((day) => availability[day]?.enabled);
+}
+
+function availabilityMatches(coach, option) {
+  if (!option || option === 'Any time') return true;
+  const availability = coach.availability || {};
+  const days = enabledDays(availability);
+  if (option === 'Has set availability') return days.length > 0;
+  if (option === 'Weekends') return days.includes('Saturday') || days.includes('Sunday');
+  if (option === 'Evenings') {
+    return days.some((day) => {
+      const slot = availability[day] || {};
+      const start = minutesOf(slot.start);
+      const end = minutesOf(slot.end);
+      return (start !== null && start >= 15 * 60) || (end !== null && end >= 18 * 60);
+    });
+  }
+  return true;
+}
+
+function locationMatches(coach, model, haystack, place, locationText, radius) {
+  if (place) {
+    const distance = coachDistanceMiles(coach, place);
+    if (distance !== null) {
+      const coachRadius = coachServiceRadiusMiles(coach) || 0;
+      const travels = coach.service_type === 'travels' || coach.service_type === 'hybrid';
+      const effective = travels ? Math.max(radius, coachRadius) : radius;
+      return distance <= effective;
+    }
+    // No coordinates on the coach — fall back to text matching.
+    const terms = [place.label, ...(place.aliases || [])].filter(Boolean);
+    return terms.some((term) => haystack.includes(String(term).toLowerCase().replace(/, mi$/i, '').trim()));
+  }
+  if (locationText) {
+    const loose = locationText.toLowerCase().replace(/\bmichigan\b/g, '').replace(/\bmi\b/g, '').replace(/[,\s]+/g, ' ').trim();
+    return !loose || haystack.includes(loose) || haystack.includes(locationText.toLowerCase());
+  }
+  return true;
+}
+
 export default function CoachSearch() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState({
-    sport: valueFromParams(searchParams, 'sport', 'All sports'),
-    location: valueFromParams(searchParams, 'location', valueFromParams(searchParams, 'location_label', '')),
-    radius: radiusFromParams(searchParams),
-    availability: valueFromParams(searchParams, 'availability', 'Any time'),
+  usePageMeta({
+    title: 'Find a Coach',
+    description: 'Search published coaches by sport, location, level, availability, organization, price, and specialty. Compare real profiles and reviews, then book training.',
   });
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
   const [selectedPlace, setSelectedPlace] = useState(() => placeFromParams(searchParams));
   const [coaches, setCoaches] = useState([]);
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const [coachResult, packageRows] = await Promise.all([
-          rpc.invoke('getPublicCoaches', {}).catch((err) => {
-            console.warn('Public coaches unavailable.', err);
-            return null;
-          }),
-          pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
-        ]);
-        if (cancelled) return;
-        const liveCoaches = (coachResult?.data?.coaches || coachResult?.coaches || []).map(normalizePublicCoach);
-        setCoaches(liveCoaches);
-        setPackages(packageRows);
-      } catch (err) {
-        console.error('CoachSearch load failed', err);
-        if (!cancelled) setError('Coach results could not load. Try again in a moment.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      // getPublicCoaches paginates server-side in batches of 100 (hard cap
+      // 1,000 published coaches per response).
+      const [coachResult, packageRows] = await Promise.all([
+        callFn('getPublicCoaches', {}),
+        pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
+      ]);
+      setCoaches((coachResult?.coaches || []).map(normalizePublicCoach));
+      setPackages(packageRows);
+    } catch (err) {
+      console.error('CoachSearch load failed', err);
+      setLoadError(err?.message || 'Coach results could not load.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
+  // Keep state in sync when the URL changes (back/forward, inbound links).
   useEffect(() => {
-    const nextPlace = placeFromParams(searchParams);
-    setSelectedPlace(nextPlace);
-    setFilters({
-      sport: valueFromParams(searchParams, 'sport', 'All sports'),
-      location: valueFromParams(searchParams, 'location', valueFromParams(searchParams, 'location_label', '')),
-      radius: radiusFromParams(searchParams),
-      availability: valueFromParams(searchParams, 'availability', 'Any time'),
-    });
+    setFilters(filtersFromParams(searchParams));
+    setSelectedPlace(placeFromParams(searchParams));
+    setPage(Math.max(1, Number(searchParams.get('page')) || 1));
   }, [searchParams]);
 
   const activePlace = useMemo(
@@ -108,114 +210,189 @@ export default function CoachSearch() {
     [filters.location],
   );
 
-  const filteredCoaches = useMemo(() => {
-    const selectedRadius = Number(filters.radius || 15);
-    const baseRadius = Number.isFinite(selectedRadius) && selectedRadius > 0 ? selectedRadius : 15;
-    const filterAtRadius = (radius) => coaches.filter((coach) => (
-      matchesCoachSearch(coach, { ...filters, radius: String(radius), place: activePlace })
-    ));
+  const models = useMemo(
+    () => coaches.map((coach) => {
+      const model = publicCoachDisplay(coach, { searchPlace: activePlace });
+      return { coach, model, haystack: haystackFor(model) };
+    }),
+    [coaches, activePlace],
+  );
 
-    if (!activePlace) {
-      return {
-        matches: filterAtRadius(baseRadius),
-        selectedRadius: baseRadius,
-        effectiveRadius: baseRadius,
-        expanded: false,
-      };
+  const organizationOptions = useMemo(() => {
+    const map = new Map();
+    for (const { coach } of models) {
+      if (coach.organization?.id && coach.organization?.name) {
+        map.set(coach.organization.id, coach.organization.name);
+      }
     }
+    return [...map.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [models]);
 
-    const candidates = Array.from(new Set([
-      baseRadius,
-      ...EXPANSION_RADII.filter((radius) => radius > baseRadius),
-    ]));
+  const specialtyOptions = useMemo(() => {
+    const sport = resolveSportFilter(filters.sport);
+    const catalogSpecialties = sport
+      ? (SPORTS_CATALOG.find((item) => item.sport_key === sport.sport_key)?.specialties || [])
+      : [];
+    const coachSpecialties = models.flatMap(({ model }) => model.specializations);
+    return Array.from(new Set([...catalogSpecialties, ...coachSpecialties])).sort();
+  }, [models, filters.sport]);
 
-    for (const radius of candidates) {
-      const matches = filterAtRadius(radius);
-      if (matches.length > 0 || radius === candidates[candidates.length - 1]) {
-        return {
-          matches,
-          selectedRadius: baseRadius,
-          effectiveRadius: radius,
-          expanded: radius > baseRadius,
-        };
+  const filtered = useMemo(() => {
+    const sport = resolveSportFilter(filters.sport);
+    const baseRadius = Number(filters.radius) > 0 ? Number(filters.radius) : 15;
+    const priceBand = PRICE_BANDS.find((band) => band.value === filters.price);
+
+    const matchAt = (radius) => models.filter(({ coach, model, haystack }) => {
+      if (sport) {
+        const sportTerms = coach.sports.map((s) => String(s).toLowerCase());
+        const matchesSport = sportTerms.includes(sport.sport_key)
+          || sportTerms.includes(sport.display_name.toLowerCase())
+          || haystack.includes(sport.display_name.toLowerCase());
+        if (!matchesSport) return false;
+      }
+      if (!locationMatches(coach, model, haystack, activePlace, filters.location.trim(), radius)) return false;
+      if (!availabilityMatches(coach, filters.availability)) return false;
+      if (filters.level !== 'Any level' && !haystack.includes(filters.level.toLowerCase())) return false;
+      if (filters.age !== 'Any age group' && !haystack.includes(filters.age.toLowerCase())) return false;
+      if (filters.org !== 'any' && coach.organization?.id !== filters.org) return false;
+      if (priceBand && priceBand.value !== 'any') {
+        const cents = Number(coach.price_hint_cents);
+        if (!Number.isFinite(cents) || cents <= 0) return false;
+        if (cents < priceBand.min || cents > priceBand.max) return false;
+      }
+      if (filters.specialty) {
+        const want = filters.specialty.toLowerCase();
+        const hasSpecialty = model.specializations.some((item) => {
+          const have = item.toLowerCase();
+          return have.includes(want) || want.includes(have);
+        });
+        if (!hasSpecialty) return false;
+      }
+      if (filters.type !== 'any' && coach.service_type !== filters.type) return false;
+      return true;
+    });
+
+    // If a place is set and nothing matched, widen the radius progressively
+    // so the page suggests real nearby coaches instead of a dead end.
+    let matches = matchAt(baseRadius);
+    let effectiveRadius = baseRadius;
+    let expanded = false;
+    if (activePlace && matches.length === 0) {
+      for (const radius of EXPANSION_RADII.filter((r) => r > baseRadius)) {
+        const wider = matchAt(radius);
+        if (wider.length > 0) {
+          matches = wider;
+          effectiveRadius = radius;
+          expanded = true;
+          break;
+        }
       }
     }
 
-    return {
-      matches: [],
-      selectedRadius: baseRadius,
-      effectiveRadius: baseRadius,
-      expanded: false,
-    };
-  }, [coaches, filters, activePlace]);
+    const sorted = [...matches];
+    if (filters.sort === 'rating') {
+      sorted.sort((a, b) => (Number(b.coach.rating_avg) || 0) - (Number(a.coach.rating_avg) || 0)
+        || (Number(b.coach.review_count) || 0) - (Number(a.coach.review_count) || 0));
+    } else if (filters.sort === 'price_asc' || filters.sort === 'price_desc') {
+      const dir = filters.sort === 'price_asc' ? 1 : -1;
+      sorted.sort((a, b) => {
+        const pa = Number(a.coach.price_hint_cents);
+        const pb = Number(b.coach.price_hint_cents);
+        const va = Number.isFinite(pa) && pa > 0 ? pa : null;
+        const vb = Number.isFinite(pb) && pb > 0 ? pb : null;
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        return (va - vb) * dir;
+      });
+    }
 
-  const displayedCoaches = filteredCoaches.matches;
-  const visibleRadius = loading ? Number(filters.radius || 15) : filteredCoaches.effectiveRadius;
+    return { rows: sorted, baseRadius, effectiveRadius, expanded };
+  }, [models, filters, activePlace]);
 
-  const coachBookingParams = useMemo(
-    () => bookingParams(activePlace, filteredCoaches.effectiveRadius || filters.radius),
-    [activePlace, filteredCoaches.effectiveRadius, filters.radius],
-  );
+  const totalPages = Math.max(1, Math.ceil(filtered.rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const writeParams = (nextFilters, nextPage = 1, place = selectedPlace) => {
+    const next = new URLSearchParams();
+    if (nextFilters.sport) next.set('sport', nextFilters.sport);
+    const appliedPlace = place || resolvePlace(nextFilters.location);
+    if (appliedPlace && nextFilters.location.trim()) {
+      next.set('location', appliedPlace.label);
+      next.set('lat', String(appliedPlace.lat));
+      next.set('lng', String(appliedPlace.lng));
+      next.set('radius', nextFilters.radius);
+    } else if (nextFilters.location.trim()) {
+      next.set('location', nextFilters.location.trim());
+      next.set('radius', nextFilters.radius);
+    }
+    if (nextFilters.availability !== 'Any time') next.set('availability', nextFilters.availability);
+    if (nextFilters.level !== 'Any level') next.set('level', nextFilters.level);
+    if (nextFilters.age !== 'Any age group') next.set('age', nextFilters.age);
+    if (nextFilters.org !== 'any') next.set('org', nextFilters.org);
+    if (nextFilters.price !== 'any') next.set('price', nextFilters.price);
+    if (nextFilters.specialty) next.set('specialty', nextFilters.specialty);
+    if (nextFilters.type !== 'any') next.set('type', nextFilters.type);
+    if (nextFilters.sort !== 'featured') next.set('sort', nextFilters.sort);
+    if (nextPage > 1) next.set('page', String(nextPage));
+    setSearchParams(next);
+  };
 
   const applyFilters = (event) => {
     event?.preventDefault?.();
     const appliedPlace = selectedPlace || resolvePlace(filters.location);
-    const next = new URLSearchParams();
-    if (filters.sport && filters.sport !== 'All sports') next.set('sport', filters.sport);
-    if (appliedPlace) {
-      next.set('location', appliedPlace.label);
-      next.set('lat', String(appliedPlace.lat));
-      next.set('lng', String(appliedPlace.lng));
-      next.set('radius', String(filters.radius || 15));
-      setSelectedPlace(appliedPlace);
-      setFilters((prev) => ({ ...prev, location: appliedPlace.label }));
-    } else if (filters.location) {
-      next.set('location', filters.location);
-      next.set('radius', String(filters.radius || 15));
-    }
-    if (filters.availability && filters.availability !== 'Any time') next.set('availability', filters.availability);
-    setSearchParams(next);
+    if (appliedPlace && filters.location.trim()) setSelectedPlace(appliedPlace);
+    writeParams(filters, 1, appliedPlace);
   };
+
+  const clearFilters = () => {
+    setSelectedPlace(null);
+    setSearchParams(new URLSearchParams());
+  };
+
+  const goToPage = (nextPage) => {
+    writeParams(filters, nextPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const bookingParams = activePlace
+    ? {
+      location_label: activePlace.label,
+      location_lat: String(activePlace.lat),
+      location_lng: String(activePlace.lng),
+      location_radius: filters.radius,
+    }
+    : {};
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_58%,#eef5ff_100%)]">
         <div className="mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
-                <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Verified coaching marketplace</span>
-              </div>
-              <h1 className="mt-5 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-                Find coaches near your athlete's training location.
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Compare verified profiles, open availability, distance, training specialties, and intro-booking options.
-              </p>
+          <div className="max-w-3xl">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2">
+              <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
             </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Results</p>
-              <p className="mt-1 font-display text-3xl font-bold text-slate-950">
-                {loading ? '...' : displayedCoaches.length}
-                <span className="ml-2 text-sm font-semibold text-slate-500">coach{displayedCoaches.length === 1 ? '' : 'es'}</span>
-              </p>
-            </div>
+            <h1 className="mt-5 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
+              Find a coach
+            </h1>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+              Every result is a published coach profile. Ratings and reviews come from completed
+              sessions; prices and availability come from each coach's own settings.
+            </p>
           </div>
 
-          <form onSubmit={applyFilters} className="mt-7 rounded-lg border border-slate-200 bg-white p-3 shadow-xl shadow-blue-600/10">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.35fr_0.75fr_1fr_auto]">
+          <form onSubmit={applyFilters} className="mt-6 rounded-lg border border-slate-200 bg-white p-3 shadow-xl shadow-blue-600/10">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.3fr_0.7fr_1fr_auto]">
               <FilterSelect
                 label="Sport"
                 icon={Trophy}
                 value={filters.sport}
-                options={SPORTS}
-                onChange={(value) => setFilters((prev) => ({ ...prev, sport: value }))}
+                onChange={(value) => setFilters((prev) => ({ ...prev, sport: value, specialty: '' }))}
+                options={[{ value: '', label: 'All sports' }, ...SPORTS_CATALOG.map((sport) => ({ value: sport.sport_key, label: sport.display_name }))]}
               />
-              <FilterInput
-                label="Location"
-                icon={MapPin}
+              <LocationInput
                 value={filters.location}
                 suggestions={locationSuggestions}
                 selectedPlaceLabel={selectedPlace?.label || ''}
@@ -232,147 +409,232 @@ export default function CoachSearch() {
                 label="Radius"
                 icon={MapPin}
                 value={filters.radius}
-                options={RADII}
                 onChange={(value) => setFilters((prev) => ({ ...prev, radius: value }))}
+                options={RADII.map((value) => ({ value, label: `${value} mi` }))}
               />
               <FilterSelect
                 label="Availability"
                 icon={CalendarDays}
                 value={filters.availability}
-                options={AVAILABILITY}
                 onChange={(value) => setFilters((prev) => ({ ...prev, availability: value }))}
+                options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
               />
-              <Button className="h-14 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
-                <Search className="h-4 w-4" />
-                Find Coaches
+              <Button type="submit" className="h-14 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+                <Search className="h-4 w-4" aria-hidden="true" />
+                Search
               </Button>
+            </div>
+
+            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
+              <FilterSelect
+                label="Level"
+                icon={GraduationCap}
+                value={filters.level}
+                onChange={(value) => setFilters((prev) => ({ ...prev, level: value }))}
+                options={LEVELS.map((value) => ({ value, label: value }))}
+                compact
+              />
+              <FilterSelect
+                label="Age group"
+                icon={Users}
+                value={filters.age}
+                onChange={(value) => setFilters((prev) => ({ ...prev, age: value }))}
+                options={AGE_GROUPS.map((value) => ({ value, label: value }))}
+                compact
+              />
+              <FilterSelect
+                label="Organization"
+                icon={Building2}
+                value={filters.org}
+                onChange={(value) => setFilters((prev) => ({ ...prev, org: value }))}
+                options={[{ value: 'any', label: 'Any organization' }, ...organizationOptions]}
+                compact
+              />
+              <FilterSelect
+                label="Price band"
+                icon={CircleDollarSign}
+                value={filters.price}
+                onChange={(value) => setFilters((prev) => ({ ...prev, price: value }))}
+                options={PRICE_BANDS.map(({ value, label }) => ({ value, label }))}
+                compact
+              />
+              <FilterSelect
+                label="Specialty"
+                icon={Tag}
+                value={filters.specialty}
+                onChange={(value) => setFilters((prev) => ({ ...prev, specialty: value }))}
+                options={[{ value: '', label: 'Any specialty' }, ...specialtyOptions.map((value) => ({ value, label: value }))]}
+                compact
+              />
+              <FilterSelect
+                label="Session type"
+                icon={SlidersHorizontal}
+                value={filters.type}
+                onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
+                options={SESSION_TYPES.map(({ value, label }) => ({ value, label }))}
+                compact
+              />
             </div>
           </form>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-[1480px] grid-cols-1 gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[280px_1fr] lg:px-8">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-blue-700" />
-              <p className="font-display text-lg font-bold tracking-normal text-slate-950">Filters</p>
-            </div>
-            <div className="mt-4 space-y-3">
-              <FilterPill label={filters.sport} active={filters.sport !== 'All sports'} />
-              <FilterPill
-                label={activePlace
-                  ? `${activePlace.label} · ${visibleRadius || filters.radius} mi search`
-                  : (filters.location || 'Any location')}
-                active={!!filters.location}
-              />
-              <FilterPill label={filters.availability} active={filters.availability !== 'Any time'} />
-            </div>
-            <p className="mt-5 text-xs leading-5 text-slate-500">
-              Profiles are populated from coach data. Ratings, prices, sports, and organizations only appear when those fields exist.
+      <section className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-display text-xl font-bold tracking-normal text-slate-950">
+              {loading ? 'Searching...' : `${filtered.rows.length} coach${filtered.rows.length === 1 ? '' : 'es'}`}
+            </p>
+            <p className="text-sm text-slate-600">
+              {loading
+                ? 'Loading published coach profiles.'
+                : activePlace
+                  ? `Serving ${activePlace.label} within ${filtered.effectiveRadius} miles`
+                  : 'Across all locations'}
             </p>
           </div>
-        </aside>
-
-        <div>
-          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-display text-xl font-bold tracking-normal text-slate-950">Best matches</p>
-              <p className="text-sm text-slate-600">
-                {loading
-                  ? 'Loading verified coach profiles...'
-                  : activePlace
-                    ? `${displayedCoaches.length} coach${displayedCoaches.length === 1 ? '' : 'es'} serving ${activePlace.label} at a ${visibleRadius}-mile search radius`
-                    : `${displayedCoaches.length} result${displayedCoaches.length === 1 ? '' : 's'} for your search`}
-              </p>
-            </div>
-            <Link to="/apply/private-training-coach" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+              <span>Sort</span>
+              <select
+                value={filters.sort}
+                onChange={(event) => {
+                  const sort = event.target.value;
+                  setFilters((prev) => ({ ...prev, sort }));
+                  writeParams({ ...filters, sort }, 1);
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                {SORT_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </label>
+            <Link to="/for-coaches" className="hidden items-center gap-1 text-sm font-bold text-blue-700 hover:underline sm:inline-flex">
               Are you a coach?
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
+        </div>
 
-          {loading && (
+        {loading && (
+          <div className="space-y-3" aria-busy="true" aria-label="Loading coaches">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="h-40 animate-pulse rounded-lg border border-slate-200 bg-white" />
+            ))}
+          </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="rounded-lg border border-red-200 bg-white p-8 text-center shadow-sm" role="alert">
+            <h2 className="font-display text-2xl font-bold text-slate-950">We couldn't load coaches</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+              {loadError} This is a loading problem on our side — your filters are fine.
+            </p>
+            <Button onClick={load} className="mt-5 rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {!loading && !loadError && filtered.expanded && (
+          <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
+            <p className="font-bold text-blue-900">
+              No coaches matched within {filtered.baseRadius} miles{activePlace ? ` of ${activePlace.label}` : ''}.
+            </p>
+            <p className="mt-1 text-blue-800">
+              Showing coaches within {filtered.effectiveRadius} miles instead.
+            </p>
+          </div>
+        )}
+
+        {!loading && !loadError && pageRows.length > 0 && (
+          <>
             <div className="space-y-3">
-              {[0, 1, 2].map((item) => (
-                <div key={item} className="h-40 animate-pulse rounded-lg border border-slate-200 bg-white" />
-              ))}
-            </div>
-          )}
-
-          {!loading && error && (
-            <div className="rounded-lg border border-red-200 bg-white p-6 text-sm font-semibold text-red-700 shadow-sm">
-              {error}
-            </div>
-          )}
-
-          {!loading && !error && filteredCoaches.expanded && (
-            <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
-              <p className="font-bold text-blue-900">
-                No coaches matched within {filteredCoaches.selectedRadius} miles of {activePlace.label}.
-              </p>
-              <p className="mt-1 text-blue-800">
-                Showing coaches within {filteredCoaches.effectiveRadius} miles and coaches who serve nearby athletes.
-              </p>
-            </div>
-          )}
-
-          {!loading && !error && displayedCoaches.length > 0 && (
-            <div className="space-y-3">
-              {displayedCoaches.map((coach) => (
+              {pageRows.map(({ coach }) => (
                 <PublicCoachCard
                   key={coach.id}
                   coach={coach}
                   packages={packages}
                   distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}
-                  bookingParams={coachBookingParams}
+                  bookingParams={bookingParams}
                 />
               ))}
             </div>
-          )}
 
-          {!loading && !error && displayedCoaches.length === 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                <Search className="h-6 w-6" />
-              </div>
-              <h2 className="mt-4 font-display text-2xl font-bold text-slate-950">No coaches match those filters yet</h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                Try broadening the sport, location radius, or availability window. New coaches appear here as their profiles go live.
-              </p>
-              <Button
-                className="mt-5 rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700"
-                onClick={() => {
-                  setSelectedPlace(null);
-                  setFilters({ sport: 'All sports', location: '', radius: '15', availability: 'Any time' });
-                  setSearchParams(new URLSearchParams());
-                }}
-              >
-                Clear filters
+            {totalPages > 1 && (
+              <nav className="mt-6 flex items-center justify-center gap-2" aria-label="Search results pages">
+                <Button
+                  variant="outline"
+                  disabled={safePage <= 1}
+                  onClick={() => goToPage(safePage - 1)}
+                  className="h-10 rounded-lg border-slate-200 px-3 font-bold"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <span className="px-3 text-sm font-bold text-slate-700">
+                  Page {safePage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  disabled={safePage >= totalPages}
+                  onClick={() => goToPage(safePage + 1)}
+                  className="h-10 rounded-lg border-slate-200 px-3 font-bold"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </nav>
+            )}
+          </>
+        )}
+
+        {!loading && !loadError && filtered.rows.length === 0 && (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+              <Search className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <h2 className="mt-4 font-display text-2xl font-bold text-slate-950">No coaches match those filters yet</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+              Try broadening the sport, radius, or other filters. New coaches appear here the moment
+              their profiles are published.
+            </p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button onClick={clearFilters} variant="outline" className="rounded-lg border-blue-200 px-5 font-bold text-blue-700 hover:bg-blue-50">
+                Clear all filters
+              </Button>
+              <Button asChild className="rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+                <Link to="/apply/private-training-coach">
+                  Coach here? Be the first in your area
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
               </Button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-function FilterSelect({ label, icon: Icon, value, options, onChange }) {
+function FilterSelect({ label, icon: Icon, value, options, onChange, compact = false }) {
   return (
-    <label className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-        <Icon className="h-4 w-4" />
+    <label className={`flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 ${compact ? 'py-1.5' : 'py-2'}`}>
+      <span className={`grid shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 ${compact ? 'h-8 w-8' : 'h-9 w-9'}`}>
+        <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</span>
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="mt-1 w-full bg-transparent text-sm font-bold text-slate-950 outline-none"
+          className="mt-1 w-full bg-transparent text-sm font-bold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          aria-label={label}
         >
           {options.map((option) => (
-            <option key={option} value={option}>{option}</option>
+            <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </span>
@@ -380,21 +642,22 @@ function FilterSelect({ label, icon: Icon, value, options, onChange }) {
   );
 }
 
-function FilterInput({ label, icon: Icon, value, onChange, suggestions = [], selectedPlaceLabel = '', onSelect }) {
+function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel = '', onSelect }) {
   const showSuggestions = value && suggestions.length > 0 && value !== selectedPlaceLabel;
 
   return (
     <div className="relative flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-        <Icon className="h-4 w-4" />
+        <MapPin className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</span>
+        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Location</span>
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="mt-1 h-auto border-0 bg-transparent p-0 text-sm font-bold text-slate-950 shadow-none outline-none focus-visible:ring-0"
           placeholder="City, county, or ZIP"
+          aria-label="Location"
         />
       </span>
       {showSuggestions && (
@@ -414,16 +677,5 @@ function FilterInput({ label, icon: Icon, value, onChange, suggestions = [], sel
         </span>
       )}
     </div>
-  );
-}
-
-function FilterPill({ label, active }) {
-  return (
-    <span className={`inline-flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-bold ${
-      active ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'bg-slate-50 text-slate-500 ring-1 ring-slate-200'
-    }`}>
-      {label}
-      {active && <span className="h-2 w-2 rounded-full bg-blue-600" />}
-    </span>
   );
 }

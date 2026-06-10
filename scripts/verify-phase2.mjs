@@ -1,100 +1,71 @@
-import { existsSync, readFileSync } from 'node:fs';
+// Phase 2 — legal & compliance.
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-
-function read(path) {
-  return readFileSync(join(root, path), 'utf8');
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-function includes(path, snippets) {
+const failures = [];
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const check = (ok, msg) => { if (!ok) failures.push(msg); };
+const includes = (path, snippets) => {
   const content = read(path);
-  for (const snippet of snippets) {
-    assert(content.includes(snippet), `${path} is missing: ${snippet}`);
-  }
-}
+  for (const s of snippets) check(content.includes(s), `${path} is missing: ${s}`);
+};
 
-const requiredFiles = [
-  'functions/signLegalAgreement/package.json',
+for (const file of [
   'functions/signLegalAgreement/src/main.js',
+  'functions/generateLegalAgreementPdf/src/main.js',
   'src/lib/legal.js',
   'src/hooks/useLegalPacketStatus.js',
   'src/components/legal/LegalSignaturePanel.jsx',
   'src/pages/admin/AdminLegalDocuments.jsx',
   'src/lib/legalTemplateDefinitions.js',
   'scripts/seed-legal-templates.mjs',
-];
+]) check(existsSync(join(root, file)), `Missing required Phase 2 file: ${file}`);
 
-for (const file of requiredFiles) {
-  assert(existsSync(join(root, file)), `Missing required Phase 2 file: ${file}`);
-}
-
-includes('appwrite.json', [
-  '"$id": "signLegalAgreement"',
-  '"path": "functions/signLegalAgreement"',
-  '"$id": "generateLegalAgreementPdf"',
-]);
-
-includes('scripts/provision-appwrite.mjs', [
-  "'template_checksum'",
-  "'signer_account_id'",
-  "'signer_email'",
-  "'affirmations_json'",
-  "'signature_method'",
-  "'drawn_signature_hash'",
-]);
-
+// Server-side signer hardening: role derived server-side, guardian signings
+// bound to a linked athlete, minors cannot self-sign athlete packets.
 includes('functions/signLegalAgreement/src/main.js', [
   'callerAccountId',
-  'affirmationsValid',
+  'guardian_athletes',
+  'is_minor',
   'signature_hash',
-  'pdf_file_id',
   "Permission.read(Role.user(accountId))",
   "Permission.read(Role.label('admin'))",
-  "action: 'legal_agreement.sign'",
 ]);
 
-includes('functions/generateLegalAgreementPdf/src/main.js', [
-  'canGenerate',
-  'Authentication required.',
-  'You do not have access to this legal agreement.',
-  'already_exists',
-]);
+// Full template packet with attorney-review marker on every body.
+const templates = read('src/lib/legalTemplateDefinitions.js');
+check(templates.includes('ATTORNEY REVIEW REQUIRED'), 'legal templates must carry the attorney-review marker');
+for (const key of [
+  'platform_terms_privacy_ack',
+  'athlete_participation_waiver',
+  'athlete_medical_emergency',
+  'athlete_media_release',
+  'athlete_communication_safety',
+  'athlete_payment_terms',
+  'guardian_authority_minor_packet',
+  'guardian_medical_media_safety',
+  'guardian_payment_booking_consent',
+  'coach_independent_contractor_packet',
+  'coach_safeguarding_boundaries_packet',
+  'coach_communication_policy',
+  'organization_service_authority_packet',
+  'organization_roster_privacy_safety_packet',
+]) check(templates.includes(`'${key}'`), `legal templates missing ${key}`);
 
-includes('src/components/legal/LegalSignaturePanel.jsx', [
-  'Typed legal signature',
-  'electronic_records_consent',
-  'reviewed_current_template',
-  'accurate_information',
-  'legal_authority',
-  'toDataURL',
-]);
+// Seeder retires superseded versions so users never sign stale documents.
+includes('scripts/seed-legal-templates.mjs', ['retired_at']);
 
-includes('src/pages/Book.jsx', [
-  'LegalSignaturePanel',
-  'legalReadyForBooking',
-  'Please complete the required legal packet before payment or scheduling.',
-]);
+// Guardian signings can target a specific child in the UI.
+includes('src/components/legal/LegalSignaturePanel.jsx', ['athleteId']);
 
-includes('src/pages/admin/AdminLegalDocuments.jsx', [
-  'generateLegalAgreementPdf',
-  'legalPdfUrl',
-  'legalAdminNoteRepo.create',
-]);
+// Public pages clearly mark placeholder status.
+includes('src/pages/Terms.jsx', ['ATTORNEY REVIEW']);
+includes('src/pages/Privacy.jsx', ['ATTORNEY REVIEW']);
 
-includes('src/App.jsx', [
-  'AdminLegalDocuments',
-  'path="/admin/legal-documents"',
-  'RequireSignedLegalPacket',
-]);
-
-includes('src/pages/admin/AdminCoaches.jsx', [
-  'getLegalPacketStatus',
-  'Coach legal packet is incomplete',
-]);
-
+if (failures.length) {
+  console.error('Phase 2 verification failed:');
+  for (const f of failures) console.error(`- ${f}`);
+  process.exit(1);
+}
 console.log('Phase 2 verification passed.');

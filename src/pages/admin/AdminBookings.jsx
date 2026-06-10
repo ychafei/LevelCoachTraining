@@ -3,13 +3,15 @@ import { sessionRepo, coachRepo } from '@/api/repo';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format } from 'date-fns';
-import { Clock, CheckCircle2, XCircle, Trash2, Lock } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, UserX, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
-import { formatSessionDateTimeET } from '@/lib/formatInET';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { formatInTz } from '@/lib/scheduleET';
 import { logAdminAction } from '@/lib/audit';
 
 const statusConfig = {
@@ -17,42 +19,111 @@ const statusConfig = {
   confirmed: { icon: CheckCircle2, color: 'bg-primary/10 text-primary border-primary/20' },
   completed: { icon: CheckCircle2, color: 'bg-green-500/10 text-green-400 border-green-500/20' },
   cancelled: { icon: XCircle, color: 'bg-destructive/10 text-destructive border-destructive/20' },
+  no_show: { icon: UserX, color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' },
 };
 
+// Admin cancellation dialog — the booking function requires/records a reason
+// and applies the credit-restoration policy server-side.
+function CancelDialog({ session, onClose, onDone, actor }) {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const result = await sessionRepo.cancel(session.id, reason.trim() || 'Cancelled by admin');
+      toast.success(result.credit_restored
+        ? 'Session cancelled — credit restored'
+        : 'Session cancelled — credit forfeited per policy');
+      await logAdminAction({
+        actor,
+        action: 'session.status_change',
+        entityType: 'Session',
+        entityId: session.id,
+        before: { status: session.status },
+        after: { status: 'cancelled' },
+        reason: reason.trim() || 'Cancelled by admin',
+        metadata: { client_email: session.client_email, coach_id: session.coach_id },
+      });
+      onDone();
+    } catch (err) {
+      toast.error(err?.message || 'Could not cancel this session.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="font-display tracking-wider">CANCEL BOOKING</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {session.client_name} · {formatInTz(session.date, session.start_time, session.timezone) || `${session.date} ${session.start_time}`}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          The server applies the cancellation policy: cancellations 24+ hours out (or by the coach) restore the credit.
+        </p>
+        <div>
+          <Label htmlFor="cancel-reason" className="font-display tracking-wider uppercase text-xs">Reason</Label>
+          <Textarea
+            id="cancel-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            rows={2}
+            placeholder="Why is this booking being cancelled?"
+            className="mt-1 bg-secondary border-border"
+          />
+        </div>
+        <Button
+          onClick={submit}
+          disabled={saving}
+          className="mt-2 w-full bg-destructive text-destructive-foreground font-display tracking-wider uppercase hover:bg-destructive/90"
+        >
+          {saving ? 'Cancelling...' : 'Cancel booking'}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminBookings() {
-  const { user, isAdmin, isSuperAdmin } = useCurrentUser();
+  const { user, isAdmin } = useCurrentUser();
   const [sessions, setSessions] = useState([]);
   const [coaches, setCoaches] = useState({});
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [actingId, setActingId] = useState('');
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  const load = async () => {
+    try {
+      const [s, c] = await Promise.all([
+        sessionRepo.list('-date'),
+        coachRepo.list(),
+      ]);
+      setSessions(s);
+      const map = {};
+      c.forEach((coach) => { map[coach.id] = coach; });
+      setCoaches(map);
+    } catch (err) {
+      console.error('AdminBookings load failed', err);
+      toast.error('Could not load bookings.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
       return;
     }
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [s, c] = await Promise.all([
-          sessionRepo.list('-date'),
-          coachRepo.list(),
-        ]);
-        if (cancelled) return;
-        setSessions(s);
-        const map = {};
-        c.forEach((coach) => { map[coach.id] = coach; });
-        setCoaches(map);
-      } catch (err) {
-        console.error('AdminBookings load failed', err);
-        if (!cancelled) toast.error('Could not load bookings.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    return () => { cancelled = true; };
+    void load();
+     
   }, [isAdmin]);
 
   const enriched = useMemo(() => sessions.map((s) => {
@@ -66,128 +137,41 @@ export default function AdminBookings() {
 
   const filtered = filter === 'all' ? enriched : enriched.filter((s) => s.status === filter);
 
-  const bulkDelete = async () => {
-    if (!isSuperAdmin) {
-      toast.error('Only a super admin can bulk-delete bookings. Use individual cancel/delete instead.');
-      return;
-    }
-    const ids = filtered.map((s) => s.id);
-    if (ids.length === 0) return;
-    const filterLabel = filter === 'all' ? 'all bookings' : `${filter} bookings`;
+  // Lifecycle changes go through the booking function — complete/no_show are
+  // valid for confirmed sessions only; cancellation requires a reason.
+  const markStatus = async (session, action) => {
+    const labels = { complete: 'completed', noShow: 'no-show' };
     const ok = await confirm({
-      title: `Delete ${ids.length} ${filterLabel}?`,
-      description: 'Permanently removes these Session records. There is no undo.',
-      consequences: [
-        'Coach calendars and earnings totals will recompute without these sessions.',
-        'Linked SessionCredit usage counts are not refunded automatically.',
-        'Use this for test data cleanup — confirm the filter above shows only what you want to remove.',
-      ],
-      confirmLabel: `Delete ${ids.length}`,
-      cancelLabel: 'Cancel',
-      variant: 'destructive',
-      requireTyped: `DELETE ${ids.length}`,
+      title: `Mark this session as ${labels[action]}?`,
+      description: `${session.client_name} · ${session.date} ${session.start_time} with ${session.coach_name}`,
+      consequences: action === 'noShow'
+        ? ['The credit stays consumed — no automatic restoration for no-shows.']
+        : ['Completed sessions count toward coach earnings and review eligibility.'],
+      confirmLabel: `Mark ${labels[action]}`,
+      cancelLabel: 'Keep as is',
     });
     if (!ok) return;
-
-    const results = await Promise.allSettled(ids.map((id) => sessionRepo.delete(id)));
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    const deletedSet = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
-    setSessions((prev) => prev.filter((s) => !deletedSet.has(s.id)));
-    await logAdminAction({
-      actor: user,
-      action: 'session.bulk_delete',
-      entityType: 'Session',
-      metadata: {
-        filter,
-        attempted: ids.length,
-        deleted: deletedSet.size,
-        failed,
-        bulk_ids: Array.from(deletedSet),
-      },
-    });
-    if (failed === 0) toast.success(`Deleted ${deletedSet.size} session${deletedSet.size === 1 ? '' : 's'}`);
-    else toast.error(`Deleted ${deletedSet.size}, ${failed} failed — see console`);
-    if (failed > 0) console.error('Failed deletes:', results.filter((r) => r.status === 'rejected'));
-  };
-
-  const deleteOne = async (session) => {
-    const ok = await confirm({
-      title: 'Delete this session?',
-      description: `${session.client_name} · ${format(new Date(session.date), 'MMM d, yyyy')} at ${session.start_time} with ${session.coach_name}`,
-      consequences: [
-        'Permanently removes the Session record. There is no undo.',
-        'Linked SessionCredit usage is not refunded automatically.',
-        'Prefer cancelling (status → cancelled) for live data.',
-      ],
-      confirmLabel: 'Delete session',
-      cancelLabel: 'Keep session',
-      variant: 'destructive',
-      requireTyped: 'DELETE',
-    });
-    if (!ok) return;
-    const before = {
-      status: session.status,
-      payment_status: session.payment_status,
-      date: session.date,
-      start_time: session.start_time,
-    };
+    setActingId(session.id);
     try {
-      await sessionRepo.delete(session.id);
-      setSessions((prev) => prev.filter((s) => s.id !== session.id));
-      await logAdminAction({
-        actor: user,
-        action: 'session.delete',
-        entityType: 'Session',
-        entityId: session.id,
-        before,
-        metadata: {
-          client_email: session.client_email,
-          coach_id: session.coach_id,
-        },
-      });
-      toast.success('Session deleted');
-    } catch (err) {
-      console.error(err);
-      toast.error('Could not delete session');
-    }
-  };
-
-  const updateStatus = async (session, status) => {
-    if (status === session.status) return;
-    if (status === 'cancelled') {
-      const ok = await confirm({
-        title: 'Cancel this booking?',
-        description: `${session.client_name} · ${format(new Date(session.date), 'MMM d, yyyy')} at ${session.start_time}`,
-        consequences: [
-          'Status will be set to "cancelled".',
-          'No automatic credit refund is issued from this panel — handle refunds in the Credits page.',
-        ],
-        confirmLabel: 'Cancel booking',
-        cancelLabel: 'Keep booking',
-        variant: 'destructive',
-      });
-      if (!ok) return;
-    }
-    const before = { status: session.status };
-    try {
-      await sessionRepo.update(session.id, { status });
+      const updated = action === 'complete'
+        ? await sessionRepo.complete(session.id)
+        : await sessionRepo.noShow(session.id);
+      const status = updated?.status || (action === 'complete' ? 'completed' : 'no_show');
       setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, status } : s)));
       await logAdminAction({
         actor: user,
         action: 'session.status_change',
         entityType: 'Session',
         entityId: session.id,
-        before,
+        before: { status: session.status },
         after: { status },
-        metadata: {
-          client_email: session.client_email,
-          coach_id: session.coach_id,
-        },
+        metadata: { client_email: session.client_email, coach_id: session.coach_id },
       });
       toast.success('Status updated');
     } catch (err) {
-      console.error(err);
-      toast.error('Could not update status');
+      toast.error(err?.message || 'Could not update this session.');
+    } finally {
+      setActingId('');
     }
   };
 
@@ -199,8 +183,10 @@ export default function AdminBookings() {
       sortAccessor: 'when_sort',
       cell: (row) => (
         <div>
-          <p className="font-display tracking-wider text-foreground text-sm">{formatSessionDateTimeET(row.date, row.start_time)}</p>
-          <p className="text-xs text-muted-foreground">{row.duration_minutes} min · {row.county}</p>
+          <p className="font-display tracking-wider text-foreground text-sm">
+            {formatInTz(row.date, row.start_time, row.timezone) || `${row.date} ${row.start_time}`}
+          </p>
+          <p className="text-xs text-muted-foreground">{row.duration_minutes} min</p>
         </div>
       ),
     },
@@ -233,7 +219,7 @@ export default function AdminBookings() {
         const Icon = sc.icon;
         return (
           <Badge className={`${sc.color} border text-xs`}>
-            <Icon className="w-3 h-3 mr-1" />
+            <Icon className="w-3 h-3 mr-1" aria-hidden="true" />
             {row.status}
           </Badge>
         );
@@ -253,30 +239,51 @@ export default function AdminBookings() {
     {
       key: 'action',
       header: 'Actions',
-      cell: (row) => (
-        <div className="flex items-center gap-2">
-          <Select value={row.status} onValueChange={(v) => updateStatus(row, v)}>
-            <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => deleteOne(row)}
-            className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-            title="Permanently delete this session"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      ),
+      cell: (row) => {
+        const busy = actingId === row.id;
+        const canCancel = ['pending', 'confirmed'].includes(row.status);
+        const canFinish = row.status === 'confirmed';
+        if (!canCancel && !canFinish) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canFinish && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => markStatus(row, 'complete')}
+                className="h-7 text-xs text-green-400 hover:text-green-400 hover:bg-green-500/10"
+              >
+                <CheckCircle2 className="w-3 h-3 mr-1" aria-hidden="true" /> Complete
+              </Button>
+            )}
+            {canFinish && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => markStatus(row, 'noShow')}
+                className="h-7 text-xs text-yellow-500 hover:text-yellow-500 hover:bg-yellow-500/10"
+              >
+                <UserX className="w-3 h-3 mr-1" aria-hidden="true" /> No-show
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setCancelTarget(row)}
+                className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <XCircle className="w-3 h-3 mr-1" aria-hidden="true" /> Cancel
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -285,50 +292,56 @@ export default function AdminBookings() {
   return (
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">ALL BOOKINGS</h1>
-          <div className="flex items-center gap-2">
-            {isSuperAdmin && (
-              <Button
-                variant="outline"
-                onClick={bulkDelete}
-                disabled={filtered.length === 0}
-                className="font-display tracking-wider uppercase text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-                title="Permanently delete every session matching the current filter (super admin)"
-              >
-                <Lock className="w-3 h-3 mr-1.5" />
-                <Trash2 className="w-3 h-3 mr-1.5" /> Delete {filtered.length} {filter === 'all' ? '' : filter}
-              </Button>
-            )}
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-40 bg-secondary border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className="w-40 bg-secondary border-border" aria-label="Filter bookings by status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+              <SelectItem value="no_show">No-show</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
+        <p className="mb-6 flex items-start gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          Sessions are server-managed: cancellations, completions, and no-shows route through the booking
+          function so credit policy, notifications, and emails stay consistent. Records cannot be deleted.
+        </p>
+
         {loading ? (
-          <div className="text-center py-12">
-            <div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" />
+          <div className="space-y-3 py-6" aria-busy="true" aria-label="Loading bookings">
+            <div className="h-12 animate-pulse rounded bg-secondary/50" />
+            <div className="h-12 animate-pulse rounded bg-secondary/50" />
+            <div className="h-12 w-2/3 animate-pulse rounded bg-secondary/50" />
           </div>
         ) : (
           <DataTable
             columns={columns}
             data={filtered}
-            searchFields={['client_name', 'client_email', 'coach_name', 'county']}
-            searchPlaceholder="Search by client, coach, or county…"
+            searchFields={['client_name', 'client_email', 'coach_name']}
+            searchPlaceholder="Search by client or coach…"
             emptyMessage="No bookings found."
           />
         )}
       </div>
+      {cancelTarget && (
+        <CancelDialog
+          session={cancelTarget}
+          actor={user}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setSessions((prev) => prev.map((s) => (s.id === cancelTarget.id ? { ...s, status: 'cancelled' } : s)));
+            setCancelTarget(null);
+          }}
+        />
+      )}
       {confirmDialog}
     </div>
   );
