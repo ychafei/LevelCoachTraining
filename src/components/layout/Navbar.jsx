@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/AuthContext';
+import { greetingName } from '@/lib/displayName';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 
 export default function Navbar() {
@@ -84,7 +85,6 @@ export default function Navbar() {
     return [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Find a Coach', path: '/coaches' },
-      { label: 'Matching', path: '/matching' },
       { label: 'Messages', path: '/messages' },
     ];
   };
@@ -210,9 +210,9 @@ export default function Navbar() {
             <div className="ml-4">
               {authenticated ? (
                 <div className="flex items-center gap-3">
-                  {user?.first_name && (
+                  {greetingName(user) !== 'there' && (
                     <span className="font-display tracking-wide uppercase text-xs text-muted-foreground hidden lg:inline">
-                      Hi, <span className="text-accent">{user.first_name}</span>
+                      Hi, <span className="text-accent">{greetingName(user)}</span>
                     </span>
                   )}
                   <Link to="/settings">

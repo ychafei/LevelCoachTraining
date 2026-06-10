@@ -17,8 +17,6 @@ import {
   RequireOrganizationAdmin,
   RequireGuardianOfAthlete,
   RequireAthlete,
-  RequireSignedLegalPacket,
-  RequireClient,
 } from '@/components/guards/RouteGuards';
 
 // Layouts
@@ -73,10 +71,11 @@ const OnboardingCompletion = React.lazy(() => import('@/pages/onboarding/Onboard
 // Authenticated pages
 const Messages = React.lazy(() => import('@/pages/Messages'));
 const Settings = React.lazy(() => import('@/pages/Settings'));
-const Matching = React.lazy(() => import('@/pages/Matching'));
 const CoachSchedule = React.lazy(() => import('@/pages/CoachSchedule'));
 const AthletePortal = React.lazy(() => import('@/pages/athlete/AthletePortal'));
+const AthleteSettings = React.lazy(() => import('@/pages/athlete/AthleteSettings'));
 const ParentPortal = React.lazy(() => import('@/pages/parent/ParentPortal'));
+const ParentSettings = React.lazy(() => import('@/pages/parent/ParentSettings'));
 const OrganizationPortal = React.lazy(() => import('@/pages/organization/OrganizationPortal'));
 const MasterAdminPortal = React.lazy(() => import('@/pages/master-admin/MasterAdminPortal'));
 
@@ -97,6 +96,7 @@ const AdminPayments = React.lazy(() => import('@/pages/admin/AdminPayments'));
 const AdminOrganizations = React.lazy(() => import('@/pages/admin/AdminOrganizations'));
 const AdminSafety = React.lazy(() => import('@/pages/admin/AdminSafety'));
 const AdminReconciliation = React.lazy(() => import('@/pages/admin/AdminReconciliation'));
+const AdminPlatformSettings = React.lazy(() => import('@/pages/admin/AdminPlatformSettings'));
 
 // Single Suspense fallback — same spinner pattern used by the auth boot.
 const PageLoader = () => (
@@ -172,9 +172,11 @@ const AuthenticatedApp = () => {
           <Route element={<RequireOnboardingComplete />}>
             <Route element={<RequireAthlete />}>
               <Route path="/athlete" element={<AthletePortal />} />
+              <Route path="/athlete/settings" element={<AthleteSettings />} />
             </Route>
             <Route element={<RequireGuardianOfAthlete />}>
               <Route path="/parent" element={<ParentPortal />} />
+              <Route path="/parent/settings" element={<ParentSettings />} />
             </Route>
             <Route element={<RequireOrganizationAdmin />}>
               <Route path="/organization" element={<OrganizationPortal />} />
@@ -182,13 +184,6 @@ const AuthenticatedApp = () => {
           </Route>
 
           <Route element={<RequireOnboardingComplete />}>
-            {/* Client-only */}
-            <Route element={<RequireClient />}>
-              <Route element={<RequireSignedLegalPacket />}>
-                <Route path="/matching" element={<Matching />} />
-              </Route>
-            </Route>
-
             {/* Coach portal — shell + nested pages. RequireCoach (admins also pass).
                 Individual pages handle the "no coach_id" state gracefully. */}
             <Route element={<RequireCoach />}>
@@ -227,6 +222,7 @@ const AuthenticatedApp = () => {
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/messages" element={<AdminMessages />} />
               <Route path="/admin/unsubscribes" element={<AdminUnsubscribes />} />
+              <Route path="/admin/settings" element={<AdminPlatformSettings />} />
             </Route>
           </Route>
 

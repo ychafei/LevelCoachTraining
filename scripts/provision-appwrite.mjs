@@ -675,6 +675,10 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'string', key: 'coach_count_label', size: 80 },
       { type: 'string', key: 'description', size: 20000 },
       { type: 'bool', key: 'updates_opt_in', def: false },
+      // Nullable per-org platform-fee override (basis points). The platform's
+      // cut for bookings routed through this org; an admin decision, set via
+      // adminOps.setOrgFee. null = fall through to the global/default fee.
+      { type: 'int', key: 'platform_fee_bps', min: 0, max: 5000 },
     ],
     indexes: [
       { key: 'idx_slug', type: 'unique', attrs: ['slug'] },

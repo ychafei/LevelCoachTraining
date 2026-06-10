@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
@@ -22,8 +21,6 @@ const EMPTY_PROFILE = {
   parent_email: '',
   parent_phone: '',
   parent_relationship: '',
-  matching_opted_in: false,
-  matching_age_group: '',
 };
 
 export default function Settings() {
@@ -43,8 +40,6 @@ export default function Settings() {
         parent_email: user.parent_email || '',
         parent_phone: user.parent_phone || '',
         parent_relationship: user.parent_relationship || '',
-        matching_opted_in: user.matching_opted_in === true,
-        matching_age_group: user.matching_age_group || '',
       });
     }
   }, [user]);
@@ -54,10 +49,9 @@ export default function Settings() {
     try {
       // Profile writes go through the server-side accountProfile whitelist.
       // Omit empty optional values the server validates strictly (dob must be
-      // a real date, matching_age_group must be one of the known groups).
+      // a real date).
       const payload = { ...profile };
       if (!payload.dob) delete payload.dob;
-      if (!payload.matching_age_group) delete payload.matching_age_group;
       await auth.updateCurrentUser(payload);
       await refetch();
       toast.success('Profile saved');
@@ -96,7 +90,6 @@ export default function Settings() {
         <Tabs defaultValue="profile">
           <TabsList className="bg-card border border-border mb-8">
             <TabsTrigger value="profile" className="font-display tracking-wider uppercase text-xs">Profile</TabsTrigger>
-            {!isCoach && <TabsTrigger value="matching" className="font-display tracking-wider uppercase text-xs">Matching</TabsTrigger>}
           </TabsList>
 
           {/* Profile Tab */}
@@ -145,52 +138,6 @@ export default function Settings() {
 
             <Button onClick={saveProfile} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
               {saving ? 'Saving...' : 'Save Profile'}
-            </Button>
-          </TabsContent>
-
-          {/* Matching Tab */}
-          <TabsContent value="matching" className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
-              <div>
-                <p className="font-display tracking-wider text-sm">Opt In to Player Matching</p>
-                <p className="text-xs text-muted-foreground mt-1">Allow other clients to see your first name and age group.</p>
-              </div>
-              <Switch
-                checked={profile.matching_opted_in}
-                onCheckedChange={v => setProfile({...profile, matching_opted_in: v})}
-                aria-label="Opt in to player matching"
-              />
-            </div>
-            {profile.matching_opted_in && (
-              <div className="space-y-3">
-                <Label className="font-display tracking-wider uppercase text-xs">Preferred Age Group</Label>
-                <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Preferred age group">
-                  {[
-                    { label: 'Ages 5–8', value: '5-8' },
-                    { label: 'Ages 9–12', value: '9-12' },
-                    { label: 'Ages 13+', value: '13+' },
-                  ].map(group => (
-                    <button
-                      key={group.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={profile.matching_age_group === group.value}
-                      onClick={() => setProfile({...profile, matching_age_group: group.value})}
-                      className={`p-3 rounded-lg border text-sm font-display tracking-wider uppercase text-center transition-all ${
-                        profile.matching_age_group === group.value
-                          ? 'border-accent bg-accent/10 text-accent'
-                          : 'border-border text-muted-foreground hover:border-accent/30'
-                      }`}
-                    >
-                      {group.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">You'll appear in matching for players in your selected age group.</p>
-              </div>
-            )}
-            <Button onClick={saveProfile} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-              {saving ? 'Saving...' : 'Save Matching Preferences'}
             </Button>
           </TabsContent>
         </Tabs>

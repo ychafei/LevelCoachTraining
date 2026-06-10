@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Shared motion + visual primitives for the public marketing surface.
@@ -127,15 +127,24 @@ export function GradientImage({
   overlayClassName = '',
   children,
 }) {
+  // If the photo 404s (or otherwise fails to load), stop rendering the <img> so
+  // the broken-image icon never shows — the CSS gradient stays as a clean
+  // fallback. Reset on src change so a new URL gets a fresh attempt.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
   return (
     <div className={`relative overflow-hidden ${gradientClassName} ${className}`}>
-      {src && (
+      {src && !failed && (
         <img
           src={src}
           alt={alt}
           loading={eager ? 'eager' : 'lazy'}
           fetchPriority={eager ? 'high' : undefined}
           decoding="async"
+          onError={() => setFailed(true)}
           className={`absolute inset-0 h-full w-full object-cover ${imgClassName}`}
         />
       )}

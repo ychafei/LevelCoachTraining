@@ -40,6 +40,12 @@ export const organizationRepo = {
   suspendCoach: (payload) => callFn('orgAdmin', { action: 'suspendCoach', ...payload }),
   setPayoutRule: (payload) => callFn('orgAdmin', { action: 'setPayoutRule', ...payload }),
 
+  // Per-org platform-fee override (the platform's cut for this org's bookings,
+  // basis points). This is an admin decision — it goes through adminOps.setOrgFee
+  // (admin label), not the org-self-service orgAdmin function.
+  setPlatformFee: (organization_id, platform_fee_bps) =>
+    callFn('adminOps', { action: 'setOrgFee', organization_id, platform_fee_bps }),
+
   // --- Members ---------------------------------------------------------------
   inviteMember: (payload) => callFn('orgAdmin', { action: 'inviteMember', ...payload }),
   acceptMemberInvite: (payload) => callFn('orgAdmin', { action: 'acceptMemberInvite', ...payload }),

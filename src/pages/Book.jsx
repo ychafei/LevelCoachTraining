@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -125,12 +125,19 @@ function remainingCredits(credit) {
 }
 
 export default function Book() {
+  const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
   const stripeSuccess = urlParams.get('stripe_success');
   const { user, refetch } = useCurrentUser();
   const [showProfileGate, setShowProfileGate] = useState(false);
+
+  // Arriving from a coach profile (/book?coach_id=X) locks the coach: the
+  // wizard never shows the coach-selection step (step 0). The effective minimum
+  // step is 1, and "Back" on step 1 returns to that coach's profile.
+  const coachLocked = !!preCoachId;
+  const minStep = coachLocked ? 1 : 0;
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
   const hasSelectedBookingContext = !!preCoachId
@@ -139,7 +146,7 @@ export default function Book() {
     || urlParams.get('stripe_cancel') === '1'
     || !!saved?.coach?.id;
 
-  const [step, setStep]                       = useState(saved?.step ?? 0);
+  const [step, setStep]                       = useState(Math.max(saved?.step ?? 0, coachLocked ? 1 : 0));
   const [coach, setCoach]                     = useState(saved?.coach ? normalizePublicCoach(saved.coach) : null);
   const [coaches, setCoaches]                 = useState([]);
   const [packages, setPackages]               = useState([]);
@@ -837,16 +844,23 @@ export default function Book() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-        {/* Progress */}
-        <div className="mb-12">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Step {step + 1} of {STEPS.length}</span>
-            <span className="text-xs font-display tracking-widest uppercase text-accent">{STEPS[step]}</span>
-          </div>
-          <div className="h-1 bg-secondary rounded-full overflow-hidden">
-            <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
-          </div>
-        </div>
+        {/* Progress — when the coach is locked, the Coach step is hidden so the
+            indicator never invites returning to coach-selection. */}
+        {(() => {
+          const visibleSteps = coachLocked ? STEPS.slice(1) : STEPS;
+          const displayIndex = coachLocked ? step - 1 : step;
+          return (
+            <div className="mb-12">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Step {displayIndex + 1} of {visibleSteps.length}</span>
+                <span className="text-xs font-display tracking-widest uppercase text-accent">{STEPS[step]}</span>
+              </div>
+              <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((displayIndex + 1) / visibleSteps.length) * 100}%` }} />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Step 0: Coach */}
         {step === 0 && (
@@ -1299,8 +1313,21 @@ export default function Book() {
         {/* Navigation */}
         {step < 4 && (
           <div className="flex justify-between mt-6 lg:mt-10">
-            <Button variant="outline" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
-              className="font-display tracking-wider uppercase">
+            <Button
+              variant="outline"
+              onClick={() => {
+                // When the coach is locked and we're on the first usable step,
+                // "Back" returns to the coach's profile rather than the
+                // coach-selection list the user never chose from.
+                if (coachLocked && step === minStep) {
+                  navigate(`/coaches/${preCoachId}`);
+                  return;
+                }
+                setStep(Math.max(minStep, step - 1));
+              }}
+              disabled={!coachLocked && step === 0}
+              className="font-display tracking-wider uppercase"
+            >
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}

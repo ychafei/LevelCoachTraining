@@ -5,7 +5,7 @@ import useCurrentUser from '@/hooks/useCurrentUser';
 import {
   Users, Calendar, FileText, DollarSign, Briefcase, PenTool, MessageSquare,
   Shield, MailX, Zap, CalendarClock, CheckCircle2, UserCheck, History,
-  TrendingUp, Building2, Scale, ShieldAlert,
+  TrendingUp, Building2, Scale, ShieldAlert, SlidersHorizontal,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ViewAsMenu from '@/features/admin/ViewAsMenu';
@@ -26,6 +26,7 @@ const adminLinks = [
   { label: 'Users', path: '/admin/users', icon: Shield, desc: 'Manage users & roles' },
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare, desc: 'View conversations' },
   { label: 'Unsubscribes', path: '/admin/unsubscribes', icon: MailX, desc: 'Manage unsubscribes' },
+  { label: 'Settings', path: '/admin/settings', icon: SlidersHorizontal, desc: 'Platform fee & pricing' },
 ];
 
 function todayET() {

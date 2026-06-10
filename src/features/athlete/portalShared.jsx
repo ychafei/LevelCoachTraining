@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -170,6 +171,77 @@ export function ScoreBar({ value, max = 10, label }) {
       aria-label={label || `${value} out of ${max}`}
     >
       <div className="h-2 rounded-full bg-accent" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+// --- Motion + dashboard primitives -------------------------------------------
+
+// Fade-and-rise reveal. Honors prefers-reduced-motion: when reduced motion is
+// requested the element renders in its final state with no animation.
+export function Reveal({ children, as = 'div', delay = 0, y = 12, className, ...rest }) {
+  const reduce = useReducedMotion();
+  if (reduce) {
+    const Tag = as;
+    return <Tag className={className} {...rest}>{children}</Tag>;
+  }
+  const MotionTag = motion[as] || motion.div;
+  return (
+    <MotionTag
+      className={className}
+      initial={{ opacity: 0, y }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay }}
+      {...rest}
+    >
+      {children}
+    </MotionTag>
+  );
+}
+
+// Compact dashboard stat tile. Renders a real number (or "—"/skeleton) with an
+// icon, optional sub-line, and optional CTA. Used by the athlete hero row.
+export function StatTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  href,
+  action,
+  loading = false,
+  tone = 'accent',
+}) {
+  const toneRing = {
+    accent: 'bg-accent/10 text-accent',
+    green: 'bg-green-500/10 text-green-500',
+    amber: 'bg-yellow-500/10 text-yellow-500',
+    blue: 'bg-blue-500/10 text-blue-400',
+  }[tone] || 'bg-accent/10 text-accent';
+
+  return (
+    <div className="flex h-full flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg', toneRing)}>
+          {Icon && <Icon className="h-5 w-5" aria-hidden="true" />}
+        </span>
+        <p className="pt-1.5 text-sm font-semibold leading-snug text-foreground">{label}</p>
+      </div>
+      <div className="mt-3">
+        {loading ? (
+          <div className="h-8 w-16 animate-pulse rounded bg-secondary/60" aria-hidden="true" />
+        ) : (
+          <p className="font-display text-3xl font-extrabold tracking-tight text-foreground">{value}</p>
+        )}
+        {sub && !loading && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
+        {href && action && !loading && (
+          <Link
+            to={href}
+            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+          >
+            {action}
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

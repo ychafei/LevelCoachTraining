@@ -199,7 +199,7 @@ export default function ChildForm({ open, onOpenChange, child = null, onSaved = 
 
           <fieldset>
             <legend className="text-sm font-medium text-foreground">Sports</legend>
-            <p className="mt-0.5 text-xs text-muted-foreground">Pick everything they train in — this powers their assessments and coach matching.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Pick everything they train in — this powers their assessments and the right coaches for them.</p>
             <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {sportOptions().map((option) => (
                 <label

@@ -356,6 +356,76 @@ async function setCoachFee(ctx, payload) {
   return { status: 200, body: { ok: true } };
 }
 
+// Platform-wide fee: the global cut applied to bookings with no coach/org
+// override. Stored in site_content (key 'platform_fee_bps', value as a string).
+async function setPlatformFee(ctx, payload) {
+  const { databases, actor, labels } = ctx;
+  if (!labels.includes('superadmin')) {
+    return { status: 403, body: { error: 'Super admin access required.' } };
+  }
+  const feeBps = int(payload.platform_fee_bps, 0, 5000);
+  if (feeBps === undefined) {
+    return { status: 400, body: { error: 'platform_fee_bps must be an integer 0-5000.' } };
+  }
+
+  const existing = await databases.listDocuments(DB_ID, 'site_content', [
+    Query.equal('key', 'platform_fee_bps'),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+
+  const before = existing.documents[0]?.value ?? null;
+  if (existing.documents[0]) {
+    await databases.updateDocument(DB_ID, 'site_content', existing.documents[0].$id, {
+      value: String(feeBps),
+      content_type: 'text',
+    });
+  } else {
+    await databases.createDocument(DB_ID, 'site_content', ID.unique(), {
+      key: 'platform_fee_bps',
+      value: String(feeBps),
+      content_type: 'text',
+    });
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: 'super_admin',
+    action: 'platform.set_fee',
+    entity_type: 'SiteContent',
+    entity_id: 'platform_fee_bps',
+    before: JSON.stringify({ platform_fee_bps: before }),
+    after: JSON.stringify({ platform_fee_bps: String(feeBps) }),
+  });
+  return { status: 200, body: { ok: true, platform_fee_bps: feeBps } };
+}
+
+// Per-organization platform-fee override: the platform's cut for bookings
+// routed through this org. An admin decision (not org self-service).
+async function setOrgFee(ctx, payload) {
+  const { databases, actor } = ctx;
+  const organizationId = String(payload.organization_id || '');
+  const feeBps = int(payload.platform_fee_bps, 0, 5000);
+  if (!organizationId) return { status: 400, body: { error: 'organization_id is required.' } };
+  if (feeBps === undefined) {
+    return { status: 400, body: { error: 'platform_fee_bps must be an integer 0-5000.' } };
+  }
+
+  const org = await databases.getDocument(DB_ID, 'organizations', organizationId).catch(() => null);
+  if (!org) return { status: 404, body: { error: 'Organization not found.' } };
+
+  await databases.updateDocument(DB_ID, 'organizations', organizationId, { platform_fee_bps: feeBps });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'org.set_fee',
+    entity_type: 'Organization',
+    entity_id: organizationId,
+    before: JSON.stringify({ platform_fee_bps: org.platform_fee_bps ?? null }),
+    after: JSON.stringify({ platform_fee_bps: feeBps }),
+  });
+  return { status: 200, body: { ok: true, platform_fee_bps: feeBps } };
+}
+
 async function setCoachActive(ctx, payload) {
   const { databases, actor } = ctx;
   const coachId = String(payload.coach_id || '');
@@ -453,6 +523,12 @@ export default async ({ req, res, error }) => {
         break;
       case 'setCoachFee':
         result = await setCoachFee(ctx, payload);
+        break;
+      case 'setPlatformFee':
+        result = await setPlatformFee(ctx, payload);
+        break;
+      case 'setOrgFee':
+        result = await setOrgFee(ctx, payload);
         break;
       case 'setCoachActive':
         result = await setCoachActive(ctx, payload);

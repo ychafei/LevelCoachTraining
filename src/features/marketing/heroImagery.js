@@ -38,10 +38,10 @@ export const MARKETING_IMAGES = {
     src: unsplash('photo-1526232761682-d26e03ac148e', 1280),
     alt: 'A youth soccer player on a sunny field during a coached training session.',
   },
-  // For Coaches hero — a coach instructing on the sideline.
+  // For Coaches hero — a coach leading a training session.
   coachesHero: {
-    src: unsplash('photo-1526676037777-05a232554f77', 1280),
-    alt: 'A coach with a clipboard giving instruction beside a sports field.',
+    src: unsplash('photo-1571019613454-1cb2f99b2d8b', 1280),
+    alt: 'A coach leading a training session.',
   },
   // For Organizations hero — a team huddle / roster.
   organizationsHero: {

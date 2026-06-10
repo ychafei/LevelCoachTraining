@@ -23,18 +23,22 @@ export function useFamily(user) {
 
   const children = query.data?.children || [];
   const links = query.data?.links || [];
+
   const linkByAthleteId = {};
   for (const link of links) linkByAthleteId[link.athlete_id] = link;
 
+  const childById = {};
   const childNamesById = {};
   for (const child of children) {
-    childNamesById[child.id] = [child.first_name, child.last_name].filter(Boolean).join(' ');
+    childById[child.id] = child;
+    childNamesById[child.id] = [child.first_name, child.last_name].filter(Boolean).join(' ') || 'Athlete';
   }
 
   return {
     children,
     links,
     linkByAthleteId,
+    childById,
     childNamesById,
     childIds: children.map((child) => child.id),
     loading: query.isLoading && !!user?.id,

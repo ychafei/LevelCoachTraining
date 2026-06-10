@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { cn } from '@/lib/utils';
+import { fullName, initialsOf } from '@/lib/displayName';
 import { coachRepo } from '@/api/repo';
 import NotificationsBell from '@/features/coach/NotificationsBell';
 
@@ -45,20 +46,11 @@ const navItems = [
   { label: 'Settings', to: '/coach/settings', icon: Settings, isActive: ({ pathname }) => pathname === '/coach/settings' },
 ];
 
+// Coach display name: prefer a real first/last name, then `name`. The email is
+// never used as the name here — it stays on the small secondary line only.
 function getDisplayName(user) {
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
-  return name || user?.full_name || user?.name || user?.email || 'Coach';
-}
-
-function getInitials(name) {
-  const initials = String(name || '')
-    .split(/\s+/)
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-  return initials || 'C';
+  const name = fullName(user);
+  return name === 'Member' ? 'Coach' : name;
 }
 
 function SidebarNav({ onSelect }) {
@@ -115,7 +107,7 @@ function Topbar({ mobileOpen, setMobileOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [coachProfile, setCoachProfile] = useState(null);
   const displayName = useMemo(() => getDisplayName(user), [user]);
-  const initials = getInitials(displayName);
+  const initials = initialsOf(user);
   const avatarUrl = coachProfile?.photo_url || user?.photo_url || '';
   const accountId = user?.account_id || '';
   const coachId = user?.coach_id || '';

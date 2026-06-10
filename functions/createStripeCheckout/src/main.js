@@ -178,9 +178,48 @@ function bpsInt(value) {
   return Number.isInteger(n) && n >= 0 && n <= 10000 ? n : null;
 }
 
-function defaultPlatformBps(coach) {
-  const fromCoach = bpsInt(coach.platform_fee_bps);
+// Admin-set fees (coach/org overrides + the global setting) are capped at 50%.
+function feeBpsInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 5000 ? n : null;
+}
+
+// Global platform fee from the site_content collection (key 'platform_fee_bps').
+// Read fresh on every checkout (one cheap listDocuments) so an admin change in
+// /admin/settings reflects immediately — no module-level cache that could go
+// stale across warm-container invocations.
+async function globalPlatformBps(db) {
+  try {
+    const rows = await db.listDocuments(DB_ID, 'site_content', [
+      Query.equal('key', 'platform_fee_bps'),
+      Query.limit(1),
+    ]);
+    const raw = rows.documents[0]?.value;
+    if (raw !== undefined && raw !== null) {
+      return feeBpsInt(Number.parseInt(String(raw), 10));
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Resolution order for the platform's cut (basis points):
+//   (a) coach.platform_fee_bps (admin-set, 0-5000)
+//   (b) org.platform_fee_bps when routed through an active org (admin-set, 0-5000)
+//   (c) global site_content 'platform_fee_bps' (0-5000)
+//   (d) env PLATFORM_FEE_BPS
+//   (e) 1500 (15%)
+// `org` is the active organization the booking routes through, or null.
+async function resolvePlatformBps(db, coach, org) {
+  const fromCoach = feeBpsInt(coach.platform_fee_bps);
   if (fromCoach !== null) return fromCoach;
+  if (org) {
+    const fromOrg = feeBpsInt(org.platform_fee_bps);
+    if (fromOrg !== null) return fromOrg;
+  }
+  const fromGlobal = await globalPlatformBps(db);
+  if (fromGlobal !== null) return fromGlobal;
   const fromEnv = bpsInt(Number.parseInt(process.env.PLATFORM_FEE_BPS || '', 10));
   if (fromEnv !== null) return fromEnv;
   return 1500;
@@ -220,10 +259,14 @@ async function activePayoutRule(db, organizationId, coachId) {
 }
 
 // Resolves the split (basis points) for a payment to this coach. All shares are
-// integers summing to 10000; never floats.
+// integers summing to 10000; never floats. The platform's cut follows the
+// coach → org → global → env → 1500 resolution order; a `payout_rules` row,
+// when present, is authoritative (it carries its own platform_share_bps).
 async function resolvePayoutPlan(db, coach) {
-  const platformDefault = defaultPlatformBps(coach);
   const org = await activeOrganizationForCoach(db, coach.$id);
+  // Thread the org's fee into the platform default for org-routed plans, so an
+  // org override applies to bookings that route through that org.
+  const platformDefault = await resolvePlatformBps(db, coach, org);
   if (org) {
     const rule = await activePayoutRule(db, org.$id, coach.$id);
     if (rule) {
@@ -237,7 +280,14 @@ async function resolvePayoutPlan(db, coach) {
       return { platform_bps: platformBps, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id };
     }
     if (org.payout_model === 'split' || org.payout_model === 'split_future') {
-      return { platform_bps: 1500, coach_bps: 6000, org_bps: 2500, organization_id: org.$id };
+      // Coach keeps 6000; the platform takes its resolved cut and the org keeps
+      // the remainder. Shares always sum to 10000.
+      const coachBps = 6000;
+      const orgBps = 10000 - platformDefault - coachBps;
+      if (orgBps < 0) {
+        return { error: `platform fee ${platformDefault}bps leaves no org share for org ${org.$id}` };
+      }
+      return { platform_bps: platformDefault, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id };
     }
     if (org.payout_model === 'organization') {
       return { platform_bps: platformDefault, coach_bps: 0, org_bps: 10000 - platformDefault, organization_id: org.$id };
