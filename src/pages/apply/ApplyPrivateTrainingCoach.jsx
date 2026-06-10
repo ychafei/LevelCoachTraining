@@ -710,12 +710,14 @@ function StatusShell({ icon, tone, title, body, primary, children }) {
                 {primary?.label}
               </button>
             )}
-            <Link
-              to="/"
-              className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              Back to platform
-            </Link>
+            {primary?.to !== '/' && (
+              <Link
+                to="/"
+                className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Back to platform
+              </Link>
+            )}
           </div>
           {children}
         </div>
