@@ -157,6 +157,27 @@ async function submit(databases, req, payload) {
 
 // --- review (admin label) ---------------------------------------------------------
 
+// Create a coach document, tolerating a live `coaches` collection that is
+// missing newer attributes (schema drift). On an "Unknown attribute" error we
+// drop that key and retry, so approval always succeeds with whatever the
+// collection currently supports.
+async function createCoachResilient(databases, data) {
+  const payload = { ...data };
+  for (let i = 0; i < 15; i += 1) {
+    try {
+      return await databases.createDocument(DB_ID, 'coaches', ID.unique(), payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Could not create coach record.');
+}
+
 async function linkableProfile(databases, users, email) {
   const rows = await databases.listDocuments(DB_ID, 'profiles', [
     Query.equal('email', email),
@@ -213,7 +234,7 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
 
   // Approve: create the coach record (unpublished, inactive until onboarding).
   const profile = await linkableProfile(databases, users, application.email);
-  const coach = await databases.createDocument(DB_ID, 'coaches', ID.unique(), {
+  const coach = await createCoachResilient(databases, {
     first_name: application.first_name,
     last_name: application.last_name,
     email: application.email,
