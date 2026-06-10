@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
+import PackagesManager from '@/features/coach/PackagesManager';
 
 const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -732,6 +733,11 @@ export default function CoachProfile() {
                 Tip: save your sport selection above first — per-sport details apply to your saved sports.
               </p>
             )}
+          </Section>
+
+          {/* Packages & pricing — the coach sets their own prices */}
+          <Section title="Packages & Pricing" icon={Wallet}>
+            <PackagesManager />
           </Section>
 
           {/* Service area */}

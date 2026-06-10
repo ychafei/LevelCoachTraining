@@ -541,16 +541,26 @@ async function provisionPricingPackages() {
   await ensureCollection('pricing_packages', 'Pricing Packages', PUBLIC_READ_ADMIN_WRITE, false);
   await attrString('pricing_packages', 'name', 200, true);
   await attrInt('pricing_packages',    'sessions');
-  await attrFloat('pricing_packages',  'price', true);
+  await attrFloat('pricing_packages',  'price', true);                     // legacy dollars (back-compat)
   await attrString('pricing_packages', 'badge', 100);
   await attrString('pricing_packages', 'description', 1000);
   await attrString('pricing_packages', 'includes', 500, false, null, true); // string[]
   await attrInt('pricing_packages',    'display_order', false, null, null, 0);
   await attrBool('pricing_packages',   'is_visible', false, true);
+  // Per-coach marketplace pricing. A package now belongs to a coach and is
+  // self-contained: price_cents is the total charge, duration_minutes the
+  // session length. coach_id empty = legacy/platform-default package.
+  await attrString('pricing_packages', 'coach_id', 64);
+  await attrInt('pricing_packages',    'price_cents');                      // authoritative total in cents
+  await attrInt('pricing_packages',    'duration_minutes');                 // session length
+  await attrString('pricing_packages', 'session_type', 120);
+  await attrBool('pricing_packages',   'is_active', false, true);
 
   await waitAttributesReady('pricing_packages');
   await ensureIndex('pricing_packages', 'idx_is_visible',    'key', ['is_visible']);
   await ensureIndex('pricing_packages', 'idx_display_order', 'key', ['display_order']);
+  await ensureIndex('pricing_packages', 'idx_pkg_coach',     'key', ['coach_id']);
+  await ensureIndex('pricing_packages', 'idx_pkg_active',    'key', ['is_active']);
 }
 
 async function provisionBlogPosts() {

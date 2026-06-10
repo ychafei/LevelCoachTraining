@@ -83,8 +83,38 @@ const DEFAULT_AVAILABILITY_PREFERENCE = {
 // Steps: 0=Coach, 1=Package, 2=Duration, 3=Preferences, 4=Checkout
 const STEPS = ['Coach', 'Package', 'Duration', 'Preferences', 'Checkout'];
 
+// A self-contained per-coach package carries its own total (price_cents) and
+// session length (duration_minutes); the legacy per-hour multiplier no longer
+// applies to it.
+function packagePriceCents(pkg) {
+  const pc = Number(pkg?.price_cents);
+  return Number.isInteger(pc) && pc > 0 ? pc : null;
+}
+function isSelfContained(pkg) {
+  return packagePriceCents(pkg) != null;
+}
+function packageDurationMinutes(pkg) {
+  const d = Number(pkg?.duration_minutes);
+  return Number.isInteger(d) && d >= 15 ? d : null;
+}
+function durationLabel(minutes) {
+  if (minutes % 60 === 0) return `${minutes / 60} Hour${minutes > 60 ? 's' : ''}`;
+  return `${minutes} Minutes`;
+}
+// DURATIONS entry for a given minute length, or a synthetic one (used for
+// per-coach packages whose length isn't in the legacy table).
+function durationFromMinutes(minutes) {
+  if (!minutes) return null;
+  return DURATIONS.find(d => d.minutes === minutes)
+    || { label: durationLabel(minutes), minutes, hours: minutes / 60, discount: 0 };
+}
+
+// Per-session price in dollars (for display only — the server is authoritative).
 function calcPrice(pkg, dur) {
-  if (!pkg || !dur) return null;
+  if (!pkg) return null;
+  const pc = packagePriceCents(pkg);
+  if (pc != null) return Math.round(pc / (pkg.sessions || 1)) / 100;
+  if (!dur) return null;
   const perSessionBase = pkg.price / (pkg.sessions || 1);
   return Math.round(perSessionBase * dur.hours * (1 - dur.discount));
 }
@@ -183,16 +213,12 @@ export default function Book() {
     let cancelled = false;
     (async () => {
       try {
-        const [coachRes, packageRows] = await Promise.all([
-          rpc.invoke('getPublicCoaches', {}).catch((err) => {
-            console.warn('Public coaches unavailable', err);
-            return null;
-          }),
-          pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
-        ]);
+        const coachRes = await rpc.invoke('getPublicCoaches', {}).catch((err) => {
+          console.warn('Public coaches unavailable', err);
+          return null;
+        });
         if (cancelled) return;
         setCoaches((coachRes?.data?.coaches || []).map(normalizePublicCoach));
-        setPackages(packageRows);
       } catch (err) {
         console.error('Book public data load failed', err);
       } finally {
@@ -201,6 +227,23 @@ export default function Book() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Packages are per-coach: load the selected coach's own packages (falling
+  // back to platform-default templates only if the coach has none). This is the
+  // marketplace model — each coach sets their own prices.
+  useEffect(() => {
+    let cancelled = false;
+    if (!coach?.id) { setPackages([]); return undefined; }
+    (async () => {
+      let rows = await pricingPackageRepo.listForCoach(coach.id).catch(() => []);
+      if (!rows.length) rows = await pricingPackageRepo.listPlatformDefaults().catch(() => []);
+      if (cancelled) return;
+      setPackages(rows);
+      // Drop a stale package selection that doesn't belong to this coach.
+      setSelectedPackage(prev => (prev && rows.some(r => r.id === prev.id) ? prev : null));
+    })();
+    return () => { cancelled = true; };
+  }, [coach?.id]);
 
   // One-shot: pre-select coach from /coaches/:id "Book with this coach" link.
   useEffect(() => {
@@ -259,7 +302,7 @@ export default function Book() {
         setPaymentConfirmed(true);
         setSkipToSchedule(true);
         if (active.session_duration_minutes) {
-          const creditDur = DURATIONS.find(d => d.minutes === active.session_duration_minutes);
+          const creditDur = durationFromMinutes(active.session_duration_minutes);
           if (creditDur) setDuration(creditDur);
         }
         setScheduling(true);
@@ -315,7 +358,7 @@ export default function Book() {
           setUseExistingCredit(true);
           setCreditRecord(active);
           if (active.session_duration_minutes) {
-            const creditDur = DURATIONS.find(d => d.minutes === active.session_duration_minutes);
+            const creditDur = durationFromMinutes(active.session_duration_minutes);
             if (creditDur) setDuration(creditDur);
           }
           setStripeCheckoutMessage('');
@@ -778,7 +821,9 @@ export default function Book() {
     pkg: selectedPackage,
     duration,
     sessionPrice,
-    packageTotal: sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null,
+    packageTotal: packagePriceCents(selectedPackage) != null
+      ? packagePriceCents(selectedPackage) / 100
+      : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null),
     usingCredit: useExistingCredit,
     creditRemaining: existingCredit ? remainingCredits(existingCredit) : null,
     creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
@@ -842,7 +887,7 @@ export default function Book() {
                       setPaymentConfirmed(true);
                       setCreditRecord(existingCredit);
                       if (existingCredit.session_duration_minutes) {
-                        const creditDur = DURATIONS.find(d => d.minutes === existingCredit.session_duration_minutes);
+                        const creditDur = durationFromMinutes(existingCredit.session_duration_minutes);
                         if (creditDur) setDuration(creditDur);
                       }
                       setScheduling(true);
@@ -858,21 +903,44 @@ export default function Book() {
               </div>
             )}
 
+            {packages.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                <Package className="w-6 h-6 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
+                <p className="text-sm text-muted-foreground">
+                  {coach ? `${coach.name || 'This coach'} hasn't published any packages yet.` : 'Select a coach to see their packages.'}
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {packages.map((pkg) => {
-                const perSession = Math.round(pkg.price / (pkg.sessions || 1));
+                const totalCents = packagePriceCents(pkg);
+                const totalLabel = totalCents != null
+                  ? `$${(totalCents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                  : `$${pkg.price}`;
+                const perSession = totalCents != null
+                  ? Math.round(totalCents / (pkg.sessions || 1)) / 100
+                  : Math.round(pkg.price / (pkg.sessions || 1));
+                const pkgDuration = packageDurationMinutes(pkg);
                 const isSelected = selectedPackage?.id === pkg.id;
                 return (
-                  <button key={pkg.id} onClick={() => { setSelectedPackage(pkg); setUseExistingCredit(false); }}
+                  <button key={pkg.id} onClick={() => {
+                    setSelectedPackage(pkg);
+                    setUseExistingCredit(false);
+                    // A self-contained package fixes the session length; pre-set
+                    // it so the Duration step becomes a confirmation.
+                    setDuration(pkgDuration != null ? durationFromMinutes(pkgDuration) : null);
+                  }}
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
                       <span className="absolute top-3 right-3 text-xs font-display tracking-wide bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
                     )}
                     <Package className={`w-5 h-5 mb-3 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                    <p className="font-display text-xl font-bold tracking-wider">{pkg.name.toUpperCase()}</p>
-                    <p className="text-2xl font-display font-bold text-accent mt-1">${pkg.price}</p>
+                    <p className="font-display text-xl font-bold tracking-wider">{(pkg.name || '').toUpperCase()}</p>
+                    <p className="text-2xl font-display font-bold text-accent mt-1">{totalLabel}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : `1 session · $${perSession}/hr base`}
+                      {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : '1 session'}
+                      {pkgDuration != null ? ` · ${pkgDuration} min` : ''}
+                      {pkg.session_type ? ` · ${String(pkg.session_type).replace('_', ' ')}` : ''}
                     </p>
                     {pkg.description && <p className="text-sm text-muted-foreground mt-3">{pkg.description}</p>}
                     {pkg.includes?.length > 0 && (
@@ -895,28 +963,48 @@ export default function Book() {
         {step === 2 && (
           <div>
             <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SESSION DURATION</h2>
-            <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly rate.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {DURATIONS.map((d) => {
-                const price = calcPrice(selectedPackage, d);
-                const isSelected = duration?.minutes === d.minutes;
-                return (
-                  <button key={d.minutes} onClick={() => setDuration(d)}
-                    className={`p-6 rounded-lg border text-center transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
-                    {d.discount > 0 && (
-                      <span className="absolute top-2 right-2 text-xs font-display bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
-                        -{Math.round(d.discount * 100)}%
-                      </span>
-                    )}
-                    <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                    <span className="font-display text-lg font-bold tracking-wider block">{d.label}</span>
-                    {price !== null && (
-                      <span className={`text-sm font-display font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {isSelfContained(selectedPackage) ? (
+              <>
+                <p className="text-muted-foreground text-sm mb-8">
+                  This package sets the session length. Confirm and continue.
+                </p>
+                <div className="rounded-lg border border-accent bg-accent/10 p-6 max-w-sm">
+                  <Timer className="w-5 h-5 text-accent mb-2" aria-hidden="true" />
+                  <p className="font-display text-lg font-bold tracking-wider">
+                    {duration?.label || `${packageDurationMinutes(selectedPackage)} Minutes`}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions · ` : ''}
+                    ${(packagePriceCents(selectedPackage) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} total
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly rate.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {DURATIONS.map((d) => {
+                    const price = calcPrice(selectedPackage, d);
+                    const isSelected = duration?.minutes === d.minutes;
+                    return (
+                      <button key={d.minutes} onClick={() => setDuration(d)}
+                        className={`p-6 rounded-lg border text-center transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
+                        {d.discount > 0 && (
+                          <span className="absolute top-2 right-2 text-xs font-display bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+                            -{Math.round(d.discount * 100)}%
+                          </span>
+                        )}
+                        <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
+                        <span className="font-display text-lg font-bold tracking-wider block">{d.label}</span>
+                        {price !== null && (
+                          <span className={`text-sm font-display font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         )}
 

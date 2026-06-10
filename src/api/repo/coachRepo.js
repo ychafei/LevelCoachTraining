@@ -46,8 +46,13 @@ export const coachRepo = {
   requestEmailCode: (email) => callFn('coachSelf', { action: 'requestEmailCode', ...(email ? { email } : {}) }),
   confirmEmailCode: (code) => callFn('coachSelf', { action: 'confirmEmailCode', code }),
 
+  // Per-coach packages (the coach owns their own prices/offerings).
+  listPackages: async () => (await callFn('coachSelf', { action: 'listPackages' }))?.packages || [],
+  savePackage: (pkg) => callFn('coachSelf', { action: 'savePackage', ...pkg }),
+  deletePackage: (package_id) => callFn('coachSelf', { action: 'deletePackage', package_id }),
+
   // Marketplace publication (server-gated: legal packet + Connect + verified
-  // email + complete profile).
+  // email + complete profile + at least one active package).
   publish: () => callFn('coachSelf', { action: 'publish' }),
   unpublish: () => callFn('coachSelf', { action: 'unpublish' }),
 

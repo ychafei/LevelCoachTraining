@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { logAdminAction } from '@/lib/audit';
 
-const empty = { name: '', sessions: '', price: '', badge: '', description: '', includes: [], is_visible: true, display_order: 0 };
+const empty = { name: '', sessions: '', price: '', duration_minutes: 60, badge: '', description: '', includes: [], is_visible: true, display_order: 0 };
 
 export default function AdminPricing() {
   const { user, isAdmin } = useCurrentUser();
@@ -27,7 +27,19 @@ export default function AdminPricing() {
   const load = () => pricingPackageRepo.list('display_order').then(setPackages);
 
   const save = async () => {
-    const data = { ...editing, sessions: Number(editing.sessions), price: Number(editing.price), display_order: Number(editing.display_order) };
+    // Platform-default templates are self-contained too: coach_id empty,
+    // price stored in cents, a default session length, active = visible.
+    const priceDollars = Number(editing.price);
+    const data = {
+      ...editing,
+      sessions: Number(editing.sessions) || 1,
+      price: priceDollars,
+      price_cents: Math.round(priceDollars * 100),
+      duration_minutes: Number(editing.duration_minutes) || 60,
+      coach_id: '',
+      is_active: editing.is_visible !== false,
+      display_order: Number(editing.display_order),
+    };
     const isUpdate = !!editing.id;
     const previous = isUpdate ? packages.find(p => p.id === editing.id) : null;
     let savedId = editing.id;
@@ -102,8 +114,14 @@ export default function AdminPricing() {
   return (
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className="mb-3">
+          <p className="text-sm text-muted-foreground">
+            These are <strong>platform-default templates</strong> shown only when a coach hasn't created their own packages.
+            Coaches set their own prices and packages in their portal — this list does not override them.
+          </p>
+        </div>
         <div className="flex items-center justify-between mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">PRICING PACKAGES</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">DEFAULT PACKAGES</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => { setEditing({ ...empty, includes: [] }); setIncludeInput(''); }} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
@@ -131,6 +149,10 @@ export default function AdminPricing() {
                       <Label className="font-display tracking-wider uppercase text-xs">Order</Label>
                       <Input type="number" value={editing.display_order} onChange={e => setEditing({ ...editing, display_order: e.target.value })} className="bg-secondary border-border mt-1" />
                     </div>
+                  </div>
+                  <div>
+                    <Label className="font-display tracking-wider uppercase text-xs">Session Length (minutes)</Label>
+                    <Input type="number" value={editing.duration_minutes} onChange={e => setEditing({ ...editing, duration_minutes: e.target.value })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
                     <Label className="font-display tracking-wider uppercase text-xs">Badge (e.g. Most Popular)</Label>

@@ -317,6 +317,105 @@ async function setBookingRules(databases, coach, payload) {
   return { status: 200, body: { ok: true, booking_rules: rules } };
 }
 
+// --- Packages (per-coach, self-contained pricing) -------------------------------
+// Each coach owns their packages. A package is a complete offering: N sessions
+// of duration_minutes for price_cents total. Marketplace pricing — the platform
+// never dictates a coach's prices.
+
+const SESSION_TYPES = ['private', 'small_group', 'team', 'evaluation', 'virtual'];
+const MIN_PRICE_CENTS = 500;            // $5.00 floor
+const MAX_PRICE_CENTS = 5_000_00;       // $5,000 ceiling per package
+
+function packageView(doc) {
+  return {
+    id: doc.$id,
+    coach_id: doc.coach_id || '',
+    name: doc.name || '',
+    sessions: Number(doc.sessions) || 1,
+    duration_minutes: Number(doc.duration_minutes) || 60,
+    price_cents: Number(doc.price_cents) || 0,
+    session_type: doc.session_type || '',
+    description: doc.description || '',
+    badge: doc.badge || '',
+    is_active: doc.is_active !== false,
+    display_order: Number(doc.display_order) || 0,
+  };
+}
+
+async function listPackages(databases, coach) {
+  const rows = await databases.listDocuments(DB_ID, 'pricing_packages', [
+    Query.equal('coach_id', coach.$id),
+    Query.limit(100),
+  ]).catch(() => ({ documents: [] }));
+  const packages = rows.documents
+    .map(packageView)
+    .sort((a, b) => a.display_order - b.display_order || a.price_cents - b.price_cents);
+  return { status: 200, body: { packages } };
+}
+
+async function savePackage(databases, coach, payload) {
+  const name = str(payload.name, 1, 200);
+  const sessions = int(payload.sessions, 1, 100);
+  const duration = int(payload.duration_minutes, 15, 480);
+  const priceCents = int(payload.price_cents, MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+  if (name === undefined) return { status: 400, body: { error: 'A package name is required.' } };
+  if (sessions === undefined) return { status: 400, body: { error: 'Sessions must be an integer between 1 and 100.' } };
+  if (duration === undefined) return { status: 400, body: { error: 'Session length must be 15–480 minutes.' } };
+  if (priceCents === undefined) return { status: 400, body: { error: `Price must be between $${MIN_PRICE_CENTS / 100} and $${MAX_PRICE_CENTS / 100}.` } };
+
+  const sessionType = payload.session_type ? (SESSION_TYPES.includes(payload.session_type) ? payload.session_type : undefined) : '';
+  if (sessionType === undefined) return { status: 400, body: { error: 'Invalid session type.' } };
+  const description = payload.description != null ? str(payload.description, 0, 1000) ?? '' : '';
+  const badge = payload.badge != null ? str(payload.badge, 0, 100) ?? '' : '';
+  const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
+  const isActive = payload.is_active !== false;
+
+  const data = {
+    coach_id: coach.$id,
+    name,
+    sessions,
+    duration_minutes: duration,
+    price_cents: priceCents,
+    price: Math.round(priceCents) / 100,   // legacy dollar mirror (back-compat)
+    session_type: sessionType,
+    description,
+    badge,
+    display_order: displayOrder,
+    is_active: isActive,
+    is_visible: isActive,                  // legacy visibility mirror
+  };
+
+  let doc;
+  if (payload.package_id) {
+    const existing = await databases.getDocument(DB_ID, 'pricing_packages', String(payload.package_id)).catch(() => null);
+    if (!existing) return { status: 404, body: { error: 'Package not found.' } };
+    if (existing.coach_id !== coach.$id) return { status: 403, body: { error: 'You can only edit your own packages.' } };
+    doc = await databases.updateDocument(DB_ID, 'pricing_packages', existing.$id, data);
+  } else {
+    doc = await databases.createDocument(DB_ID, 'pricing_packages', ID.unique(), data);
+  }
+  return { status: 200, body: { ok: true, package: packageView(doc) } };
+}
+
+async function deletePackage(databases, coach, payload) {
+  const id = String(payload.package_id || '');
+  if (!id) return { status: 400, body: { error: 'package_id is required.' } };
+  const existing = await databases.getDocument(DB_ID, 'pricing_packages', id).catch(() => null);
+  if (!existing) return { status: 404, body: { error: 'Package not found.' } };
+  if (existing.coach_id !== coach.$id) return { status: 403, body: { error: 'You can only delete your own packages.' } };
+  await databases.deleteDocument(DB_ID, 'pricing_packages', id);
+  return { status: 200, body: { ok: true } };
+}
+
+async function hasActivePackage(databases, coach) {
+  const rows = await databases.listDocuments(DB_ID, 'pricing_packages', [
+    Query.equal('coach_id', coach.$id),
+    Query.equal('is_active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
 async function requestEmailCode(databases, coach, payload, error) {
   const target = String(payload.email || coach.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(target) || target.length > 254) {
@@ -481,6 +580,7 @@ async function publish(databases, profile, coach) {
   if (!String(coach.photo_url || '').trim()) missing.push('photo');
   if (!(await hasSport(databases, coach))) missing.push('sport');
   if (!(await hasAvailability(databases, coach))) missing.push('availability');
+  if (!(await hasActivePackage(databases, coach))) missing.push('pricing');
   if (missing.length > 0) {
     return { status: 400, body: { error: 'Publish requirements not met.', missing } };
   }
@@ -546,6 +646,15 @@ export default async ({ req, res, error }) => {
         break;
       case 'setBookingRules':
         result = await setBookingRules(databases, coach, payload);
+        break;
+      case 'listPackages':
+        result = await listPackages(databases, coach);
+        break;
+      case 'savePackage':
+        result = await savePackage(databases, coach, payload);
+        break;
+      case 'deletePackage':
+        result = await deletePackage(databases, coach, payload);
         break;
       case 'requestEmailCode':
         result = await requestEmailCode(databases, coach, payload, error);

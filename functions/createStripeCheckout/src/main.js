@@ -152,6 +152,12 @@ async function coachLegalPacketComplete(db, coach) {
 }
 
 function calculateAmountCents(pkg, durationMinutes) {
+  // Self-contained per-coach package: price_cents is the authoritative total.
+  // The legacy global per-hour multiplier no longer applies.
+  const priceCents = Number(pkg.price_cents);
+  if (Number.isInteger(priceCents) && priceCents > 0) return priceCents;
+
+  // Legacy fallback: global package priced as (per-hour base × duration table).
   const duration = DURATIONS.get(Number(durationMinutes) || 60);
   if (!duration) return null;
   const sessions = Math.max(1, Number(pkg.sessions) || 1);
@@ -160,6 +166,11 @@ function calculateAmountCents(pkg, durationMinutes) {
   const perSessionBase = basePrice / sessions;
   const perSessionPrice = Math.round(perSessionBase * duration.hours * (1 - duration.discount));
   return Math.round(perSessionPrice * sessions * 100);
+}
+
+// Is this a self-contained per-coach package (price + duration baked in)?
+function isSelfContained(pkg) {
+  return Number.isInteger(Number(pkg.price_cents)) && Number(pkg.price_cents) > 0;
 }
 
 function bpsInt(value) {
@@ -363,10 +374,9 @@ export default async ({ req, res, error }) => {
     const payload = body(req);
     const packageId = payload.packageId || payload.package_id;
     const coachId = payload.coachId || payload.coach_id;
-    const durationMinutes = Number(payload.sessionDurationMinutes || payload.session_duration_minutes || 60);
+    const requestedDuration = Number(payload.sessionDurationMinutes || payload.session_duration_minutes || 60);
     if (!validId(packageId)) return res.json({ error: 'packageId is required.' }, 400);
     if (!validId(coachId)) return res.json({ error: 'coachId is required.' }, 400);
-    if (!DURATIONS.has(durationMinutes)) return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
     if (payload.bookingId && !validId(payload.bookingId)) {
       return res.json({ error: 'bookingId is invalid.' }, 400);
     }
@@ -390,6 +400,17 @@ export default async ({ req, res, error }) => {
     const pkgCoachId = typeof pkg.coach_id === 'string' ? pkg.coach_id : '';
     if (pkgCoachId && pkgCoachId !== coach.$id) {
       return res.json({ error: 'This package is not available for this coach.' }, 400);
+    }
+    if (pkg.is_active === false) return res.json({ error: 'This package is not available for checkout.' }, 400);
+
+    // Duration: a self-contained package defines its own session length (server
+    // is the source of truth). Legacy global packages still use the duration
+    // table the client selected.
+    const durationMinutes = isSelfContained(pkg)
+      ? (Number.isInteger(Number(pkg.duration_minutes)) && Number(pkg.duration_minutes) >= 15 ? Number(pkg.duration_minutes) : 60)
+      : requestedDuration;
+    if (!isSelfContained(pkg) && !DURATIONS.has(durationMinutes)) {
+      return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
     }
 
     // Publish gate: published coaches only. Fallback for rollout: documents that

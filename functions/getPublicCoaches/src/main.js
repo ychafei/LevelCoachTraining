@@ -101,6 +101,28 @@ async function orgAffiliations(databases, coachIds) {
   return byCoach;
 }
 
+// Lowest per-session price (cents) across a coach's active packages. This makes
+// the "From $X / session" hint on cards reflect the coach's real pricing.
+async function packagePriceHints(databases, coachIds) {
+  const hints = new Map();
+  for (let i = 0; i < coachIds.length; i += 100) {
+    const page = await databases.listDocuments(DB_ID, 'pricing_packages', [
+      Query.equal('coach_id', coachIds.slice(i, i + 100)),
+      Query.equal('is_active', true),
+      Query.limit(500),
+    ]).catch(() => ({ documents: [] }));
+    for (const pkg of page.documents) {
+      const cents = Number(pkg.price_cents);
+      const sessions = Math.max(1, Number(pkg.sessions) || 1);
+      if (!Number.isInteger(cents) || cents <= 0) continue;
+      const perSession = Math.round(cents / sessions);
+      const current = hints.get(pkg.coach_id);
+      if (current == null || perSession < current) hints.set(pkg.coach_id, perSession);
+    }
+  }
+  return hints;
+}
+
 export default async ({ res, error }) => {
   try {
     const databases = db();
@@ -113,9 +135,16 @@ export default async ({ res, error }) => {
       ? all.filter((doc) => doc.published === true)
       : all.filter((doc) => doc.is_active === true);
 
-    const orgs = await orgAffiliations(databases, visible.map((doc) => doc.$id));
+    const visibleIds = visible.map((doc) => doc.$id);
+    const orgs = await orgAffiliations(databases, visibleIds);
+    const priceHints = await packagePriceHints(databases, visibleIds);
     return res.json({
-      coaches: visible.map((doc) => publicCard(doc, orgs.get(doc.$id))),
+      coaches: visible.map((doc) => {
+        const card = publicCard(doc, orgs.get(doc.$id));
+        // Package-derived hint wins over the coach's manual hint when present.
+        if (priceHints.has(doc.$id)) card.price_hint_cents = priceHints.get(doc.$id);
+        return card;
+      }),
     });
   } catch (err) {
     error?.(err?.message || String(err));
