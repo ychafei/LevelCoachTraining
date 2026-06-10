@@ -26,8 +26,7 @@ import { coachApplicationRepo } from '@/api/repo';
 import { SPORT_SELECT_OPTIONS, EMAIL_RE, normalizePhoneForStorage } from '@/lib/athleteOnboardingFields';
 import { WhatHappensNext } from '@/components/apply/ApplicationForm';
 import { onboardingPath } from '@/lib/roleHome';
-
-const COUNTY_OPTIONS = ['Oakland', 'Macomb', 'Wayne', 'Other'];
+import LocationAutocomplete from '@/components/forms/LocationAutocomplete';
 
 const PASSWORD_RULES = [
   { id: 'length', label: '8+ characters', test: (value) => value.length >= 8 },
@@ -75,7 +74,8 @@ export default function ApplyPrivateTrainingCoach() {
   );
   const passwordValid = passwordChecks.every((check) => check.ok);
   const usingExistingAccount = isAuthenticated && !!user;
-  const wantsAccount = !usingExistingAccount && form.password.length > 0;
+  // A new applicant always creates an account — the password is required.
+  const wantsAccount = !usingExistingAccount;
 
   useEffect(() => {
     if (!user) return;
@@ -137,7 +137,8 @@ export default function ApplyPrivateTrainingCoach() {
       if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     }
     if (sports.length === 0) next.sports = 'Select at least one sport you coach.';
-    if (!form.serviceArea.trim()) next.serviceArea = 'Service area is required.';
+    if (!form.serviceArea.trim()) next.serviceArea = 'Select your primary location.';
+    if (!form.county.trim()) next.county = 'Pick a location with a county from the suggestions.';
     if (form.experience.trim().length < 20) next.experience = 'Tell us a bit more (at least 20 characters).';
     if (form.resumeUrl.trim() && !/^https?:\/\//i.test(form.resumeUrl.trim())) {
       next.resumeUrl = 'Use a full link, like https://…';
@@ -183,7 +184,8 @@ export default function ApplyPrivateTrainingCoach() {
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         dob: form.dob,
-        ...(form.county && form.county !== 'Other' ? { county: form.county } : {}),
+        service_location: form.serviceArea.trim(),
+        ...(form.county.trim() ? { service_county: form.county.trim() } : {}),
         coaching_background: background,
         resume_url: form.resumeUrl.trim(),
         background_check_consent: true,
@@ -409,10 +411,10 @@ export default function ApplyPrivateTrainingCoach() {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <AuthField
                           id="coach-password"
-                          label="Password (optional)"
+                          label="Password"
                           type={showPassword ? 'text' : 'password'}
                           icon={Lock}
-                          placeholder="Create one to track your application"
+                          placeholder="Create a password for your account"
                           value={form.password}
                           onChange={(event) => updateForm('password', event.target.value)}
                           error={errors.password}
@@ -503,29 +505,34 @@ export default function ApplyPrivateTrainingCoach() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
+                    <LocationAutocomplete
                       id="coach-service-area"
                       label="Primary location / service area"
-                      icon={MapPin}
-                      placeholder="City, State or ZIP + radius"
+                      required
+                      placeholder="City, state, or ZIP — anywhere in the USA"
                       value={form.serviceArea}
-                      onChange={(event) => updateForm('serviceArea', event.target.value)}
                       error={errors.serviceArea}
                       disabled={submitting}
+                      onClear={() => setForm((prev) => ({ ...prev, serviceArea: '', county: '' }))}
+                      onSelect={(place) => {
+                        setForm((prev) => ({ ...prev, serviceArea: place.label, county: place.county || '' }));
+                        setErrors((current) => ({ ...current, serviceArea: undefined, county: undefined }));
+                      }}
                     />
-                    <SelectField
-                      id="coach-county"
-                      label="County (optional)"
-                      icon={MapPin}
-                      value={form.county}
-                      onChange={(event) => updateForm('county', event.target.value)}
-                      disabled={submitting}
-                    >
-                      <option value="">Select county</option>
-                      {COUNTY_OPTIONS.map((county) => (
-                        <option key={county} value={county}>{county}</option>
-                      ))}
-                    </SelectField>
+                    <div>
+                      <label htmlFor="coach-county" className="block text-sm font-medium text-foreground mb-1">
+                        County<span className="text-destructive"> *</span>
+                      </label>
+                      <div className={`flex h-11 items-center gap-2 rounded-md border bg-secondary/40 px-3 text-sm ${errors.county ? 'border-destructive' : 'border-border'}`}>
+                        <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                        <span className={form.county ? 'text-foreground' : 'text-muted-foreground'} id="coach-county">
+                          {form.county
+                            ? (form.county.toLowerCase().includes('county') ? form.county : `${form.county} County`)
+                            : 'Auto-filled from your location'}
+                        </span>
+                      </div>
+                      {errors.county && <p className="mt-1 text-xs text-destructive">{errors.county}</p>}
+                    </div>
                   </div>
 
                   <TextAreaField
@@ -739,33 +746,6 @@ function AuthField({
   );
 }
 
-function SelectField({ id, label, icon: Icon, error, children, onChange, ...selectProps }) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-bold text-slate-950">
-        {label}
-      </label>
-      <div className="relative">
-        <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <select
-          id={id}
-          onChange={onChange}
-          className={`h-9 w-full appearance-none rounded-md border bg-white pl-10 pr-10 text-sm text-slate-950 transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${
-            error
-              ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
-              : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
-          }`}
-          aria-invalid={error ? 'true' : undefined}
-          {...selectProps}
-        >
-          {children}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-      </div>
-      {error && <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>}
-    </div>
-  );
-}
 
 function TextAreaField({ id, label, required = false, error, onChange, ...textAreaProps }) {
   return (

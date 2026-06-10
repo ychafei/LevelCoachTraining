@@ -7,11 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckCircle2, Clock3, Mail, Rocket } from 'lucide-react';
-
-const COUNTY_OPTIONS = ['Oakland', 'Macomb', 'Wayne', 'Other'];
+import { CheckCircle2, Clock3, Mail, MapPin, Rocket } from 'lucide-react';
+import LocationAutocomplete from '@/components/forms/LocationAutocomplete';
 
 export function WhatHappensNext({ heading = 'What happens next' }) {
   const steps = [
@@ -135,7 +133,8 @@ export function ApplicationForm({
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         ...(form.dob ? { dob: form.dob } : {}),
-        ...(form.county && form.county !== 'Other' ? { county: form.county } : {}),
+        ...(form.service_area.trim() ? { service_location: form.service_area.trim() } : {}),
+        ...(form.county.trim() ? { service_county: form.county.trim() } : {}),
         coaching_background: background,
         resume_url: form.resume_url.trim(),
         background_check_consent: true,
@@ -239,27 +238,25 @@ export function ApplicationForm({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="application-service-area" className="font-display tracking-wider uppercase text-xs">Service Area *</Label>
-              <Input
-                id="application-service-area"
-                placeholder="City, region, or radius you cover"
-                value={form.service_area}
-                onChange={(e) => update('service_area', e.target.value)}
-                className="bg-card border-border mt-1"
-              />
-              {errors.service_area && <p className="mt-1 text-xs text-destructive">{errors.service_area}</p>}
-            </div>
+            <LocationAutocomplete
+              id="application-service-area"
+              label="Service area *"
+              placeholder="City, state, or ZIP — anywhere in the USA"
+              value={form.service_area}
+              error={errors.service_area}
+              onClear={() => { update('service_area', ''); update('county', ''); }}
+              onSelect={(place) => { update('service_area', place.label); update('county', place.county || ''); }}
+            />
             <div>
               <Label className="font-display tracking-wider uppercase text-xs">County</Label>
-              <Select value={form.county} onValueChange={(v) => update('county', v)}>
-                <SelectTrigger className="bg-card border-border mt-1"><SelectValue placeholder="Select county" /></SelectTrigger>
-                <SelectContent>
-                  {COUNTY_OPTIONS.map((county) => (
-                    <SelectItem key={county} value={county}>{county}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-sm mt-1">
+                <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className={form.county ? 'text-foreground' : 'text-muted-foreground'}>
+                  {form.county
+                    ? (form.county.toLowerCase().includes('county') ? form.county : `${form.county} County`)
+                    : 'Auto-filled from your location'}
+                </span>
+              </div>
             </div>
           </div>
 
