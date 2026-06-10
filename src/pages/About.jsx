@@ -14,6 +14,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { CtaBand } from '@/features/marketing/MarketingBlocks';
+import { Reveal, Stagger, GradientImage, HeroPattern } from '@/features/marketing/MarketingMotion';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const MISSION_CARDS = [
   {
@@ -68,71 +70,101 @@ export default function About() {
   });
 
   return (
-    <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_56%,#eef5ff_100%)] text-slate-950">
-      <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
-        <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-3 rounded-full bg-blue-50 px-4 py-2 text-blue-700 ring-1 ring-blue-100">
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
-          </div>
+    <div className="bg-white text-slate-950">
+      {/* Dark editorial hero with imagery */}
+      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_15%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
+        <HeroPattern className="text-white/[0.07]" />
+        <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
+            <Reveal as="div" y={20}>
+              <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-blue-100 backdrop-blur">
+                <ShieldCheck className="h-4 w-4 text-blue-300" aria-hidden="true" />
+                <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
+              </div>
 
-          <h1 className="mt-6 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-6xl">
-            Great coaching should be easy to{' '}
-            <span className="text-blue-600">find, book, and trust</span>
-          </h1>
-
-          <p className="mt-5 text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
-            LevelCoach Training is a multi-sport coaching marketplace. Athletes and families find
-            and book private coaches across 15 sports and training disciplines; coaches and
-            training organizations get the tools to run their business — scheduling, clients,
-            progress tracking, and Stripe-powered payouts — from one platform.
-          </p>
-        </div>
-
-        {/* Mission */}
-        <section className="mt-10" aria-labelledby="mission-heading">
-          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our mission</p>
-          <h2 id="mission-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
-            One platform for everyone in training
-          </h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {MISSION_CARDS.map(({ title, body, icon: Icon }) => (
-              <article key={title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <span className="grid h-10 w-10 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
+              <h1 className="mt-6 font-display text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Great coaching should be easy to{' '}
+                <span className="bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
+                  find, book, and trust
                 </span>
-                <h3 className="mt-3 font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-              </article>
-            ))}
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">
+                LevelCoach Training is a multi-sport coaching marketplace. Athletes and families find
+                and book private coaches across 15 sports and training disciplines; coaches and
+                training organizations get the tools to run their business — scheduling, clients,
+                progress tracking, and Stripe-powered payouts — from one platform.
+              </p>
+            </Reveal>
+
+            <Reveal as="div" y={24} delay={0.1} className="hidden lg:block">
+              <GradientImage
+                src={MARKETING_IMAGES.aboutTeam.src}
+                alt={MARKETING_IMAGES.aboutTeam.alt}
+                eager
+                className="aspect-[5/4] rounded-3xl shadow-2xl shadow-blue-900/40 ring-1 ring-white/20"
+                gradientClassName="bg-[linear-gradient(135deg,#0b2350_0%,#13357a_45%,#2563eb_100%)]"
+                overlayClassName="bg-gradient-to-t from-slate-950/40 via-transparent to-transparent"
+              />
+            </Reveal>
           </div>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
+      </section>
+
+      <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
+        {/* Mission */}
+        <section aria-labelledby="mission-heading">
+          <Reveal>
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our mission</p>
+            <h2 id="mission-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
+              One platform for everyone in training
+            </h2>
+          </Reveal>
+          <Stagger className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {MISSION_CARDS.map(({ title, body, icon: Icon }) => (
+              <Stagger.Item key={title}>
+                <article className="group h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/10">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-3 font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+                </article>
+              </Stagger.Item>
+            ))}
+          </Stagger>
         </section>
 
         {/* Principles */}
-        <section className="mt-10" aria-labelledby="principles-heading">
-          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">What we believe</p>
-          <h2 id="principles-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
-            The principles behind the product
-          </h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <section className="mt-12" aria-labelledby="principles-heading">
+          <Reveal>
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">What we believe</p>
+            <h2 id="principles-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
+              The principles behind the product
+            </h2>
+          </Reveal>
+          <Stagger className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {PRINCIPLES.map(({ title, body, icon: Icon }) => (
-              <article key={title} className="flex gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <h3 className="font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
-                  <p className="mt-1.5 text-sm leading-6 text-slate-600">{body}</p>
-                </div>
-              </article>
+              <Stagger.Item key={title}>
+                <article className="flex h-full gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/10">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3 className="font-display text-lg font-bold tracking-normal text-slate-950">{title}</h3>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-600">{body}</p>
+                  </div>
+                </article>
+              </Stagger.Item>
             ))}
-          </div>
+          </Stagger>
         </section>
 
         {/* Roots */}
-        <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="roots-heading">
+        <Reveal as="section" className="mt-12 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/60 p-6 shadow-sm sm:p-8" aria-labelledby="roots-heading">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25">
               <Flag className="h-7 w-7" aria-hidden="true" />
             </span>
             <div>
@@ -155,7 +187,7 @@ export default function About() {
               </Button>
             </div>
           </div>
-        </section>
+        </Reveal>
       </section>
 
       <CtaBand

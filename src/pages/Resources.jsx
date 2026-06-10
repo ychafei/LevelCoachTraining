@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { Reveal, HeroPattern } from '@/features/marketing/MarketingMotion';
 
 const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
 
@@ -176,9 +177,9 @@ function ResourceCard({ resource }) {
   return (
     <Link
       to={resource.href}
-      className="group flex min-h-[144px] gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-600/10 focus-visible:ring-2 focus-visible:ring-blue-600"
+      className="group flex min-h-[144px] gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/10 focus-visible:ring-2 focus-visible:ring-blue-600"
     >
-      <span className="grid h-14 w-14 shrink-0 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600 shadow-sm">
+      <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 shadow-sm transition group-hover:bg-blue-600 group-hover:text-white">
         <resource.icon className="h-7 w-7" aria-hidden="true" />
       </span>
       <span className="min-w-0 pt-1">
@@ -238,25 +239,33 @@ export default function Resources() {
   }, [activeAudience, query]);
 
   return (
-    <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_48%,#eef5ff_100%)] text-slate-950">
-      <section className="mx-auto max-w-[1380px] px-4 py-10 sm:px-6 lg:px-8">
-        <div className="max-w-[680px]">
-          <div className="mb-6 inline-flex items-center gap-3 text-xl font-semibold text-slate-800">
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-600 text-white">
-              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
-            </span>
-            Resources
-          </div>
-          <h1 className="font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-            Resources for better training decisions
-          </h1>
-          <p className="mt-5 text-lg leading-8 text-slate-600">
-            Everything here links to a real page on LevelCoach — platform guides, the marketplace,
-            legal documents, and the blog.
-          </p>
+    <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_60%,#eef5ff_100%)] text-slate-950">
+      {/* Dark hero band */}
+      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_15%_0%,#102a5c_0%,#081226_60%,#05080f_100%)] text-white">
+        <HeroPattern className="text-white/[0.07]" />
+        <div className="relative mx-auto max-w-[1380px] px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+          <Reveal className="max-w-[720px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-blue-100 backdrop-blur">
+              <BookOpen className="h-4 w-4 text-blue-300" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-[0.18em]">Resource center</span>
+            </div>
+            <h1 className="mt-6 font-display text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl">
+              Resources for better{' '}
+              <span className="bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
+                training decisions
+              </span>
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+              Everything here links to a real page on LevelCoach — platform guides, the marketplace,
+              legal documents, and the blog.
+            </p>
+          </Reveal>
         </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
+      </section>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.73fr)_minmax(300px,0.27fr)]">
+      <section className="mx-auto max-w-[1380px] px-4 py-10 sm:px-6 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.73fr)_minmax(300px,0.27fr)]">
           <main>
             <label className="relative block max-w-[650px]">
               <span className="sr-only">Search resources</span>

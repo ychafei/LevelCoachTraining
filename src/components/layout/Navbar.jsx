@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Shield, Briefcase, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,20 @@ import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
+  const [scrolled, setScrolled] = useState(false);
   const { user, isAuthenticated, isAdmin, isCoach, isOrganizationAdmin, logout } = useAuth();
   const authenticated = isAuthenticated;
   const location = useLocation();
   const navigate = useNavigate();
   const isGuestPlatform = !authenticated || !user;
+
+  // Elevate the guest navbar with a stronger shadow once the page is scrolled.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const getNavLinks = () => {
     // Guests: full marketplace/product navigation.
@@ -113,9 +122,11 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b ${
+      className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md transition-all duration-300 ${
         isGuestPlatform
-          ? 'bg-white/95 border-slate-200 text-slate-950 shadow-sm'
+          ? `border-slate-200 text-slate-950 ${
+              scrolled ? 'bg-white/90 shadow-lg shadow-slate-900/5' : 'bg-white/80 shadow-sm'
+            }`
           : 'bg-background/90 border-border'
       }`}
     >

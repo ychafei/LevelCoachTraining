@@ -16,6 +16,7 @@ import {
   StepStrip,
 } from '@/features/marketing/MarketingBlocks';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const BENEFITS = [
   {
@@ -97,6 +98,19 @@ export default function ForOrganizations() {
         description="Bring your coach roster to LevelCoach: branded public pages, automated payout splits on every session, and compliance gates that protect your club and your athletes."
         primaryCta={{ to: '/apply/organization', label: 'Create an Organization' }}
         secondaryCta={{ to: '/organizations', label: 'See Active Organizations' }}
+        image={{
+          ...MARKETING_IMAGES.organizationsHero,
+          badge: {
+            icon: CircleDollarSign,
+            title: 'Automated payout splits',
+            subtitle: 'Default 60 / 25 / 15, set per coach link',
+          },
+        }}
+        highlights={[
+          { label: 'Branded public page', icon: Globe },
+          { label: 'One roster, every coach', icon: Users },
+          { label: 'Real Stripe transfer per leg', icon: CircleDollarSign },
+        ]}
       />
 
       <BenefitGrid

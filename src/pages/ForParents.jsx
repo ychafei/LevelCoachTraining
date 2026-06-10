@@ -18,6 +18,7 @@ import {
   StepStrip,
 } from '@/features/marketing/MarketingBlocks';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const BENEFITS = [
   {
@@ -109,6 +110,19 @@ export default function ForParents() {
         description="LevelCoach is built so minors never train without guardian consent: you sign the waivers, you book or approve every session, and you can see their messages."
         primaryCta={{ to: '/create-account/parent', label: 'Create Parent Account' }}
         secondaryCta={{ to: '/coaches', label: 'Browse Coaches First' }}
+        image={{
+          ...MARKETING_IMAGES.parentsHero,
+          badge: {
+            icon: ShieldCheck,
+            title: 'Guardian-gated bookings',
+            subtitle: 'Enforced server-side for every minor',
+          },
+        }}
+        highlights={[
+          { label: 'You sign every waiver', icon: FileSignature },
+          { label: 'Read your child’s messages', icon: Eye },
+          { label: 'Stripe-protected payments', icon: CreditCard },
+        ]}
       />
 
       <BenefitGrid

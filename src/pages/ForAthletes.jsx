@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  BadgeCheck,
   CalendarCheck,
   ClipboardList,
   CreditCard,
@@ -18,6 +19,7 @@ import {
   StepStrip,
 } from '@/features/marketing/MarketingBlocks';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const BENEFITS = [
   {
@@ -109,6 +111,19 @@ export default function ForAthletes() {
         description="Search published coaches across 15 sports, compare real reviews and availability, and book sessions that move you toward your goals."
         primaryCta={{ to: '/coaches', label: 'Find a Coach' }}
         secondaryCta={{ to: '/create-account/athlete', label: 'Create Athlete Account' }}
+        image={{
+          ...MARKETING_IMAGES.athletesHero,
+          badge: {
+            icon: Star,
+            title: 'Reviews from real sessions',
+            subtitle: 'Only completed-session clients can rate',
+          },
+        }}
+        highlights={[
+          { label: '15 sports & training types', icon: Trophy },
+          { label: 'Live coach availability', icon: CalendarCheck },
+          { label: 'Verified coach profiles', icon: BadgeCheck },
+        ]}
       />
 
       <BenefitGrid

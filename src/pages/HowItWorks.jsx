@@ -21,6 +21,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { CtaBand } from '@/features/marketing/MarketingBlocks';
+import { Reveal, Stagger, GradientImage, HeroPattern } from '@/features/marketing/MarketingMotion';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const JOURNEYS = [
   {
@@ -183,40 +185,72 @@ export default function HowItWorks() {
   });
 
   return (
-    <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_68%,#eef5ff_100%)] text-slate-950">
+    <div className="bg-white text-slate-950">
+      {/* Dark editorial hero with an action image band */}
+      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
+        <HeroPattern className="text-white/[0.07]" />
+        <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
+          <Reveal className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 backdrop-blur">
+              <Rocket className="h-4 w-4 text-blue-300" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">The full picture</span>
+            </div>
+            <h1 className="mt-6 font-display text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl">
+              How{' '}
+              <span className="bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
+                LevelCoach
+              </span>{' '}
+              works
+            </h1>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+              One marketplace, three journeys. Here&apos;s exactly what happens for athletes and parents,
+              for coaches, and for training organizations.
+            </p>
+          </Reveal>
+
+          <Reveal delay={0.1} className="mx-auto mt-10 max-w-4xl">
+            <GradientImage
+              src={MARKETING_IMAGES.trackStart.src}
+              alt={MARKETING_IMAGES.trackStart.alt}
+              eager
+              className="aspect-[21/9] rounded-3xl shadow-2xl shadow-blue-900/40 ring-1 ring-white/20"
+              gradientClassName="bg-[linear-gradient(135deg,#0b2350_0%,#13357a_45%,#2563eb_100%)]"
+              overlayClassName="bg-gradient-to-t from-slate-950/45 via-transparent to-transparent"
+            />
+          </Reveal>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
+      </section>
+
       <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <h1 className="font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-            How LevelCoach works
-          </h1>
-          <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
-            One marketplace, three journeys. Here's exactly what happens for athletes and parents,
-            for coaches, and for training organizations.
-          </p>
-        </div>
-
-        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <Stagger className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           {JOURNEYS.map((journey) => (
-            <JourneyCard key={journey.id} journey={journey} />
+            <Stagger.Item key={journey.id} className="flex">
+              <JourneyCard journey={journey} />
+            </Stagger.Item>
           ))}
-        </div>
+        </Stagger>
 
-        <section className="mt-10" aria-labelledby="guarantees-heading">
-          <p className="text-center text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Under the hood</p>
-          <h2 id="guarantees-heading" className="mt-2 text-center font-display text-3xl font-bold tracking-normal text-slate-950">
-            Rules the platform enforces for everyone
-          </h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-12" aria-labelledby="guarantees-heading">
+          <Reveal>
+            <p className="text-center text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Under the hood</p>
+            <h2 id="guarantees-heading" className="mt-2 text-center font-display text-3xl font-bold tracking-normal text-slate-950">
+              Rules the platform enforces for everyone
+            </h2>
+          </Reveal>
+          <Stagger className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {GUARANTEES.map(({ title, body, icon: Icon }) => (
-              <article key={title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h3 className="mt-3 text-sm font-bold text-slate-950">{title}</h3>
-                <p className="mt-1.5 text-xs leading-5 text-slate-600">{body}</p>
-              </article>
+              <Stagger.Item key={title}>
+                <article className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/10">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-3 text-sm font-bold text-slate-950">{title}</h3>
+                  <p className="mt-1.5 text-xs leading-5 text-slate-600">{body}</p>
+                </article>
+              </Stagger.Item>
             ))}
-          </div>
+          </Stagger>
         </section>
       </section>
 

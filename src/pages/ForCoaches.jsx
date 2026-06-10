@@ -19,6 +19,7 @@ import {
 } from '@/features/marketing/MarketingBlocks';
 import CoachPricingSection from '@/components/marketing/CoachPricingSection';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const BENEFITS = [
   {
@@ -114,6 +115,19 @@ export default function ForCoaches() {
         description="Get discovered by athletes, manage your schedule and clients, and get paid automatically through Stripe — with one transparent platform fee and no subscription."
         primaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
         secondaryCta={{ to: '/coaches', label: 'See the Marketplace' }}
+        image={{
+          ...MARKETING_IMAGES.coachesHero,
+          badge: {
+            icon: CreditCard,
+            title: '85% to you by default',
+            subtitle: 'Solo coaches keep all but the 15% fee',
+          },
+        }}
+        highlights={[
+          { label: 'No subscription, 15% default fee', icon: CreditCard },
+          { label: 'Stripe Connect payouts', icon: BadgeCheck },
+          { label: 'Conflict-free scheduling', icon: CalendarDays },
+        ]}
       />
 
       <BenefitGrid
