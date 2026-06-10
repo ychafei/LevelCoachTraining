@@ -30,7 +30,10 @@ export function homePathForRole(user) {
   const appRole = profileRole(user);
   if (appRole === 'organization' || user?.primary_organization_id) return '/organization';
   if (appRole === 'parent' || appRole === 'guardian') return '/parent';
-  if (appRole === 'coach_applicant') return '/apply/private-training-coach';
+  // A pending coach applicant has no portal yet — send them to the public
+  // marketplace, not back to the apply page (which would make "Back to
+  // platform" loop). Their application status stays at /apply/...
+  if (appRole === 'coach_applicant') return '/coaches';
   return '/athlete';
 }
 
