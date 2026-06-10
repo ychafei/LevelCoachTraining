@@ -510,7 +510,9 @@ async function provisionCoachApplications() {
   await attrEmail('coach_applications',  'email', true);
   await attrString('coach_applications', 'phone', 30);
   await attrDatetime('coach_applications', 'dob');
-  await attrEnum('coach_applications',   'county', ['Oakland', 'Macomb', 'Wayne']);
+  // Nationwide, free-form location (replaces the legacy Detroit-only county enum).
+  await attrString('coach_applications', 'service_location', 200);
+  await attrString('coach_applications', 'service_county', 120);
   await attrString('coach_applications', 'coaching_background', 20000); // TEXT
   await attrString('coach_applications', 'resume_url', 1000);
   await attrBool('coach_applications',   'background_check_consent', false, false);

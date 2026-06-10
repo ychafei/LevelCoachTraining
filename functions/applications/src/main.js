@@ -2,7 +2,6 @@ import { Client, Databases, Users, ID, Permission, Query, Role } from 'node-appw
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const COUNTIES = ['Oakland', 'Macomb', 'Wayne'];
 const SUBMIT_RATE_LIMIT = 3; // per hour per email
 
 function services() {
@@ -116,7 +115,11 @@ async function submit(databases, req, payload) {
     if (Number.isNaN(parsed.getTime())) return { status: 400, body: { error: 'dob is invalid.' } };
     dob = parsed.toISOString();
   }
-  const county = payload.county && COUNTIES.includes(payload.county) ? payload.county : undefined;
+  // Location is now free-form and nationwide (no Detroit-only county enum).
+  // Accept the legacy enum value when present (back-compat) but store the
+  // human-readable location + county as plain strings.
+  const serviceLocation = str(payload.service_location ?? payload.service_area ?? '', 0, 200) ?? '';
+  const serviceCounty = str(payload.service_county ?? payload.county ?? '', 0, 120) ?? '';
 
   if (await emailIsBanned(databases, email)) {
     return { status: 403, body: { error: 'Unable to submit this application.' } };
@@ -141,11 +144,12 @@ async function submit(databases, req, payload) {
     email,
     phone,
     dob,
-    county,
     coaching_background: background,
     resume_url: resumeUrl,
     background_check_consent: true,
     status: 'pending',
+    ...(serviceLocation ? { service_location: serviceLocation } : {}),
+    ...(serviceCounty ? { service_county: serviceCounty } : {}),
   }, grants);
 
   return { status: 200, body: { ok: true, application_id: application.$id } };
@@ -214,7 +218,7 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
     last_name: application.last_name,
     email: application.email,
     phone: application.phone || '',
-    ...(application.county ? { county: application.county } : {}),
+    ...(application.service_county ? { service_counties: [String(application.service_county).slice(0, 100)] } : {}),
     is_active: false,
     published: false,
     ...(profile ? { user_id: profile.account_id } : {}),
