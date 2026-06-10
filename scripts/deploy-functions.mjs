@@ -81,8 +81,12 @@ for (const fn of fnList) {
   try {
     // Tar the function dir contents, excluding node_modules + dotfiles. -C
     // changes into the dir so paths inside the tarball are relative to it.
+    // NB: do NOT add --exclude='.*' here. On BSD tar (macOS) that glob also
+    // matches the '.' root entry and produces an EMPTY archive, which Appwrite
+    // rejects at build time ("package.json not found"). Function dirs carry no
+    // dotfiles, so excluding node_modules is sufficient.
     execSync(
-      `tar --exclude=node_modules --exclude='.*' -czf '${tarPath}' -C '${fnDir}' .`,
+      `tar --exclude=node_modules -czf '${tarPath}' -C '${fnDir}' .`,
       { stdio: 'pipe' },
     );
 

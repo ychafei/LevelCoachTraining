@@ -20,7 +20,9 @@
     {
       "$id": "getPublicCoaches",
       "name": "getPublicCoaches",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -30,13 +32,18 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "documents.read"],
+      "scopes": [
+        "databases.read",
+        "documents.read"
+      ],
       "path": "functions/getPublicCoaches"
     },
     {
       "$id": "getCoachAvailability",
       "name": "getCoachAvailability",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -46,13 +53,18 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "documents.read"],
+      "scopes": [
+        "databases.read",
+        "documents.read"
+      ],
       "path": "functions/getCoachAvailability"
     },
     {
       "$id": "getMatchingPlayers",
       "name": "getMatchingPlayers",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -62,13 +74,18 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "documents.read"],
+      "scopes": [
+        "databases.read",
+        "documents.read"
+      ],
       "path": "functions/getMatchingPlayers"
     },
     {
       "$id": "accountProfile",
       "name": "accountProfile",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -78,13 +95,21 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read"
+      ],
       "path": "functions/accountProfile"
     },
     {
       "$id": "booking",
       "name": "booking",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -94,13 +119,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/booking"
     },
     {
       "$id": "messaging",
       "name": "messaging",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -110,13 +142,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "storage.read", "storage.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "files.read",
+        "files.write"
+      ],
       "path": "functions/messaging"
     },
     {
       "$id": "training",
       "name": "training",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -126,13 +167,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "storage.read", "storage.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "files.read",
+        "files.write"
+      ],
       "path": "functions/training"
     },
     {
       "$id": "family",
       "name": "family",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -142,13 +192,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/family"
     },
     {
       "$id": "coachSelf",
       "name": "coachSelf",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -158,13 +215,21 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read"
+      ],
       "path": "functions/coachSelf"
     },
     {
       "$id": "orgAdmin",
       "name": "orgAdmin",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -174,13 +239,21 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read"
+      ],
       "path": "functions/orgAdmin"
     },
     {
       "$id": "applications",
       "name": "applications",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -190,13 +263,24 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read", "users.write", "storage.read", "storage.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read",
+        "users.write",
+        "files.read",
+        "files.write"
+      ],
       "path": "functions/applications"
     },
     {
       "$id": "adminOps",
       "name": "adminOps",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -206,13 +290,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read", "users.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read",
+        "users.write"
+      ],
       "path": "functions/adminOps"
     },
     {
       "$id": "reviews",
       "name": "reviews",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -222,13 +315,21 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read"
+      ],
       "path": "functions/reviews"
     },
     {
       "$id": "reports",
       "name": "reports",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -238,13 +339,19 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "documents.read", "users.read"],
+      "scopes": [
+        "databases.read",
+        "documents.read",
+        "users.read"
+      ],
       "path": "functions/reports"
     },
     {
       "$id": "emailDispatch",
       "name": "emailDispatch",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -254,13 +361,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/emailDispatch"
     },
     {
       "$id": "createStripeCheckout",
       "name": "createStripeCheckout",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -270,13 +384,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/createStripeCheckout"
     },
     {
       "$id": "stripeWebhook",
       "name": "stripeWebhook",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -286,13 +407,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/stripeWebhook"
     },
     {
       "$id": "stripeConnect",
       "name": "stripeConnect",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -302,13 +430,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/stripeConnect"
     },
     {
       "$id": "stripeConnectWebhook",
       "name": "stripeConnectWebhook",
-      "execute": ["any"],
+      "execute": [
+        "any"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -318,13 +453,20 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write"
+      ],
       "path": "functions/stripeConnectWebhook"
     },
     {
       "$id": "refundStripePayment",
       "name": "refundStripePayment",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -334,13 +476,21 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read"
+      ],
       "path": "functions/refundStripePayment"
     },
     {
       "$id": "signLegalAgreement",
       "name": "signLegalAgreement",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-1vcpu-1gb",
       "events": [],
@@ -350,13 +500,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "storage.read", "storage.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "files.read",
+        "files.write"
+      ],
       "path": "functions/signLegalAgreement"
     },
     {
       "$id": "generateLegalAgreementPdf",
       "name": "generateLegalAgreementPdf",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-1vcpu-1gb",
       "events": [],
@@ -366,13 +525,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "storage.read", "storage.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "files.read",
+        "files.write"
+      ],
       "path": "functions/generateLegalAgreementPdf"
     },
     {
       "$id": "bootstrapMasterAdmin",
       "name": "bootstrapMasterAdmin",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -382,13 +550,22 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read", "users.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read",
+        "users.write"
+      ],
       "path": "functions/bootstrapMasterAdmin"
     },
     {
       "$id": "grantAdminRole",
       "name": "grantAdminRole",
-      "execute": ["users"],
+      "execute": [
+        "users"
+      ],
       "runtime": "node-22",
       "specification": "s-0.5vcpu-512mb",
       "events": [],
@@ -398,7 +575,14 @@
       "logging": true,
       "entrypoint": "src/main.js",
       "commands": "npm install",
-      "scopes": ["databases.read", "databases.write", "documents.read", "documents.write", "users.read", "users.write"],
+      "scopes": [
+        "databases.read",
+        "databases.write",
+        "documents.read",
+        "documents.write",
+        "users.read",
+        "users.write"
+      ],
       "path": "functions/grantAdminRole"
     }
   ]
