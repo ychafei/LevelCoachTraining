@@ -165,15 +165,18 @@ export default function PublicCoachCard({
         <div className="border-t border-slate-100 pt-4 lg:min-w-[210px] lg:border-t-0 lg:pt-0">
           <div className="flex items-end justify-between gap-3 lg:block">
             <div>
-              {model.rateLabel ? (
-                <p className="font-display text-2xl font-bold tracking-normal text-slate-950">
-                  {model.rateLabel}
-                  <span className="font-sans text-xs font-semibold normal-case text-slate-500"> {model.rateHint}</span>
+              {model.verified ? (
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                  <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                  Verified profile
                 </p>
               ) : (
-                <p className="text-sm font-bold text-slate-700">{model.rateHint}</p>
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
+                  <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+                  {model.primarySport}
+                </p>
               )}
-              <p className="mt-1 text-xs font-semibold text-slate-500">Next available</p>
+              <p className="mt-3 text-xs font-semibold text-slate-500">Next available</p>
               <p className="inline-flex items-center gap-1 text-xs font-bold text-blue-700">
                 <CalendarDays className="h-3.5 w-3.5" />
                 {model.nextAvailable || 'Request times'}
@@ -193,7 +196,7 @@ export default function PublicCoachCard({
               asChild
               className="h-9 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-blue-600/20 hover:bg-blue-700"
             >
-              <Link to={bookHref}>Book Intro</Link>
+              <Link to={bookHref}>See Availability</Link>
             </Button>
           </div>
         </div>

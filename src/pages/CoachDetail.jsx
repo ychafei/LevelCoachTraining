@@ -6,7 +6,6 @@ import {
   BadgeCheck,
   Building2,
   CalendarDays,
-  CircleDollarSign,
   Flag,
   MapPin,
   MessageCircle,
@@ -28,7 +27,6 @@ import {
 import { recurringWindowsByDay, timezoneAbbreviation } from '@/lib/scheduleET';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
-import { formatUsdFromCents } from '@/features/marketing/format';
 
 const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
 const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -166,9 +164,6 @@ export default function CoachDetail() {
   }
 
   const bookHref = mergeSearch(coachBookHref(coach), location.search);
-  const priceLabel = Number.isFinite(Number(coach.price_hint_cents)) && Number(coach.price_hint_cents) > 0
-    ? formatUsdFromCents(coach.price_hint_cents)
-    : '';
   const weeklyWindows = recurringWindowsByDay(availability || { availability: coach.availability });
   const hasWindows = WEEK_DAYS.some((day) => (weeklyWindows[day] || []).length > 0);
   const tzLabel = timezoneAbbreviation(availability?.timezone || coach.timezone);
@@ -251,10 +246,10 @@ export default function CoachDetail() {
                     ) : (
                       <span className="font-semibold text-slate-500">No reviews yet</span>
                     )}
-                    {priceLabel && (
+                    {model.serviceTypeLabel && (
                       <span className="inline-flex items-center gap-1 font-bold text-slate-800">
-                        <CircleDollarSign className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                        {priceLabel} / session
+                        <Target className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                        {model.serviceTypeLabel}
                       </span>
                     )}
                   </div>
@@ -280,18 +275,23 @@ export default function CoachDetail() {
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Book training</p>
               <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Train with {model.firstName}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Pick a time from {model.firstName}'s live availability. Pricing is confirmed at checkout
-                and processed securely through Stripe.
+                Open the booking flow to see {model.firstName}'s live open times and session options.
+                Every booking is confirmed securely through Stripe.
               </p>
-              {priceLabel && (
-                <div className="mt-4 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Typical session price</p>
-                  <p className="mt-1 font-display text-2xl font-bold text-slate-950">
-                    {priceLabel}
-                    <span className="font-sans text-xs font-semibold text-slate-500"> / session</span>
-                  </p>
-                </div>
-              )}
+              <div className="mt-4 space-y-2">
+                {model.serviceTypeLabel && (
+                  <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    <Target className="h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
+                    <span className="text-sm font-semibold text-slate-700">{model.serviceTypeLabel}</span>
+                  </div>
+                )}
+                {model.contactVerified && (
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
+                    <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                    <span className="text-sm font-semibold text-emerald-800">Email-verified coach</span>
+                  </div>
+                )}
+              </div>
               <Button asChild className="mt-5 h-12 w-full rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700">
                 <Link to={bookHref}>
                   Book training

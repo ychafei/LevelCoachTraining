@@ -74,12 +74,16 @@ const STEPS = [
 
 const FAQ = [
   {
-    q: 'How much does it cost to join?',
-    a: 'Nothing. Applying and maintaining a profile is free. The platform takes a percentage of paid sessions — 15% by default — and the rest is transferred to your Stripe account.',
+    q: 'Does it cost anything to join?',
+    a: 'No. Creating an account, applying, and maintaining your profile are all free. You earn from the training you deliver.',
   },
   {
     q: 'How and when do I get paid?',
-    a: 'Through Stripe Connect. When a client completes checkout, your share is transferred to your connected Stripe account from that charge. You can open your Stripe Express dashboard from the coach portal at any time.',
+    a: 'Through Stripe Connect. When a client completes checkout, your earnings are transferred to your connected Stripe account from that charge. You can open your Stripe Express dashboard from the coach portal at any time.',
+  },
+  {
+    q: 'Who decides what I charge?',
+    a: 'You do. Your session packages are set up with you when your profile goes live, and the amount is computed server-side at checkout — clients always see exactly what they will pay before they book.',
   },
   {
     q: 'What do I need before I can publish my profile?',
@@ -87,11 +91,7 @@ const FAQ = [
   },
   {
     q: 'Can I coach under an academy or club?',
-    a: 'Yes. Organizations on LevelCoach invite coaches to their roster and set a payout split for the link (default 60% coach / 25% organization / 15% platform). Your profile shows the affiliation.',
-  },
-  {
-    q: 'Who sets my session prices?',
-    a: 'Session packages are configured with you when your profile is set up, and prices are computed server-side at checkout — clients always see the exact amount before paying.',
+    a: 'Yes. Organizations on LevelCoach invite coaches to their roster and configure how each session is paid out. Your profile shows the affiliation, and your earnings still land in your own Stripe account.',
   },
   {
     q: 'What about coaching minors?',
@@ -102,7 +102,7 @@ const FAQ = [
 export default function ForCoaches() {
   usePageMeta({
     title: 'For Coaches',
-    description: 'Run your coaching business on LevelCoach: marketplace visibility, conflict-free scheduling, client management, and Stripe Connect payouts with a transparent 15% platform fee.',
+    description: 'Run your coaching business on LevelCoach: marketplace visibility, conflict-free scheduling, client management, and secure Stripe Connect payouts straight to your bank.',
   });
 
   return (
@@ -112,19 +112,19 @@ export default function ForCoaches() {
         eyebrowIcon={Users}
         title="Run your coaching business from"
         highlight="one portal"
-        description="Get discovered by athletes, manage your schedule and clients, and get paid automatically through Stripe — with one transparent platform fee and no subscription."
+        description="Get discovered by athletes, manage your schedule and clients, set your own rates, and get paid automatically through Stripe — straight to your bank, no invoicing."
         primaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
         secondaryCta={{ to: '/coaches', label: 'See the Marketplace' }}
         image={{
           ...MARKETING_IMAGES.coachesHero,
           badge: {
             icon: CreditCard,
-            title: '85% to you by default',
-            subtitle: 'Solo coaches keep all but the 15% fee',
+            title: 'Paid straight to your bank',
+            subtitle: 'Secure Stripe payouts, every session',
           },
         }}
         highlights={[
-          { label: 'No subscription, 15% default fee', icon: CreditCard },
+          { label: 'You set your own rates', icon: CreditCard },
           { label: 'Stripe Connect payouts', icon: BadgeCheck },
           { label: 'Conflict-free scheduling', icon: CalendarDays },
         ]}
@@ -146,7 +146,7 @@ export default function ForCoaches() {
 
       <CtaBand
         title="Ready to grow your coaching business?"
-        description="Apply in minutes. Once approved, you control your profile, your schedule, and your prices."
+        description="Apply in minutes. Once approved, you control your profile, your schedule, and your rates."
         primaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
         secondaryCta={{ to: '/how-it-works', label: 'How It Works' }}
       />

@@ -35,7 +35,7 @@ const MISSION_CARDS = [
   },
   {
     title: 'For organizations',
-    body: 'Let academies and clubs run whole rosters with branded pages and automated payout splits.',
+    body: 'Let academies and clubs run whole rosters with branded pages and automated, secure payouts.',
     icon: Building2,
   },
 ];
@@ -53,7 +53,7 @@ const PRINCIPLES = [
   },
   {
     title: 'Money moves transparently',
-    body: 'Payments are processed by Stripe, prices are computed server-side, and every payout split is recorded in an append-only ledger.',
+    body: 'Payments are processed by Stripe, verified server-side, and every payout is recorded in an append-only ledger so nothing slips through the cracks.',
     icon: CreditCard,
   },
   {

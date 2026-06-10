@@ -17,15 +17,24 @@ export function useMyAthlete(user) {
 
   const athleteProfile = query.data || null;
   const athleteIds = [athleteProfile?.id, user?.id].filter(Boolean);
-  const sports = Array.isArray(athleteProfile?.sports) && athleteProfile.sports.length > 0
-    ? athleteProfile.sports
-    : [];
+
+  // Sport identity comes primarily from the self-editable `profiles` fields
+  // (user.sports / skill_level / sport_position), falling back to the
+  // family-managed `athlete_profiles` row, then a sensible empty state.
+  const profileSports = Array.isArray(user?.sports) ? user.sports.filter(Boolean) : [];
+  const athleteRowSports = Array.isArray(athleteProfile?.sports) ? athleteProfile.sports.filter(Boolean) : [];
+  const sports = profileSports.length > 0 ? profileSports : athleteRowSports;
+
+  const skillLevel = user?.skill_level || athleteProfile?.skill_level || '';
+  const position = user?.sport_position || '';
 
   return {
     loading: query.isLoading && !!user?.id,
     athleteProfile,
     athleteIds,
     sports,
+    skillLevel,
+    position,
     refetch: query.refetch,
   };
 }

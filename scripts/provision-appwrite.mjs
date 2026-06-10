@@ -295,6 +295,8 @@ async function provisionProfiles() {
   await attrEnum('profiles', 'position',
     ['Goalkeeper', 'Defender', 'Midfielder', 'Striker', 'Winger', 'Center Back', 'Fullback', 'Other']);
   await attrEnum('profiles', 'skill_level', ['Beginner', 'Intermediate', 'Advanced', 'Competitive']);
+  await attrString('profiles', 'sports', 120, false, null, true); // self-service multi-sport (catalog keys)
+  await attrString('profiles', 'sport_position', 100);            // free-form, varies by sport
   await attrString('profiles', 'bio', 20000); // > 16384 → stored as TEXT (excluded from row-size limit)
   await attrString('profiles', 'photo_url', 1000);
   await attrString('profiles', 'coach_id', 64);

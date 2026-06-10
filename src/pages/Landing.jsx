@@ -27,7 +27,7 @@ import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 const HOW_IT_WORKS = [
   {
     title: 'Search',
-    body: 'Filter published coaches by sport, location, availability, specialty, and price.',
+    body: 'Filter published coaches by sport, location, availability, level, and specialty.',
     icon: Search,
   },
   {
@@ -66,7 +66,7 @@ const AUDIENCES = [
   },
   {
     title: 'Organizations',
-    body: 'Run a roster of coaches with branded pages and automated payout splits.',
+    body: 'Run a roster of coaches with branded pages and automated, secure payouts.',
     to: '/for-organizations',
     icon: Building2,
     accent: 'from-amber-500/12 to-amber-600/0',

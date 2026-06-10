@@ -35,7 +35,7 @@ const JOURNEYS = [
     steps: [
       {
         title: 'Search and compare',
-        body: 'Filter published coaches by sport, location, level, availability, organization, price, and specialty. Reviews come only from completed sessions.',
+        body: 'Filter published coaches by sport, location, level, availability, organization, and specialty. Reviews come only from completed sessions.',
         icon: Search,
       },
       {
@@ -70,7 +70,7 @@ const JOURNEYS = [
       },
       {
         title: 'Get booked and paid via Stripe',
-        body: 'Clients book inside your availability windows. When they pay, your share — 85% by default as a solo coach — transfers to your Stripe account automatically.',
+        body: 'Clients book inside your availability windows. You set your own rates, and when they pay, your earnings transfer to your Stripe account automatically.',
         icon: CreditCard,
       },
     ],
@@ -89,13 +89,13 @@ const JOURNEYS = [
         icon: Globe,
       },
       {
-        title: 'Invite coaches and set splits',
-        body: 'Invite coaches to your roster and set a payout rule per link — default 60% coach / 25% organization / 15% platform, always totaling 100%.',
+        title: 'Invite coaches and configure payouts',
+        body: 'Invite coaches to your roster and configure how each coach link is paid out between coach and organization.',
         icon: UserPlus,
       },
       {
         title: 'Publish and collect automatically',
-        body: 'Once your agreement is signed and Stripe is ready, your public page goes live. Every paid session splits into separate Stripe transfers — no manual settlement.',
+        body: 'Once your agreement is signed and Stripe is ready, your public page goes live. Every paid session is paid out as secure Stripe transfers — no manual settlement.',
         icon: CircleDollarSign,
       },
     ],
@@ -162,8 +162,8 @@ const GUARANTEES = [
     icon: CalendarCheck,
   },
   {
-    title: 'Payments are server-priced',
-    body: 'Prices are computed on our servers from configured packages and charged through Stripe. The client always sees the exact amount first.',
+    title: 'Payments are Stripe-secured',
+    body: 'Every payment is verified on our servers and processed through Stripe. The client always confirms the full amount before anything is charged.',
     icon: CreditCard,
   },
   {
@@ -181,7 +181,7 @@ const GUARANTEES = [
 export default function HowItWorks() {
   usePageMeta({
     title: 'How It Works',
-    description: 'Three journeys, one platform: athletes book and track progress, coaches apply and get paid via Stripe, organizations run rosters with automated payout splits.',
+    description: 'Three journeys, one platform: athletes book and track progress, coaches apply and get paid via Stripe, organizations run rosters with automated payouts.',
   });
 
   return (

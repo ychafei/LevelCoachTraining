@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  BadgeDollarSign,
   BookOpen,
   Building2,
   CalendarDays,
@@ -37,7 +36,7 @@ const resourcesByAudience = {
   athletes: [
     {
       title: 'Find a Coach',
-      description: 'Search published coaches by sport, location, level, availability, price, and specialty.',
+      description: 'Search published coaches by sport, location, level, availability, and specialty.',
       icon: Search,
       href: '/coaches',
     },
@@ -106,9 +105,9 @@ const resourcesByAudience = {
       href: '/for-coaches',
     },
     {
-      title: 'Fees & Payouts',
-      description: 'The transparent fee model: 15% default platform fee, org splits, and Stripe transfers.',
-      icon: BadgeDollarSign,
+      title: 'How Getting Paid Works',
+      description: 'Set your own rates and get paid securely to your bank through Stripe Connect — automatically, every session.',
+      icon: CreditCard,
       href: '/for-coaches#coach-pricing',
     },
     {
@@ -133,7 +132,7 @@ const resourcesByAudience = {
   organizations: [
     {
       title: 'Organizations on LevelCoach',
-      description: 'Roster management, automated payout splits, branded pages, and compliance gates.',
+      description: 'Roster management, automated secure payouts, branded pages, and compliance gates.',
       icon: Building2,
       href: '/for-organizations',
     },
@@ -150,8 +149,8 @@ const resourcesByAudience = {
       href: '/organizations',
     },
     {
-      title: 'Payout Splits Explained',
-      description: 'How the default 60/25/15 split works and how each leg is paid via Stripe.',
+      title: 'Payouts Explained',
+      description: 'How flexible, configurable payouts work and how each share is paid out securely via Stripe.',
       icon: CreditCard,
       href: '/for-organizations',
     },
@@ -167,7 +166,7 @@ const resourcesByAudience = {
 const quickLinks = [
   { title: 'How LevelCoach Works', description: 'Understand the platform', icon: ClipboardList, href: '/how-it-works' },
   { title: 'Find a Coach', description: 'Search the marketplace', icon: Search, href: '/coaches' },
-  { title: 'Fees & Payouts', description: 'The coach fee model', icon: BadgeDollarSign, href: '/for-coaches#coach-pricing' },
+  { title: 'How Getting Paid Works', description: 'Coach payouts via Stripe', icon: CreditCard, href: '/for-coaches#coach-pricing' },
   { title: 'Blog', description: 'Articles & updates', icon: BookOpen, href: '/blog' },
   { title: 'Terms of Service', description: 'Platform rules', icon: FileText, href: '/terms' },
   { title: 'Privacy Policy', description: 'Your data rights', icon: ShieldCheck, href: '/privacy' },

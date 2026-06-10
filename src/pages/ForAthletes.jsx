@@ -24,7 +24,7 @@ import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 const BENEFITS = [
   {
     title: 'Coaches for your sport and level',
-    body: 'Search 15 sports and training types — from soccer and basketball to speed & agility and strength work — and filter by specialty, level, location, and price.',
+    body: 'Search 15 sports and training types — from soccer and basketball to speed & agility and strength work — and filter by specialty, level, and location.',
     icon: Search,
   },
   {
@@ -62,7 +62,7 @@ const STEPS = [
   },
   {
     title: 'Find and book a coach',
-    body: 'Compare published profiles, reviews, and prices. Sign the participation waiver once, then book with credits.',
+    body: 'Compare published profiles, reviews, and live availability. Sign the participation waiver once, then book your session.',
     icon: Search,
   },
   {
@@ -74,8 +74,8 @@ const STEPS = [
 
 const FAQ = [
   {
-    q: 'How much does training cost?',
-    a: 'Each coach sets their own session pricing, shown on their profile and confirmed at checkout. You pay through Stripe — LevelCoach never asks you to pay a coach directly.',
+    q: 'How do I pay for training?',
+    a: 'Securely through Stripe Checkout. You confirm everything before anything is charged, and LevelCoach never asks you to pay a coach directly or off-platform.',
   },
   {
     q: 'Are the coaches verified?',

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bell,
   Camera,
+  Check,
   CheckCircle2,
   FileSignature,
   KeyRound,
@@ -20,20 +21,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/lib/AuthContext';
 import { auth } from '@/lib/auth';
 import { storage } from '@/lib/storage';
 import { initialsOf } from '@/lib/displayName';
+import { sportOptions } from '@/lib/sportsCatalog';
 import { useMyAthlete } from '@/features/athlete/useMyAthlete';
-import { sportDisplayName, sportIconFor } from '@/features/athlete/sportMeta';
+import { sportIconFor } from '@/features/athlete/sportMeta';
 import { parseJsonObject } from '@/features/athlete/portalShared';
 import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { SignedAgreementsList } from '@/features/athlete/AthleteDocuments';
 
 // Athlete settings — every saved control persists for real through the
 // server-side `accountProfile.update` whitelist (via auth.updateCurrentUser).
-// Sport/level/health data for a self-managed athlete lives in the family-managed
-// athlete profile and is shown read-only here (never jammed into `bio`).
+// A self-managed (adult) athlete edits their own sports, skill level, and
+// position here; they save to profiles.sports / skill_level / sport_position.
+// Health notes remain family/coach-managed athlete_profiles data, shown
+// read-only (never jammed into `bio`).
 
 const SECTIONS = [
   { id: 'account', label: 'Account', sub: 'Name, photo, contact', icon: UserRound },
@@ -44,6 +55,11 @@ const SECTIONS = [
 ];
 
 const SECTION_ALIASES = { profile: 'account', sports: 'sport', password: 'security', documents: 'legal' };
+
+// Self-service skill levels — must match the accountProfile.update whitelist
+// and the profiles.skill_level enum in the provisioner.
+const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
+const MAX_SPORTS = 12;
 
 const NOTIFICATION_PREFS = [
   { key: 'session_reminders', label: 'Session reminders', sub: 'Reminders ahead of upcoming sessions.' },
@@ -286,28 +302,82 @@ function AccountSection() {
 
 function SportSection({ athlete }) {
   const { user, refetchUser } = useAuth();
-  const [form, setForm] = useState({ location_label: '', bio: '' });
+  const allSports = useMemo(() => sportOptions(), []);
+
+  // Pre-fill from the editable profile fields, falling back to the
+  // family-managed athlete_profiles row the portal already reads for display.
+  const initialSports = useMemo(() => {
+    const fromProfile = Array.isArray(user?.sports) ? user.sports.filter(Boolean) : [];
+    if (fromProfile.length > 0) return fromProfile;
+    const fromAthlete = athlete.athleteProfile?.sports;
+    return Array.isArray(fromAthlete) ? fromAthlete.filter(Boolean) : [];
+  }, [user?.sports, athlete.athleteProfile?.sports]);
+
+  const initialLevel = user?.skill_level || athlete.athleteProfile?.skill_level || '';
+  const initialPosition = user?.sport_position || '';
+  // Serialized so the reset effect can compare the sport list by value, not by
+  // the fresh array reference produced each render.
+  const initialSportsKey = initialSports.join('|');
+
+  const [form, setForm] = useState({
+    sports: initialSports,
+    skill_level: initialLevel,
+    sport_position: initialPosition,
+    location_label: '',
+    bio: '',
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm({
+      sports: initialSports,
+      skill_level: initialLevel,
+      sport_position: initialPosition,
       location_label: user?.location_label || '',
       bio: user?.bio || '',
     });
-  }, [user?.location_label, user?.bio]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialSportsKey,
+    initialLevel,
+    initialPosition,
+    user?.location_label,
+    user?.bio,
+  ]);
 
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const dirty = (form.location_label !== (user?.location_label || '')) || (form.bio !== (user?.bio || ''));
+
+  const toggleSport = (key) => {
+    setForm((current) => {
+      const has = current.sports.includes(key);
+      if (has) return { ...current, sports: current.sports.filter((s) => s !== key) };
+      if (current.sports.length >= MAX_SPORTS) {
+        toast.error(`You can select up to ${MAX_SPORTS} sports.`);
+        return current;
+      }
+      return { ...current, sports: [...current.sports, key] };
+    });
+  };
+
+  const sameSet = (a, b) => a.length === b.length && a.every((v) => b.includes(v));
+  const dirty = !sameSet(form.sports, initialSports)
+    || form.skill_level !== initialLevel
+    || form.sport_position !== initialPosition
+    || form.location_label !== (user?.location_label || '')
+    || form.bio !== (user?.bio || '');
 
   const save = async () => {
     setSaving(true);
     try {
       await auth.updateCurrentUser({
+        sports: form.sports,
+        skill_level: form.skill_level,
+        sport_position: form.sport_position.trim(),
         location_label: form.location_label.trim(),
         bio: form.bio.trim(),
       });
       await refetchUser();
-      toast.success('Profile saved.');
+      toast.success('Sport profile saved.');
     } catch (err) {
       toast.error(err?.message || 'Could not save your profile.');
     } finally {
@@ -322,45 +392,75 @@ function SportSection({ athlete }) {
     <SettingsCard
       title="Sport & profile"
       icon={Trophy}
-      blurb="Your training area and a short bio your coach sees. Sport-specific details are managed below."
+      blurb="Set the sports you train, your level, and your position. These power your assessments and how coaches find you."
     >
       <div className="space-y-6">
-        {/* Read-only sport identity (managed via athlete profile / coach) */}
-        <div className="rounded-lg border border-border bg-background/40 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground">Your sports & level</p>
-          </div>
-          {athlete.loading ? (
-            <div className="mt-3 h-7 w-48 animate-pulse rounded-full bg-secondary/60" aria-hidden="true" />
-          ) : athlete.sports.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              No sport set yet. Your sport, level, and position are set up during onboarding and by your
-              coach — reach out to your coach to update them.
-            </p>
-          ) : (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {athlete.sports.map((sport) => {
-                const Icon = sportIconFor(sport);
-                return (
-                  <span
-                    key={sport}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-xs font-semibold text-foreground"
-                  >
-                    <Icon className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-                    {sportDisplayName(sport)}
-                  </span>
-                );
-              })}
-              {profile?.skill_level && (
-                <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-                  {profile.skill_level}
-                </span>
-              )}
-            </div>
-          )}
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Sport, level, and position power your assessments. They&apos;re set in onboarding and by your coach.
+        {/* Editable sports multi-select */}
+        <fieldset>
+          <legend className="text-sm font-semibold text-foreground">Your sports</legend>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Pick every sport you train in. Choose up to {MAX_SPORTS}.
           </p>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {allSports.map((sport) => {
+              const Icon = sportIconFor(sport.value);
+              const selected = form.sports.includes(sport.value);
+              return (
+                <button
+                  key={sport.value}
+                  type="button"
+                  onClick={() => toggleSport(sport.value)}
+                  aria-pressed={selected}
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                    selected
+                      ? 'border-accent/40 bg-accent/10 text-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:border-accent/30 hover:text-foreground'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Icon className={`h-4 w-4 ${selected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
+                    {sport.label}
+                  </span>
+                  {selected && <Check className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="sport-level">Skill level</Label>
+            <Select
+              value={form.skill_level || undefined}
+              onValueChange={(value) => set('skill_level', value)}
+            >
+              <SelectTrigger id="sport-level" className="mt-1 bg-background">
+                <SelectValue placeholder="Select your level" />
+              </SelectTrigger>
+              <SelectContent>
+                {SKILL_LEVELS.map((level) => (
+                  <SelectItem key={level} value={level}>{level}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">Helps coaches tailor sessions to you.</p>
+          </div>
+
+          <div>
+            <Label htmlFor="sport-position">Position</Label>
+            <Input
+              id="sport-position"
+              value={form.sport_position}
+              onChange={(e) => set('sport_position', e.target.value)}
+              maxLength={100}
+              className="mt-1 bg-background"
+              placeholder="e.g. Striker, Point Guard, Sprints"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Free-form since positions vary by sport. Leave blank if it doesn&apos;t apply.
+            </p>
+          </div>
         </div>
 
         {/* Editable: location + bio (whitelisted fields) */}

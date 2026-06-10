@@ -15,7 +15,7 @@ import { Reveal, StatTile, isUpcomingSession } from '@/features/athlete/portalSh
 
 // Sport pills with icon + (optional) position/level, rendered from real athlete
 // profile data. Falls back gracefully while the profile is still loading.
-function SportIdentity({ athlete, user }) {
+function SportIdentity({ athlete }) {
   if (athlete.loading) {
     return <div className="h-7 w-52 animate-pulse rounded-full bg-white/15" aria-hidden="true" />;
   }
@@ -34,7 +34,7 @@ function SportIdentity({ athlete, user }) {
     <div className="flex flex-wrap items-center gap-2" aria-label="Your sports">
       {athlete.sports.map((sport) => {
         const Icon = sportIconFor(sport);
-        const position = positionLabelFor(sport, user?.position);
+        const position = positionLabelFor(sport, athlete.position);
         return (
           <Badge
             key={sport}
@@ -47,9 +47,9 @@ function SportIdentity({ athlete, user }) {
           </Badge>
         );
       })}
-      {athlete.athleteProfile?.skill_level && (
+      {athlete.skillLevel && (
         <Badge variant="outline" className="border-white/20 px-3 py-1 text-xs text-blue-100/80">
-          {athlete.athleteProfile.skill_level}
+          {athlete.skillLevel}
         </Badge>
       )}
     </div>
@@ -96,7 +96,7 @@ export default function AthletePortalHeader({
               Here&apos;s your training at a glance — every number below is live.
             </p>
             <div className="mt-4">
-              <SportIdentity athlete={athlete} user={user} />
+              <SportIdentity athlete={athlete} />
             </div>
           </div>
 

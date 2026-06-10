@@ -4,6 +4,9 @@ const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 
 const ONBOARDING_ROLES = ['athlete', 'parent', 'guardian', 'organization', 'coach_applicant'];
 const MATCHING_AGE_GROUPS = ['5-8', '9-12', '13+'];
+const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
+const MAX_SPORTS = 12;
+const SPORT_MAX_LEN = 120;
 
 function services() {
   const client = new Client()
@@ -152,12 +155,32 @@ function buildUpdates(payload, profile) {
     ['parent_first_name', 100], ['parent_last_name', 100],
     ['parent_phone', 30], ['parent_relationship', 100],
     ['bio', 20000], ['location_label', 500],
+    ['sport_position', 100],
   ];
   for (const [field, max] of stringFields) {
     if (payload[field] === undefined) continue;
     const value = cleanString(payload[field], max);
     if (value === null) return fail(`${field} is too long (max ${max} characters).`);
     updates[field] = value;
+  }
+
+  // Self-service sport identity (athletes managing their own profile).
+  if (payload.skill_level !== undefined) {
+    const value = String(payload.skill_level || '').trim();
+    if (value && !SKILL_LEVELS.includes(value)) return fail('skill_level is invalid.');
+    updates.skill_level = value;
+  }
+
+  if (payload.sports !== undefined) {
+    if (!Array.isArray(payload.sports)) return fail('sports must be an array.');
+    if (payload.sports.length > MAX_SPORTS) return fail(`sports allows at most ${MAX_SPORTS} entries.`);
+    const cleaned = [];
+    for (const entry of payload.sports) {
+      const value = cleanString(entry, SPORT_MAX_LEN);
+      if (value === null) return fail(`Each sport must be ${SPORT_MAX_LEN} characters or fewer.`);
+      if (value) cleaned.push(value);
+    }
+    updates.sports = cleaned;
   }
 
   if (payload.parent_email !== undefined) {
