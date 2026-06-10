@@ -1,51 +1,93 @@
-# LevelCoach Training Go-Live Readiness Plan
+# LevelCoach Training — Go-Live Readiness Plan
 
-Assessment date: 2026-06-07
+Last updated: 2026-06-10 (production cutover).
 
-## Product Direction
+LevelCoach Training is a multi-sport coaching marketplace: athletes and
+parents/guardians find coaches, book and pay for sessions, message safely, and
+track development; coaches run their business (profile, availability, clients,
+training plans, evaluations, earnings, Stripe Connect payouts); organizations
+(gyms/academies/clubs) manage rosters, branding, and payout splits; platform
+admins operate everything with a locked master-admin root of trust.
 
-LevelCoach Training is a clean SaaS coaching marketplace and operations platform. The product UI direction is light surfaces, navy/slate text, bright-blue actions, fine blue/gray borders, dashboard cards, responsive workflows, and the LevelCoach wordmark.
+## What the cutover delivered
 
-The active product surface is:
+- **Security model**: account-label authorization (`admin`/`superadmin`/`coach`),
+  documentSecurity + per-document grants everywhere, server-only writes for all
+  sensitive collections, 24 consolidated Appwrite Functions with server-side
+  validation, audit logging, ban enforcement, and no client-trusted prices,
+  roles, or IDs. Tripwires: `npm run phase7:verify`.
+- **Payments**: platform is merchant of record; server-priced checkout in
+  integer cents; default platform fee `PLATFORM_FEE_BPS` (15%); org/coach
+  splits via `payout_rules` (e.g. 60/25/15) paid as real Stripe transfers from
+  the verified webhook; idempotent webhooks; admin refunds with proportional
+  transfer reversals; dispute handling; append-only `payment_ledger_entries`
+  with reconciliation views for coach, org, and admin.
+- **Safety/compliance**: role-specific legal packets (placeholder copy —
+  attorney review required), guardian-bound minor consent, minors cannot book
+  or self-sign, parent-visible messaging grants, safety reports, private
+  buckets actually private.
 
-- athletes and parents discovering coaches, booking sessions, paying, messaging, and tracking progress
-- coaches managing profile, availability, clients, sessions, earnings, and messages
-- organization/admin users managing coaches, users, pricing, bookings, credits, applications, content, conversations, and revenue
+## Launch checklist (ordered)
 
-## Launch Blockers
+### A. Secrets & accounts
+- [ ] **Rotate every key currently in `.env.local`** (Stripe live secret,
+      Appwrite admin API key, Resend) — they predate the cutover and have sat
+      in a working tree. Remove the stale PayPal and BASE44 entries.
+- [ ] Use Stripe **test mode** until section D passes end-to-end.
+- [ ] Set all vars from `.env.example` in Vercel (frontend) and via
+      `scripts/configure-functions.mjs` (functions), including the new
+      `STRIPE_CONNECT_WEBHOOK_SECRET`, `PLATFORM_FEE_BPS`, `UNSUBSCRIBE_SECRET`,
+      `MASTER_ADMIN_EMAIL`, `APP_BASE_URL`.
 
-| Priority | Finding | Destination | Acceptance Criteria |
-|---|---|---|---|
-| P0 | Appwrite environment must be reprovisioned for LevelCoach naming. | `.env.local`, Vercel env, Appwrite Console | `VITE_APPWRITE_DATABASE_ID` and `APPWRITE_DATABASE_ID` are set, provision scripts authenticate, and all active collections exist. |
-| P0 | Appwrite function deployment now has a canonical source tree, but still needs live deployment verification. | `appwrite.json`, `functions/*`, deployment scripts | Payment, refund, email, matching, coach availability, public coach, coach-client, legal signing/PDF, master-admin, and Stripe Connect functions deploy and execute. |
-| P0 | Payment and credit flows need live verification. | Stripe, Appwrite functions | Each successful Stripe card purchase creates exactly one correct `session_credits` record and handles duplicate webhooks idempotently. |
-| P0 | Organization onboarding needs live Appwrite verification. | schema, `CreateOrganization.jsx`, admin/org routes | Organizations, memberships, owner roles, slugs, and logo storage are backed by real collections; Stripe subscription state is completed in the payments phase. |
-| P1 | Legal/privacy copy and legal template seed content need review for youth coaching, messaging, payments, refunds, e-signature consent, and document retention. | `Terms.jsx`, `Privacy.jsx`, `src/lib/legalTemplateDefinitions.js`, legal review | Production legal pages and required legal templates are reviewed and approved. |
+### B. Backend provisioning (see APPWRITE_SETUP.md)
+- [ ] `node scripts/provision-appwrite.mjs` (permission cutover included)
+- [ ] Widen any enums the script flags (console, one-time)
+- [ ] `node scripts/backfill-permissions.mjs --dry-run` → apply
+- [ ] `node scripts/seed-sports.mjs && node scripts/seed-legal-templates.mjs`
+- [ ] `node scripts/configure-functions.mjs && node scripts/deploy-functions.mjs`
+- [ ] Delete the 8 superseded functions from the Appwrite console
+- [ ] Configure both Stripe webhook endpoints (platform + Connect)
 
-## Quality Gates
+### C. Master admin & roles
+- [ ] Create + verify the `MASTER_ADMIN_EMAIL` account → `/master-admin` → Bootstrap
+- [ ] Grant admin roles only through the master-admin UI
 
-- `npm run build` passes.
-- `npm run lint` passes.
-- Dependency audit is clean or exceptions are documented.
-- Typecheck is passing or intentionally scoped.
-- Appwrite metadata check has no missing active collections, attributes, functions, or buckets.
-- Stripe sandbox tests pass before live credentials are used.
-- `npm run phase0:verify` passes before deploying function changes.
-- `npm run phase1:verify` passes before testing onboarding/admin role changes.
-- `npm run phase2:verify` passes before testing legal packet signing, booking gates, and admin legal vault workflows.
-- `npm run phase3:verify` passes before testing Stripe Checkout, Connect, webhooks, refunds, and reconciliation.
-- `npm run legal:seed-templates` has been run after provisioning and counsel-approved template text has been published.
-- Booking smoke test passes on mobile and desktop.
-- Coach portal smoke test passes.
-- Admin portal smoke test passes.
-- Matching and parent consent smoke test passes.
-- Public route smoke test passes: `/`, `/book`, `/for-coaches`, `/create-account`, `/apply/private-training-coach`, `/create-organization`, `/resources`, `/terms`, `/privacy`.
+### D. End-to-end verification (test mode)
+- [ ] Coach: apply → admin approval → coach label → profile → availability →
+      email-code verification → Stripe Connect onboarding → legal packet →
+      **Publish** (gate must list anything missing)
+- [ ] Athlete (adult): signup → onboarding → legal packet → buy package
+      (Stripe test card) → webhook creates exactly ONE credit (re-send the
+      webhook from Stripe to prove idempotency) → book → coach sees session
+- [ ] Splits: org with payout rule 60/25 → checkout → verify two transfers in
+      Stripe + ledger rows; solo coach → one transfer at 85%
+- [ ] Refund from `/admin/payments` → verify Stripe refund + transfer
+      reversal(s) + credit adjustment + ledger entries
+- [ ] Parent/minor: parent signup → add child → guardian packet (bound to the
+      child) → book for child; verify a minor account cannot book or self-sign
+- [ ] Messaging: two users → realtime delivery; non-participant cannot read
+      (try via console SDK); guardian sees child's thread
+- [ ] Permission spot-checks from a throwaway user account via the SDK:
+      cannot read other profiles, cannot create credits, cannot update
+      coaches/pricing/site_content, cannot read stripe records
+- [ ] `npm run phase0:verify && npm run phase7:verify` green in CI
 
-## Recommended Next Phases
+### E. Legal (blocking for real users)
+- [ ] Attorney review of ALL legal templates (`src/lib/legalTemplateDefinitions.js`),
+      Terms, Privacy — every document is marked
+      `OPERATIONAL PLACEHOLDER — ATTORNEY REVIEW REQUIRED`
+- [ ] Confirm COPPA posture for under-13 athletes with counsel
+- [ ] Decide insurance/background-check vendor for coach verification claims
 
-1. Refresh Appwrite API keys and provision the `levelcoach` database.
-2. Normalize function source/deployment structure.
-3. Verify auth, booking, payments, emails, matching, coach portal, and admin workflows.
-4. Live-test legal packet signing/storage enforcement for athletes, guardians, coaches, and organizations.
-5. Live-test Stripe Checkout, Connect onboarding, webhook idempotency, refunds, and `/admin/payments` reconciliation in sandbox.
-6. Add CI gates for build, lint, audit, schema drift, and Playwright route smoke tests.
+### F. Cutover
+- [ ] Switch Stripe to live keys (after D passes), re-run configure-functions
+- [ ] Vercel production deploy; confirm CSP/HSTS headers respond
+- [ ] Smoke the five public pages + one full booking with a real card; refund it
+
+## Known limitations / next phases
+- Org admins see revenue via reports, not raw coach session lists (permission-scoped).
+- Coach background checks are consent-only (no vendor integration yet).
+- No automated tests beyond structural verifiers — add Playwright smoke tests.
+- Matching is message-based discovery only (legacy match requests removed).
+- Webhook retries: a failed event row blocks re-processing of that event id;
+  clear the `stripe_webhook_events` row to replay after fixing the cause.

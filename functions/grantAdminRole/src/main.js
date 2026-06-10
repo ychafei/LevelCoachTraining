@@ -23,7 +23,9 @@ async function syncAccountLabels(users, accountId, role) {
   if (!accountId) return;
   const account = await users.get(accountId).catch(() => null);
   if (!account) return;
-  const labels = new Set((account.labels || []).filter((label) => label !== 'admin' && label !== 'super_admin' && label !== 'superadmin'));
+  const managed = new Set(['admin', 'super_admin', 'superadmin', 'coach']);
+  const labels = new Set((account.labels || []).filter((label) => !managed.has(label)));
+  if (role === 'coach') labels.add('coach');
   if (role === 'admin') labels.add('admin');
   if (role === 'super_admin') labels.add('admin').add('superadmin');
   await users.updateLabels(accountId, [...labels]);
@@ -60,8 +62,11 @@ export default async ({ req, res, error }) => {
     if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
 
     const { databases, users } = db();
+    // Authorization: superadmin account label (Users API) + locked master profile.
+    const callerAccount = await users.get(accountId).catch(() => null);
+    const callerLabels = callerAccount?.labels || [];
     const actor = await profileForAccount(databases, accountId);
-    if (actor?.role !== 'super_admin' || actor?.master_admin_locked !== true) {
+    if (!callerLabels.includes('superadmin') || actor?.master_admin_locked !== true) {
       return res.json({ error: 'Only the locked master admin can grant platform admin roles.' }, 403);
     }
 
@@ -118,6 +123,6 @@ export default async ({ req, res, error }) => {
     });
   } catch (err) {
     error?.(err?.message || String(err));
-    return res.json({ error: 'Could not grant admin role.', detail: err?.message || String(err) }, 500);
+    return res.json({ error: 'Could not grant admin role.' }, 500);
   }
 };

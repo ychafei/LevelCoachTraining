@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { coachRepo, profileRepo, coachLinkRequestRepo } from '@/api/repo';
-import { rpc } from '@/lib/rpc';
+import { coachRepo, profileRepo } from '@/api/repo';
 import { storage } from '@/lib/storage';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
@@ -139,34 +138,30 @@ export default function AdminCoaches() {
     }
   };
 
-  // Gated path: create a pending link request + email the person a verify
-  // link. The link only activates when they click it while signed in as
-  // that email (see /verify-coach-link).
+  // Server-validated path: adminOps.linkCoachAccount links the coach to the
+  // account's profile, sets the `coach` label and writes the audit log. This
+  // replaces the old email-token flow (coach_link_requests is server-only now).
   const sendVerifyLink = async () => {
     const raw = linkEmail.trim();
     if (!raw || !linkDialog) return;
     setSendingVerify(true);
     try {
-      const token = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-      const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      await coachLinkRequestRepo.create({
-        coach_id: linkDialog.id,
-        email: raw,
-        token,
-        status: 'pending',
-        created_by: user?.email || '',
-        expires_at,
-      });
-      const coachName = `${linkDialog.first_name || ''} ${linkDialog.last_name || ''}`.trim();
-      await rpc.invoke('sendCoachLinkEmail', {
-        to: raw,
-        link: `${window.location.origin}/verify-coach-link?token=${token}`,
-        coachName,
-      });
-      toast.success(`Verification email sent to ${raw}`);
+      const lower = raw.toLowerCase();
+      let u = users.find((x) => (x.email || '').toLowerCase() === lower);
+      if (!u) {
+        const found = await profileRepo.filter({ email: raw }).catch(() => []);
+        u = found[0] || (await profileRepo.filter({ email: lower }).catch(() => []))[0];
+      }
+      if (!u) {
+        toast.error('No account found with that email. They must create an account first, then you can link it.');
+        return;
+      }
+      await coachRepo.adminLinkAccount(linkDialog.id, u.id);
+      toast.success(`Coach access linked for ${raw}`);
       setLinkEmail('');
+      setLinkDialog(null);
     } catch (err) {
-      toast.error(err?.data?.error || err?.message || 'Could not send verification email. Check that the coach_link_requests collection exists and sendCoachLinkEmail is deployed.');
+      toast.error(err?.message || 'Could not link that account.');
     } finally {
       setSendingVerify(false);
     }
@@ -641,13 +636,13 @@ export default function AdminCoaches() {
                 disabled={sendingVerify || linkingEmail || !linkEmail.trim()}
                 className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs shrink-0"
               >
-                {sendingVerify ? 'Sending…' : 'Send verify email'}
+                {sendingVerify ? 'Linking…' : 'Server link'}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
               <strong>Link now</strong>: instant, for an existing account.{' '}
-              <strong>Send verify email</strong>: emails the person a link they must
-              click while signed in as that email to activate the coach access.
+              <strong>Server link</strong>: links through the audited admin
+              function (sets the coach label on the account).
             </p>
             <p className="text-[11px] text-muted-foreground mt-1">
               Tip: the coach should verify their email (a verification link is

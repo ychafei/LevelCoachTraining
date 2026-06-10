@@ -24,8 +24,8 @@ function Row({ label, value, icon: Icon, hint }) {
 }
 
 function Body({
-  county,
   coach,
+  coachLocationLabel,
   pkg,
   duration,
   sessionPrice,
@@ -42,12 +42,11 @@ function Body({
   const durationLabel = duration?.label || (creditDurationMinutes ? `${creditDurationMinutes / 60} hr${creditDurationMinutes > 60 ? 's' : ''}` : '');
   const bookingLocationLabel = bookingLocation?.label
     ? `${bookingLocation.label} · ${bookingLocation.radius || 15} mi`
-    : '';
+    : (coachLocationLabel || '');
   const availabilityLabel = availabilityMode === 'flexible' ? 'Flexible window' : 'Exact scheduling';
 
   return (
     <div className="divide-y divide-border">
-      <Row label="County" value={county} icon={MapPin} />
       <Row label="Location" value={bookingLocationLabel} icon={MapPin} />
       <Row label="Availability" value={availabilityLabel} icon={CalendarDays} />
       <Row label="Coach" value={coachLabel} icon={User} />
@@ -92,14 +91,13 @@ export default function BookingSummaryCard(props) {
 
   const headerLine = (() => {
     const parts = [];
-    if (props.county) parts.push(props.county);
     if (props.coach) parts.push(`${props.coach.first_name}`);
     if (props.usingCredit) {
       if (props.creditRemaining != null) parts.push(`${props.creditRemaining} left`);
     } else if (props.pkg) {
       parts.push(props.pkg.name);
     }
-    return parts.join(' · ') || 'Start with a county';
+    return parts.join(' · ') || 'Start by choosing a coach';
   })();
 
   return (

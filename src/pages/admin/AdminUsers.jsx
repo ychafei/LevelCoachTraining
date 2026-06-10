@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { profileRepo, userBanRepo, coachRepo, sessionCreditRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
-import { email as emailLib } from '@/lib/email';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -196,11 +195,8 @@ export default function AdminUsers() {
 
   const sendWarning = async () => {
     if (!warnMessage.trim()) { toast.error('Please enter a warning message'); return; }
-    await emailLib.send({
-      to: warnDialog.email,
-      subject: 'Account Warning — LevelCoach Training',
-      body: `<p>Hi ${warnDialog.full_name || warnDialog.email},</p><p>${warnMessage}</p><p>If you have questions, reply to this email or contact support@levelcoach.com.</p><p>— LevelCoach Training Team</p>`,
-    });
+    // The open-relay email helper was removed in the production cutover —
+    // warnings are recorded in the audit log only for now.
     await logAdminAction({
       actor: me,
       action: 'user.warn',
@@ -209,7 +205,7 @@ export default function AdminUsers() {
       reason: warnMessage,
       metadata: { target_email: warnDialog.email },
     });
-    toast.success(`Warning sent to ${warnDialog.email}`);
+    toast.success(`Warning recorded for ${warnDialog.email}`);
     setWarnDialog(null);
     setWarnMessage('');
   };

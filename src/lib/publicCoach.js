@@ -1,6 +1,8 @@
-// getPublicCoaches returns raw Appwrite documents: `availability` is a JSON
-// string and the doc id is `$id` (not `id`). Normalise here so the UI can use
-// `coach.id` and `coach.availability['Monday']` like everywhere else.
+// getPublicCoaches returns sanitized public cards: no email/phone/user_id/fee
+// fields ever reach the client. Cards include rating_avg, review_count, sports,
+// price_hint_cents and organization {id,name,slug,logo_file_id}. `availability`
+// may arrive as a JSON string from direct coach reads, so normalise here and
+// expose `coach.id` consistently.
 import {
   coachDistanceMiles,
   coachServiceRadiusMiles,
@@ -47,6 +49,8 @@ export function normalizePublicCoach(doc) {
     ...doc,
     id: doc.id || doc.$id,
     availability: parseAvailability(doc.availability),
+    sports: Array.isArray(doc.sports) ? doc.sports : [],
+    organization: doc.organization && typeof doc.organization === 'object' ? doc.organization : null,
   };
 }
 
@@ -149,7 +153,6 @@ export function coachBookHref(coach, params = {}) {
   if (!coach?.id) return '/book';
   const search = new URLSearchParams({
     coach_id: coach.id,
-    county: coach.county || '',
     ...params,
   });
   return `/book?${search.toString()}`;
@@ -174,27 +177,26 @@ export function publicCoachDisplay(coach, options = {}) {
   const locationLabel = cityStateLabel || trainingArea || (county ? `${county} County` : 'Location coming soon');
   const serviceRadiusMiles = coachServiceRadiusMiles(normalized);
   const serviceType = compact(normalized?.service_type) || '';
-  const organizationName = firstValue(normalized, [
+  const organization = normalized?.organization && typeof normalized.organization === 'object'
+    ? normalized.organization
+    : null;
+  const organizationName = compact(organization?.name) || firstValue(normalized, [
     'organization_name',
     'org_name',
-    'organization',
     'business_name',
     'academy_name',
   ]);
   const primarySport = inferSport(normalized, specializations);
-  const sessionRate = firstValue(normalized, [
-    'intro_price',
-    'session_rate',
-    'hourly_rate',
-    'price',
-    'base_price',
-  ]);
+  // Server-set price hint (integer cents). No client-side fee math.
+  const priceHintCents = Number(normalized?.price_hint_cents);
   const minPackagePrice = Array.isArray(options.packages) && options.packages.length
     ? Math.min(...options.packages.map((pkg) => Number(pkg.price) / (Number(pkg.sessions) || 1)).filter(Number.isFinite))
     : null;
-  const rateLabel = money(sessionRate) || (Number.isFinite(minPackagePrice) ? `From $${Math.round(minPackagePrice)}` : '');
-  const rating = Number(normalized?.rating_avg || normalized?.rating);
-  const reviewCount = Number(normalized?.review_count || normalized?.reviews);
+  const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? money(priceHintCents / 100) : '')
+    || (Number.isFinite(minPackagePrice) ? `From $${Math.round(minPackagePrice)}` : '');
+  // Rating aggregates are server-maintained (reviews function). Never derived client-side.
+  const rating = Number(normalized?.rating_avg);
+  const reviewCount = Number(normalized?.review_count);
   const distance = options.searchPlace ? coachDistanceMiles(normalized, options.searchPlace) : null;
 
   return {
@@ -204,7 +206,7 @@ export function publicCoachDisplay(coach, options = {}) {
     firstName: normalized?.first_name || 'Coach',
     initials: getCoachInitials(normalized),
     photoUrl: normalized?.photo_url || '',
-    organizationName: organizationName || 'LevelCoach verified coach',
+    organizationName: organizationName || 'Independent coach',
     primarySport,
     locationLabel,
     countyLabel: county ? `${county} County` : '',
@@ -222,9 +224,13 @@ export function publicCoachDisplay(coach, options = {}) {
     specializations,
     ageGroups,
     trainingFormats,
+    sports: toArray(normalized?.sports),
+    organization,
     headline: compact(normalized?.quote) || `Personal coaching for athletes who want structured, focused training.`,
     bio: compact(normalized?.bio) || '',
-    verified: !!(normalized?.is_active || normalized?.email_verified_at),
+    // Server-set signals only: coachSelf confirmEmailCode sets email_verified_at,
+    // coachSelf publish sets published. Nothing is fabricated client-side.
+    verified: !!(normalized?.email_verified_at || normalized?.published === true),
     contactVerified: !!normalized?.email_verified_at,
     nextAvailable: nextAvailabilityLabel(normalized),
     availability: availabilitySummary(normalized),

@@ -1,106 +1,34 @@
-import { account, databases, functions, DB_ID, COL, Query, ID } from '@/api/appwriteClient';
+import { account, databases, DB_ID, COL, Query, ID } from '@/api/appwriteClient';
+import { callFn } from '@/lib/rpc';
 import { OAuthProvider } from 'appwrite';
 
-function toProfilePatch(data) {
-  const out = {};
-  for (const [key, value] of Object.entries(data || {})) {
-    if (value === undefined) continue;
-    if (key.startsWith('$')) continue;
-    if (key === 'id' || key === 'created_date' || key === 'updated_date') continue;
-    out[key] = value;
-  }
-  return out;
-}
-
-// Hydrate the matching `profiles` document for an Appwrite account, then
-// merge into a single app-shaped user object. The app reads `.email`,
-// `.role`, `.is_super_admin`, `.first_name`, `.last_name`, `.id` etc., so
-// the merge keeps those keys stable.
+// Hydrate the caller's `profiles` document through the server-side
+// `accountProfile` function (clients can no longer create or repair profile
+// rows directly — the collection is server-only writable), then merge account
+// + profile into a single app-shaped user object. The app reads `.email`,
+// `.role`, `.is_super_admin`, `.first_name`, `.last_name`, `.id` etc., so the
+// merge keeps those keys stable.
 async function hydrateProfile(acc) {
   if (!acc) return null;
-  let profile = null;
-  try {
-    const res = await databases.listDocuments(DB_ID, COL.Profile, [
-      Query.equal('account_id', acc.$id),
-      Query.limit(1),
-    ]);
-    profile = res.documents[0] || null;
-  } catch (err) {
-    console.error('[auth] failed to load profile for', acc.$id, err);
+
+  // ensure → { profile, banned, labels }. The function creates the profile on
+  // first sign-in (replacing the old client-side auto-create), claims legacy
+  // rows, and reports the ban state + account labels.
+  const ensured = await callFn('accountProfile', { action: 'ensure' });
+  const profile = ensured?.profile || null;
+  const labels = Array.isArray(ensured?.labels) ? ensured.labels : [];
+
+  if (ensured?.banned === true) {
+    // Drop the session so a banned account can't keep using per-doc grants.
+    try { await account.deleteSession('current'); } catch { /* already gone */ }
+    /** @type {any} */
+    const err = new Error('This account is suspended.');
+    err.type = 'account_banned';
+    throw err;
   }
 
-  // First time we see this account (signup or OAuth) — create a minimal
-  // profiles row so downstream role checks and admin queries don't trip.
-  if (!profile) {
-    try {
-      profile = await databases.createDocument(DB_ID, COL.Profile, ID.unique(), {
-        account_id: acc.$id,
-        email: acc.email,
-        role: 'user',
-        first_name: '',
-        last_name: '',
-        profile_setup_complete: false,
-        onboarding_role: '',
-        onboarding_status: 'incomplete',
-      });
-    } catch (err) {
-      console.error('[auth] failed to auto-create profile for', acc.$id, err);
-    }
-  }
-
-  // Repair a blank/stale profile email. Some accounts (often OAuth) were
-  // created when acc.email was empty, leaving profile.email = "" forever —
-  // which silently breaks all email-based matching (admin link + self-heal).
-  // Backfill it on every login so both duplicate rows become matchable.
-  if (
-    profile &&
-    acc.email &&
-    (profile.email || '').trim().toLowerCase() !== acc.email.trim().toLowerCase()
-  ) {
-    try {
-      profile = await databases.updateDocument(DB_ID, COL.Profile, profile.$id, {
-        email: acc.email,
-      });
-    } catch (err) {
-      console.error('[auth] failed to repair profile email for', acc.$id, err);
-    }
-  }
-
-  // Self-heal duplicate-account profiles: if this account's profile has no
-  // coach_id but a sibling profile with the same email does (an admin linked
-  // the other account), copy the link onto this profile so the coach portal
-  // works regardless of which sign-in method was used.
-  // Gate auto-reconciliation on a verified email: an unverified account must
-  // not inherit coach access just by using someone else's email. OAuth
-  // accounts are provider-verified; password accounts verify via /verify-email.
-  if (profile && !profile.coach_id && acc.email && acc.emailVerification === true) {
-    try {
-      // Index-free: list profiles and match email client-side. Appwrite
-      // rejects Query.equal on an unindexed attribute, and profiles.email
-      // is not indexed. Fine for a small profiles collection.
-      const want = acc.email.trim().toLowerCase();
-      const sibs = await databases.listDocuments(DB_ID, COL.Profile, [
-        Query.limit(200),
-      ]);
-      const linked = sibs.documents.find(
-        (d) => d.$id !== profile.$id
-          && (d.email || '').trim().toLowerCase() === want
-          && d.coach_id,
-      );
-      if (linked) {
-        const patch = { coach_id: linked.coach_id };
-        // A sibling having coach access proves intent; never auto-grant admin.
-        if (!profile.role || profile.role === 'user') patch.role = 'coach';
-        profile = await databases.updateDocument(DB_ID, COL.Profile, profile.$id, patch);
-      }
-    } catch (err) {
-      console.error('[auth] coach-link self-heal failed for', acc.$id, err);
-    }
-  }
-
-  // Profile fields take precedence; account email is authoritative. Typed as
-  // `any` because the profile schema is dynamic — TS can't see the columns
-  // that come back from Appwrite.
+  // Org membership rows are readable via per-document grants — load them
+  // directly but tolerate failures (pre-provisioned/staging databases).
   let organizationMemberships = [];
   if (profile) {
     try {
@@ -114,8 +42,6 @@ async function hydrateProfile(acc) {
         id: doc.$id,
       }));
     } catch (err) {
-      // Older/staging databases may not have the Phase 0 collections until
-      // provisioned. Auth should still work so users can reach setup screens.
       console.warn('[auth] organization memberships unavailable', err?.message || err);
     }
   }
@@ -130,7 +56,8 @@ async function hydrateProfile(acc) {
     name: profile
       ? [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || acc.name
       : acc.name,
-    is_super_admin: profile?.role === 'super_admin',
+    labels,
+    is_super_admin: labels.includes('superadmin') || profile?.role === 'super_admin',
     organization_memberships: organizationMemberships,
     organization_ids: organizationMemberships.map((m) => m.organization_id).filter(Boolean),
     primary_organization_id: profile?.primary_organization_id || organizationMemberships[0]?.organization_id || '',
@@ -163,8 +90,8 @@ export const auth = {
   },
 
   // Create a brand-new Appwrite account, then immediately sign in. The
-  // hydrateProfile() call inside getCurrentUser() will insert the matching
-  // profiles row.
+  // accountProfile.ensure call inside getCurrentUser() inserts the matching
+  // profiles row server-side.
   signUp: async (email, password) => {
     await account.create(ID.unique(), email, password);
     await account.createEmailPasswordSession(email, password);
@@ -239,52 +166,34 @@ export const auth = {
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   },
 
-  // Update the current user's profile document (not the Appwrite account).
+  // Update the current user's profile document through the server-side
+  // whitelist (profiles is no longer client-writable).
   updateCurrentUser: async (data) => {
-    const acc = await account.get();
-    const res = await databases.listDocuments(DB_ID, COL.Profile, [
-      Query.equal('account_id', acc.$id),
-      Query.limit(1),
-    ]);
-    const existing = res.documents[0];
-    if (!existing) {
-      throw new Error('No profile found for current account');
+    const payload = {};
+    for (const [key, value] of Object.entries(data || {})) {
+      if (value === undefined) continue;
+      if (key.startsWith('$')) continue;
+      if (key === 'id' || key === 'created_date' || key === 'updated_date') continue;
+      payload[key] = value;
     }
-    await databases.updateDocument(DB_ID, COL.Profile, existing.$id, toProfilePatch(data));
+    await callFn('accountProfile', { action: 'update', ...payload });
     return auth.getCurrentUser();
   },
 
-  // Admin-only invite. Browser SDK can't create users — this is a thin
-  // wrapper around an Appwrite Function. If the function isn't deployed yet
-  // it'll throw; the admin UI surfaces the error.
+  // Admin-only invite — routed through the consolidated adminOps function.
   inviteUser: async (email, role) => {
-    const exec = await functions.createExecution(
-      'inviteUser',
-      JSON.stringify({ email, role }),
-      false,
-    );
-    return JSON.parse(exec.responseBody || '{}');
+    return callFn('adminOps', { action: 'inviteUser', email, role });
   },
 
   bootstrapMasterAdmin: async () => {
-    const exec = await functions.createExecution('bootstrapMasterAdmin', JSON.stringify({}), false);
-    const data = JSON.parse(exec.responseBody || '{}');
-    if (exec.responseStatusCode >= 400 || data.error) {
-      throw new Error(data.detail || data.error || `bootstrapMasterAdmin failed: ${exec.responseStatusCode}`);
-    }
-    return data;
+    return callFn('bootstrapMasterAdmin', {});
   },
 
   grantAdminRole: async ({ profileId, role, allowSuperAdmin = false }) => {
-    const exec = await functions.createExecution(
-      'grantAdminRole',
-      JSON.stringify({ profile_id: profileId, role, allow_super_admin: allowSuperAdmin }),
-      false,
-    );
-    const data = JSON.parse(exec.responseBody || '{}');
-    if (exec.responseStatusCode >= 400 || data.error) {
-      throw new Error(data.error || `grantAdminRole failed: ${exec.responseStatusCode}`);
-    }
-    return data;
+    return callFn('grantAdminRole', {
+      profile_id: profileId,
+      role,
+      allow_super_admin: allowSuperAdmin,
+    });
   },
 };

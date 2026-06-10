@@ -1,13 +1,12 @@
 import { makeRepo } from '@/api/repoFactory';
-import { COL } from '@/api/appwriteClient';
+import { COL, mapDoc } from '@/api/appwriteClient';
+import { callFn } from '@/lib/rpc';
 
 const base = makeRepo(COL.Coach);
 
 // `availability` is a String attribute in Appwrite holding JSON, but the whole
 // app uses it as an object (coach.availability['Monday'] etc.). Centralise the
-// (de)serialisation here so reads return an object and writes send a string —
-// previously saving an object into the String attribute was rejected, so
-// availability never persisted.
+// deserialisation here so reads return an object.
 function parseAvail(doc) {
   if (doc && typeof doc.availability === 'string' && doc.availability.trim()) {
     try {
@@ -19,18 +18,47 @@ function parseAvail(doc) {
   return doc;
 }
 
-function serializeAvail(data) {
-  if (data && data.availability && typeof data.availability === 'object') {
-    return { ...data, availability: JSON.stringify(data.availability) };
-  }
-  return data;
-}
-
+// Coaches are server-only writable. Coach self-service goes through the
+// `coachSelf` function (whitelisted — never fee/verified/stripe/active
+// fields); admin mutations go through `adminOps`. Public reads stay direct
+// (collection read: any).
 export const coachRepo = {
-  ...base,
   list: async (sort) => (await base.list(sort)).map(parseAvail),
   filter: async (where, sort) => (await base.filter(where, sort)).map(parseAvail),
   get: async (id) => parseAvail(await base.get(id)),
-  create: (data) => base.create(serializeAvail(data)),
-  update: (id, data) => base.update(id, serializeAvail(data)),
+
+  // --- Coach self-service (label `coach`) -----------------------------------
+
+  // Whitelisted profile fields (bio, quote, training area, photo, …).
+  updateSelf: async (data) => {
+    const res = await callFn('coachSelf', { action: 'updateProfile', ...data });
+    return res?.coach ? parseAvail(mapDoc(res.coach)) : res?.coach;
+  },
+
+  // Weekly availability object — serialised server-side.
+  setAvailability: (availability) => callFn('coachSelf', { action: 'setAvailability', availability }),
+
+  setBookingRules: (rules) => callFn('coachSelf', { action: 'setBookingRules', ...rules }),
+
+  setSportProfiles: (profiles) => callFn('coachSelf', { action: 'setSportProfiles', profiles }),
+
+  // Email-ownership verification (server-generated hashed codes).
+  requestEmailCode: (email) => callFn('coachSelf', { action: 'requestEmailCode', ...(email ? { email } : {}) }),
+  confirmEmailCode: (code) => callFn('coachSelf', { action: 'confirmEmailCode', code }),
+
+  // Marketplace publication (server-gated: legal packet + Connect + verified
+  // email + complete profile).
+  publish: () => callFn('coachSelf', { action: 'publish' }),
+  unpublish: () => callFn('coachSelf', { action: 'unpublish' }),
+
+  // --- Admin (label `admin`) -------------------------------------------------
+
+  adminLinkAccount: (coach_id, profile_id) =>
+    callFn('adminOps', { action: 'linkCoachAccount', coach_id, profile_id }),
+
+  adminSetFee: (coach_id, platform_fee_bps) =>
+    callFn('adminOps', { action: 'setCoachFee', coach_id, platform_fee_bps }),
+
+  adminSetActive: (coach_id, is_active) =>
+    callFn('adminOps', { action: 'setCoachActive', coach_id, is_active }),
 };

@@ -59,7 +59,7 @@ for (const template of LEGAL_TEMPLATE_SEED) {
   );
   const payload = {
     ...template,
-    effective_at: template.effective_at || new Date().toISOString(),
+    effective_at: template.effective_at || found?.effective_at || new Date().toISOString(),
     checksum: checksum(template),
   };
 
@@ -70,6 +70,20 @@ for (const template of LEGAL_TEMPLATE_SEED) {
     await databases.createDocument(DB_ID, 'legal_templates', ID.unique(), payload);
     console.log(`  created ${template.template_key} v${template.version}`);
   }
+}
+
+// Retire documents that are no longer part of the current seed set: superseded
+// versions of seeded keys, and keys removed from the template set entirely.
+// Retired templates stop counting toward required legal packets.
+for (const doc of existing.documents) {
+  const current = LEGAL_TEMPLATE_SEED.some((template) =>
+    template.template_key === doc.template_key && template.version === doc.version
+  );
+  if (current || doc.retired_at) continue;
+  await databases.updateDocument(DB_ID, 'legal_templates', doc.$id, {
+    retired_at: new Date().toISOString(),
+  });
+  console.log(`  retired ${doc.template_key} v${doc.version}`);
 }
 
 console.log('Legal template seed complete. Have counsel review final text before production launch.');

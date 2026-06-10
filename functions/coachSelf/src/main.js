@@ -1,0 +1,570 @@
+import { Client, Databases, Users, ID, Query } from 'node-appwrite';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
+const CODE_TTL_MS = 10 * 60 * 1000;          // verification codes live 10 minutes
+const CODE_RATE_LIMIT = 3;                    // max codes per hour per coach
+const MAX_CODE_ATTEMPTS = 5;
+
+const SERVICE_TYPES = ['facility', 'travels', 'hybrid', 'online'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function services() {
+  const client = new Client()
+    .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1')
+    .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID)
+    .setKey(process.env.APPWRITE_API_KEY);
+  return { databases: new Databases(client), users: new Users(client) };
+}
+
+function body(req) {
+  if (req.bodyJson && typeof req.bodyJson === 'object') return req.bodyJson;
+  try { return JSON.parse(req.bodyRaw || req.body || '{}'); } catch { return {}; }
+}
+
+function header(req, names) {
+  for (const name of names) {
+    const value = req.headers?.[name] || req.headers?.[name.toLowerCase()] || req.headers?.[name.toUpperCase()];
+    if (value) return String(value);
+  }
+  return '';
+}
+
+function callerAccountId(req) {
+  return header(req, ['x-appwrite-user-id', 'X-Appwrite-User-Id', 'X-Appwrite-User-ID']);
+}
+
+async function profileForAccount(databases, accountId) {
+  const rows = await databases.listDocuments(DB_ID, 'profiles', [
+    Query.equal('account_id', accountId),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function callerIsBanned(databases, profile) {
+  if (!profile?.email) return false;
+  const rows = await databases.listDocuments(DB_ID, 'user_bans', [
+    Query.equal('banned_email', profile.email),
+    Query.equal('is_active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
+async function coachForAccount(databases, accountId) {
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function writeAudit(databases, entry) {
+  const data = { ...entry };
+  if (!['admin', 'super_admin'].includes(data.actor_role)) delete data.actor_role;
+  await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
+}
+
+function sha256(value) {
+  return createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+async function sendEmail({ to, subject, html }) {
+  if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
+  const from = process.env.EMAIL_FROM || 'LevelCoach Training <no-reply@levelcoach.com>';
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to, subject, html }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || data?.error || `Resend returned ${response.status}`);
+  return data;
+}
+
+// --- Validation helpers -------------------------------------------------------
+
+function str(value, min, max) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < min || trimmed.length > max) return undefined;
+  return trimmed;
+}
+
+function int(value, min, max) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) return undefined;
+  return n;
+}
+
+function num(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < min || n > max) return undefined;
+  return n;
+}
+
+function strArray(value, maxItemLen, maxItems) {
+  if (!Array.isArray(value) || value.length > maxItems) return undefined;
+  const out = [];
+  for (const item of value) {
+    const s = str(item, 1, maxItemLen);
+    if (s === undefined) return undefined;
+    out.push(s);
+  }
+  return out;
+}
+
+function validTimezone(value) {
+  const tz = str(value, 1, 64);
+  if (tz === undefined) return undefined;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { return undefined; }
+}
+
+// Whitelisted self-service profile fields. Fee/verification/stripe/active/
+// published/rating/user_id fields are intentionally absent.
+const PROFILE_FIELDS = {
+  first_name: (v) => str(v, 1, 100),
+  last_name: (v) => str(v, 1, 100),
+  bio: (v) => str(v, 0, 20000),
+  quote: (v) => str(v, 0, 1000),
+  photo_url: (v) => str(v, 0, 1000),
+  phone: (v) => str(v, 0, 30),
+  training_area: (v) => str(v, 0, 255),
+  service_city: (v) => str(v, 0, 120),
+  service_state: (v) => str(v, 0, 30),
+  service_zip: (v) => str(v, 0, 20),
+  service_radius_miles: (v) => int(v, 0, 250),
+  service_type: (v) => (SERVICE_TYPES.includes(v) ? v : undefined),
+  service_venue: (v) => str(v, 0, 500),
+  service_counties: (v) => strArray(v, 100, 30),
+  location_lat: (v) => num(v, -90, 90),
+  location_lng: (v) => num(v, -180, 180),
+  specializations: (v) => strArray(v, 100, 30),
+  sports: (v) => strArray(v, 100, 20),
+  timezone: (v) => validTimezone(v),
+  intro_video_url: (v) => str(v, 0, 1000),
+  price_hint_cents: (v) => int(v, 0, 1000000),
+};
+
+// --- Action handlers ----------------------------------------------------------
+
+async function updateProfile(databases, coach, payload) {
+  const updates = {};
+  for (const [key, validate] of Object.entries(PROFILE_FIELDS)) {
+    if (!(key in payload)) continue;
+    const value = validate(payload[key]);
+    if (value === undefined) return { status: 400, body: { error: `Invalid value for ${key}.` } };
+    updates[key] = value;
+  }
+  if (Object.keys(updates).length === 0) {
+    return { status: 400, body: { error: 'No updatable fields provided.' } };
+  }
+  const updated = await databases.updateDocument(DB_ID, 'coaches', coach.$id, updates);
+  return { status: 200, body: { coach: updated } };
+}
+
+async function setAvailability(databases, coach, payload) {
+  let availability = payload.availability;
+  if (typeof availability === 'string') {
+    try { availability = JSON.parse(availability); } catch { availability = null; }
+  }
+  if (!availability || typeof availability !== 'object') {
+    return { status: 400, body: { error: 'availability must be a JSON object.' } };
+  }
+  const serialized = JSON.stringify(availability);
+  if (serialized.length > 20000) return { status: 400, body: { error: 'availability is too large.' } };
+  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { availability: serialized });
+  return { status: 200, body: { ok: true } };
+}
+
+function validateBlock(block) {
+  if (!block || typeof block !== 'object') return null;
+  const label = str(block.label ?? '', 0, 200);
+  const startDate = String(block.start_date || '');
+  const endDate = String(block.end_date || '');
+  if (label === undefined) return null;
+  if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate) || startDate > endDate) return null;
+  const allDay = block.block_all_day !== false;
+  const out = {
+    label,
+    start_date: startDate,
+    end_date: endDate,
+    block_all_day: allDay,
+    is_active: block.is_active !== false,
+  };
+  if (!allDay) {
+    const startTime = String(block.blocked_start_time || '');
+    const endTime = String(block.blocked_end_time || '');
+    if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime) || startTime >= endTime) return null;
+    out.blocked_start_time = startTime;
+    out.blocked_end_time = endTime;
+  }
+  return out;
+}
+
+async function setBlocks(databases, coach, payload) {
+  const blocks = Array.isArray(payload.blocks) ? payload.blocks : null;
+  if (!blocks || blocks.length > 100) {
+    return { status: 400, body: { error: 'blocks must be an array of at most 100 entries.' } };
+  }
+  const validated = [];
+  for (const block of blocks) {
+    const clean = validateBlock(block);
+    if (!clean) return { status: 400, body: { error: 'One or more blocks are invalid.' } };
+    validated.push(clean);
+  }
+
+  // Replace this coach's rows: delete existing then recreate.
+  let cursor = null;
+  const existing = [];
+  for (;;) {
+    const page = await databases.listDocuments(DB_ID, 'coach_blocks', [
+      Query.equal('coach_id', coach.$id),
+      Query.limit(100),
+      ...(cursor ? [Query.cursorAfter(cursor)] : []),
+    ]);
+    existing.push(...page.documents);
+    if (page.documents.length < 100) break;
+    cursor = page.documents[page.documents.length - 1].$id;
+  }
+  for (const doc of existing) {
+    await databases.deleteDocument(DB_ID, 'coach_blocks', doc.$id);
+  }
+  const created = [];
+  for (const block of validated) {
+    const doc = await databases.createDocument(DB_ID, 'coach_blocks', ID.unique(), {
+      ...block,
+      coach_id: coach.$id,
+    });
+    created.push(doc.$id);
+  }
+  return { status: 200, body: { ok: true, block_ids: created } };
+}
+
+async function setSportProfiles(databases, coach, payload) {
+  const profiles = Array.isArray(payload.profiles) ? payload.profiles : null;
+  if (!profiles || profiles.length === 0 || profiles.length > 15) {
+    return { status: 400, body: { error: 'profiles must be an array of 1 to 15 entries.' } };
+  }
+  const cleaned = [];
+  for (const item of profiles) {
+    const sportKey = str(item?.sport_key, 1, 100);
+    if (sportKey === undefined) return { status: 400, body: { error: 'Each profile requires a sport_key.' } };
+    const specialties = strArray(item.specialties ?? [], 120, 20);
+    const levels = strArray(item.levels ?? [], 120, 20);
+    const positions = strArray(item.positions ?? [], 120, 20);
+    const sessionTypes = strArray(item.session_types ?? [], 120, 20);
+    const credentials = str(item.credentials ?? '', 0, 20000);
+    if ([specialties, levels, positions, sessionTypes, credentials].some((v) => v === undefined)) {
+      return { status: 400, body: { error: `Invalid sport profile for ${sportKey}.` } };
+    }
+    cleaned.push({
+      sport_key: sportKey,
+      specialties,
+      levels,
+      positions,
+      session_types: sessionTypes,
+      credentials,
+    });
+  }
+
+  // Every sport_key must exist in the sports collection.
+  const keys = [...new Set(cleaned.map((p) => p.sport_key))];
+  const known = await databases.listDocuments(DB_ID, 'sports', [
+    Query.equal('sport_key', keys),
+    Query.limit(keys.length),
+  ]);
+  const knownKeys = new Set(known.documents.map((s) => s.sport_key));
+  const unknown = keys.filter((key) => !knownKeys.has(key));
+  if (unknown.length > 0) {
+    return { status: 400, body: { error: `Unknown sport(s): ${unknown.join(', ')}.` } };
+  }
+
+  const existingRows = await databases.listDocuments(DB_ID, 'coach_sport_profiles', [
+    Query.equal('coach_id', coach.$id),
+    Query.limit(100),
+  ]);
+  const bySport = new Map(existingRows.documents.map((doc) => [doc.sport_key, doc]));
+  const ids = [];
+  for (const profile of cleaned) {
+    const existing = bySport.get(profile.sport_key);
+    const doc = existing
+      ? await databases.updateDocument(DB_ID, 'coach_sport_profiles', existing.$id, profile)
+      : await databases.createDocument(DB_ID, 'coach_sport_profiles', ID.unique(), {
+        ...profile,
+        coach_id: coach.$id,
+      });
+    ids.push(doc.$id);
+  }
+  return { status: 200, body: { ok: true, profile_ids: ids } };
+}
+
+async function setBookingRules(databases, coach, payload) {
+  const minNotice = int(payload.min_notice_hours, 0, 168);
+  const buffer = int(payload.buffer_minutes, 0, 120);
+  const maxAdvance = int(payload.max_advance_days, 1, 365);
+  if (minNotice === undefined || buffer === undefined || maxAdvance === undefined) {
+    return { status: 400, body: { error: 'min_notice_hours (0-168), buffer_minutes (0-120), and max_advance_days (1-365) are required integers.' } };
+  }
+  const rules = { min_notice_hours: minNotice, buffer_minutes: buffer, max_advance_days: maxAdvance };
+  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { booking_rules: JSON.stringify(rules) });
+  return { status: 200, body: { ok: true, booking_rules: rules } };
+}
+
+async function requestEmailCode(databases, coach, payload, error) {
+  const target = String(payload.email || coach.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(target) || target.length > 254) {
+    return { status: 400, body: { error: 'A valid email address is required.' } };
+  }
+
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const recent = await databases.listDocuments(DB_ID, 'coach_link_requests', [
+    Query.equal('coach_id', coach.$id),
+    Query.greaterThan('$createdAt', hourAgo),
+    Query.limit(CODE_RATE_LIMIT),
+  ]);
+  if (recent.documents.length >= CODE_RATE_LIMIT) {
+    return { status: 429, body: { error: 'Too many verification codes requested. Try again later.' } };
+  }
+
+  // Server-generated 6-digit code; only its hash is stored.
+  const code = String(randomInt(100000, 1000000));
+  await databases.createDocument(DB_ID, 'coach_link_requests', ID.unique(), {
+    email: target,
+    coach_id: coach.$id,
+    token: sha256(code),
+    status: 'pending',
+    attempts: 0,
+    expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
+  });
+
+  try {
+    await sendEmail({
+      to: target,
+      subject: 'LevelCoach Training - Email Verification Code',
+      html: `
+        <p>Enter this code in your coach profile to verify your email address:</p>
+        <p style="font-size:28px; font-weight:700; letter-spacing:6px;">${code}</p>
+        <p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>
+      `,
+    });
+  } catch (err) {
+    error?.(`verification email failed: ${err?.message || err}`);
+    return { status: 500, body: { error: 'Could not send verification email.' } };
+  }
+  return { status: 200, body: { ok: true } };
+}
+
+async function confirmEmailCode(databases, coach, payload) {
+  const code = String(payload.code || '').trim();
+  if (!/^\d{6}$/.test(code)) return { status: 400, body: { error: 'A 6-digit code is required.' } };
+
+  const rows = await databases.listDocuments(DB_ID, 'coach_link_requests', [
+    Query.equal('coach_id', coach.$id),
+    Query.equal('status', 'pending'),
+    Query.orderDesc('$createdAt'),
+    Query.limit(1),
+  ]);
+  const request = rows.documents[0];
+  if (!request) return { status: 400, body: { error: 'No pending verification code. Request a new one.' } };
+  if (request.expires_at && new Date(request.expires_at).getTime() < Date.now()) {
+    await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, { status: 'expired' }).catch(() => {});
+    return { status: 400, body: { error: 'This code has expired. Request a new one.' } };
+  }
+  if ((request.attempts || 0) >= MAX_CODE_ATTEMPTS) {
+    await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, { status: 'expired' }).catch(() => {});
+    return { status: 400, body: { error: 'Too many attempts. Request a new code.' } };
+  }
+
+  const expected = Buffer.from(String(request.token || ''), 'utf8');
+  const provided = Buffer.from(sha256(code), 'utf8');
+  const matches = expected.length === provided.length && timingSafeEqual(expected, provided);
+  if (!matches) {
+    await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, {
+      attempts: (request.attempts || 0) + 1,
+    }).catch(() => {});
+    return { status: 400, body: { error: 'Incorrect verification code.' } };
+  }
+
+  await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, { status: 'verified' });
+  const updates = { email_verified_at: new Date().toISOString() };
+  if (request.email && request.email !== coach.email) updates.email = request.email;
+  await databases.updateDocument(DB_ID, 'coaches', coach.$id, updates);
+  return { status: 200, body: { ok: true, email_verified_at: updates.email_verified_at } };
+}
+
+// --- Publish gate (ARCHITECTURE.md section 8) ----------------------------------
+
+function activeRequired(template, now = Date.now()) {
+  if (!template.required) return false;
+  if (template.retired_at && new Date(template.retired_at).getTime() <= now) return false;
+  if (template.effective_at && new Date(template.effective_at).getTime() > now) return false;
+  return true;
+}
+
+function agreementMatchesTemplate(agreement, template) {
+  if (!agreement || agreement.status !== 'signed') return false;
+  if (agreement.template_id === template.$id) return true;
+  return agreement.template_key === template.template_key
+    && agreement.template_version === template.version
+    && (!template.checksum || !agreement.template_checksum || agreement.template_checksum === template.checksum);
+}
+
+async function coachLegalPacketComplete(databases, profile, coach) {
+  const [templateRows, agreementRows] = await Promise.all([
+    databases.listDocuments(DB_ID, 'legal_templates', [
+      Query.equal('role', 'coach'),
+      Query.equal('required', true),
+      Query.limit(100),
+    ]),
+    databases.listDocuments(DB_ID, 'legal_agreements', [
+      Query.equal('signer_profile_id', profile.$id),
+      Query.equal('signer_role', 'coach'),
+      Query.equal('status', 'signed'),
+      Query.limit(200),
+    ]),
+  ]);
+  const templates = templateRows.documents.filter(activeRequired);
+  if (templates.length === 0) return false;
+  return templates.every((template) =>
+    agreementRows.documents.some((agreement) =>
+      (!agreement.coach_id || agreement.coach_id === coach.$id) && agreementMatchesTemplate(agreement, template)
+    )
+  );
+}
+
+async function connectReady(databases, coach) {
+  const rows = await databases.listDocuments(DB_ID, 'stripe_connected_accounts', [
+    Query.equal('owner_type', 'coach'),
+    Query.equal('owner_id', coach.$id),
+    Query.limit(10),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.some((row) => row.charges_enabled && row.payouts_enabled);
+}
+
+async function hasAvailability(databases, coach) {
+  if (typeof coach.availability === 'string' && coach.availability.trim()) {
+    try {
+      const parsed = JSON.parse(coach.availability);
+      if (Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed || {}).length > 0) return true;
+    } catch { /* fall through to blocks */ }
+  }
+  const rows = await databases.listDocuments(DB_ID, 'availability_blocks', [
+    Query.equal('coach_id', coach.$id),
+    Query.equal('active', true),
+    Query.limit(25),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.some((row) => row.block_type !== 'blackout');
+}
+
+async function hasSport(databases, coach) {
+  if (Array.isArray(coach.sports) && coach.sports.length > 0) return true;
+  const rows = await databases.listDocuments(DB_ID, 'coach_sport_profiles', [
+    Query.equal('coach_id', coach.$id),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
+async function publish(databases, profile, coach) {
+  const missing = [];
+  if (!(await coachLegalPacketComplete(databases, profile, coach))) missing.push('legal_packet');
+  if (!(await connectReady(databases, coach))) missing.push('stripe_connect');
+  if (!coach.email_verified_at) missing.push('email_verification');
+  if (String(coach.bio || '').trim().length < 80) missing.push('bio');
+  if (!String(coach.photo_url || '').trim()) missing.push('photo');
+  if (!(await hasSport(databases, coach))) missing.push('sport');
+  if (!(await hasAvailability(databases, coach))) missing.push('availability');
+  if (missing.length > 0) {
+    return { status: 400, body: { error: 'Publish requirements not met.', missing } };
+  }
+  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { published: true, is_active: true });
+  await writeAudit(databases, {
+    actor_email: profile.email || '',
+    action: 'coach.publish',
+    entity_type: 'Coach',
+    entity_id: coach.$id,
+    after: JSON.stringify({ published: true, is_active: true }),
+    metadata: JSON.stringify({ profile_id: profile.$id }),
+  });
+  return { status: 200, body: { ok: true, published: true } };
+}
+
+async function unpublish(databases, profile, coach) {
+  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { published: false });
+  await writeAudit(databases, {
+    actor_email: profile.email || '',
+    action: 'coach.unpublish',
+    entity_type: 'Coach',
+    entity_id: coach.$id,
+    after: JSON.stringify({ published: false }),
+    metadata: JSON.stringify({ profile_id: profile.$id }),
+  });
+  return { status: 200, body: { ok: true, published: false } };
+}
+
+// --- Entrypoint -----------------------------------------------------------------
+
+export default async ({ req, res, error }) => {
+  try {
+    const accountId = callerAccountId(req);
+    if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
+
+    const { databases, users } = services();
+    const account = await users.get(accountId).catch(() => null);
+    if (!account?.labels?.includes('coach')) {
+      return res.json({ error: 'Coach access required.' }, 403);
+    }
+    const profile = await profileForAccount(databases, accountId);
+    if (!profile) return res.json({ error: 'No profile found for this account.' }, 404);
+    if (await callerIsBanned(databases, profile)) {
+      return res.json({ error: 'Account access is restricted.' }, 403);
+    }
+    const coach = await coachForAccount(databases, accountId);
+    if (!coach) return res.json({ error: 'No coach record is linked to this account.' }, 403);
+
+    const payload = body(req);
+    let result;
+    switch (payload.action) {
+      case 'updateProfile':
+        result = await updateProfile(databases, coach, payload);
+        break;
+      case 'setAvailability':
+        result = await setAvailability(databases, coach, payload);
+        break;
+      case 'setBlocks':
+        result = await setBlocks(databases, coach, payload);
+        break;
+      case 'setSportProfiles':
+        result = await setSportProfiles(databases, coach, payload);
+        break;
+      case 'setBookingRules':
+        result = await setBookingRules(databases, coach, payload);
+        break;
+      case 'requestEmailCode':
+        result = await requestEmailCode(databases, coach, payload, error);
+        break;
+      case 'confirmEmailCode':
+        result = await confirmEmailCode(databases, coach, payload);
+        break;
+      case 'publish':
+        result = await publish(databases, profile, coach);
+        break;
+      case 'unpublish':
+        result = await unpublish(databases, profile, coach);
+        break;
+      default:
+        result = { status: 400, body: { error: 'Unknown action.' } };
+    }
+    return res.json(result.body, result.status);
+  } catch (err) {
+    error?.(err?.message || String(err));
+    return res.json({ error: 'Coach request failed.' }, 500);
+  }
+};

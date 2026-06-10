@@ -1,4 +1,4 @@
-import { Client, Databases, Storage, ID, Permission, Query, Role } from 'node-appwrite';
+import { Client, Databases, Storage, Users, ID, Permission, Query, Role } from 'node-appwrite';
 import { InputFile } from 'node-appwrite/file';
 import { jsPDF } from 'jspdf';
 
@@ -10,7 +10,7 @@ function services() {
     .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1')
     .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID)
     .setKey(process.env.APPWRITE_API_KEY);
-  return { databases: new Databases(client), storage: new Storage(client) };
+  return { databases: new Databases(client), storage: new Storage(client), users: new Users(client) };
 }
 
 function body(req) {
@@ -38,11 +38,42 @@ async function profileForAccount(databases, accountId) {
   return rows.documents[0] || null;
 }
 
-function canGenerate(actor, agreement) {
+async function callerIsBanned(databases, profile) {
+  if (!profile?.email) return false;
+  const rows = await databases.listDocuments(DB_ID, 'user_bans', [
+    Query.equal('banned_email', profile.email),
+    Query.equal('is_active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
+// Authority is derived server-side: admin label (Users API), the signer
+// themself, a verified org owner/admin, or a linked guardian of the athlete.
+async function canGenerate(databases, users, accountId, actor, agreement) {
+  const account = await users.get(accountId).catch(() => null);
+  const labels = account?.labels || [];
+  if (labels.includes('admin') || labels.includes('superadmin')) return true;
   if (!actor) return false;
-  if (actor.role === 'admin' || actor.role === 'super_admin') return true;
   if (agreement.signer_profile_id === actor.$id) return true;
-  if (agreement.organization_id && actor.primary_organization_id === agreement.organization_id) return true;
+  if (agreement.organization_id) {
+    const members = await databases.listDocuments(DB_ID, 'organization_members', [
+      Query.equal('organization_id', agreement.organization_id),
+      Query.equal('profile_id', actor.$id),
+      Query.equal('status', 'active'),
+      Query.limit(1),
+    ]).catch(() => ({ documents: [] }));
+    const member = members.documents[0];
+    if (member && ['org_owner', 'org_admin'].includes(member.role)) return true;
+  }
+  if (agreement.athlete_id) {
+    const links = await databases.listDocuments(DB_ID, 'guardian_athletes', [
+      Query.equal('guardian_profile_id', actor.$id),
+      Query.equal('athlete_id', agreement.athlete_id),
+      Query.limit(1),
+    ]).catch(() => ({ documents: [] }));
+    if (links.documents[0]) return true;
+  }
   return false;
 }
 
@@ -76,10 +107,13 @@ export default async ({ req, res, error }) => {
     const { agreement_id } = body(req);
     if (!agreement_id) return res.json({ error: 'agreement_id is required.' }, 400);
 
-    const { databases, storage } = services();
+    const { databases, storage, users } = services();
     const actor = await profileForAccount(databases, accountId);
+    if (await callerIsBanned(databases, actor)) {
+      return res.json({ error: 'Account access is restricted.' }, 403);
+    }
     const agreement = await databases.getDocument(DB_ID, 'legal_agreements', agreement_id);
-    if (!canGenerate(actor, agreement)) {
+    if (!(await canGenerate(databases, users, accountId, actor, agreement))) {
       return res.json({ error: 'You do not have access to this legal agreement.' }, 403);
     }
     if (agreement.pdf_file_id) {
@@ -133,6 +167,6 @@ export default async ({ req, res, error }) => {
     return res.json({ agreement_id: agreement.$id, pdf_file_id: created.$id });
   } catch (err) {
     error?.(err?.message || String(err));
-    return res.json({ error: 'Could not generate legal agreement PDF.', detail: err?.message || String(err) }, 500);
+    return res.json({ error: 'Could not generate legal agreement PDF.' }, 500);
   }
 };

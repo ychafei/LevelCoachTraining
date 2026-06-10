@@ -16,5 +16,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run phase0:verify
+      - run: npm run phase7:verify
       - run: npm run lint
       - run: npm run build
+      - name: Function syntax check
+        run: |
+          set -e
+          for f in functions/*/src/main.js scripts/*.mjs; do node --check "$f"; done
+      - name: Dependency audit (high+)
+        run: npm audit --audit-level=high || true

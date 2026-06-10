@@ -2,15 +2,18 @@
 //
 // Sets the correct environment variables on each Appwrite Function based on
 // what each function's source code actually reads. Idempotent — re-running
-// replaces existing variables in place (delete + create).
+// updates existing variables in place (update when present, create when not),
+// so a partial failure never leaves a function without a previously-set secret.
 //
 // After this completes, deploy the function code with:
-//   appwrite push functions --all
+//   node scripts/deploy-functions.mjs
 //
 // Required env (in .env.local):
 //   VITE_APPWRITE_ENDPOINT, VITE_APPWRITE_PROJECT_ID, APPWRITE_API_KEY
-//   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-//   RESEND_API_KEY, APP_BASE_URL
+//   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET
+//   RESEND_API_KEY, APP_BASE_URL, MASTER_ADMIN_EMAIL, UNSUBSCRIBE_SECRET
+// Optional:
+//   PLATFORM_FEE_BPS (default 1500), EMAIL_FROM
 
 import { Client, Functions } from 'node-appwrite';
 import { readFileSync } from 'node:fs';
@@ -51,26 +54,46 @@ if (!ENDPOINT || !PROJECT || !API_KEY || !DATABASE_ID) {
 process.env.APPWRITE_DATABASE_ID = DATABASE_ID;
 
 const DB_KEYS = ['APPWRITE_API_KEY', 'APPWRITE_DATABASE_ID'];
+const EMAIL_KEYS = ['RESEND_API_KEY', 'EMAIL_FROM'];
+
+// Optional keys are configured when present in .env.local and skipped quietly
+// when not (everything else logs an error when missing).
+const OPTIONAL_KEYS = new Set(['PLATFORM_FEE_BPS', 'EMAIL_FROM']);
 
 const VAR_MATRIX = {
+  // Public reads
   getPublicCoaches:     DB_KEYS,
   getCoachAvailability: DB_KEYS,
-  getCoachClients:      DB_KEYS,
   getMatchingPlayers:   DB_KEYS,
-  createStripeCheckout: [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
+
+  // Payments
+  createStripeCheckout: [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY', 'PLATFORM_FEE_BPS'],
   stripeWebhook:        [...DB_KEYS, 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
-  createStripeConnectAccount: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
-  createStripeConnectOnboarding: [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
-  refreshStripeConnectAccount: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
-  refundStripePayment: [...DB_KEYS, 'STRIPE_SECRET_KEY'],
-  bootstrapMasterAdmin: DB_KEYS,
+  stripeConnectWebhook: [...DB_KEYS, 'STRIPE_SECRET_KEY', 'STRIPE_CONNECT_WEBHOOK_SECRET'],
+  stripeConnect:        [...DB_KEYS, 'APP_BASE_URL', 'STRIPE_SECRET_KEY'],
+  refundStripePayment:  [...DB_KEYS, 'STRIPE_SECRET_KEY'],
+
+  // Identity / roles
+  accountProfile:       DB_KEYS,
+  bootstrapMasterAdmin: [...DB_KEYS, 'MASTER_ADMIN_EMAIL'],
   grantAdminRole:       DB_KEYS,
-  signLegalAgreement:   [...DB_KEYS, 'APP_BASE_URL'],
+
+  // Product
+  booking:              [...DB_KEYS, ...EMAIL_KEYS, 'APP_BASE_URL'],
+  messaging:            DB_KEYS,
+  training:             DB_KEYS,
+  family:               DB_KEYS,
+  coachSelf:            [...DB_KEYS, ...EMAIL_KEYS],
+  orgAdmin:             [...DB_KEYS, ...EMAIL_KEYS, 'PLATFORM_FEE_BPS', 'APP_BASE_URL'],
+  applications:         [...DB_KEYS, ...EMAIL_KEYS, 'APP_BASE_URL'],
+  adminOps:             [...DB_KEYS, ...EMAIL_KEYS, 'APP_BASE_URL'],
+  reviews:              DB_KEYS,
+  reports:              DB_KEYS,
+  emailDispatch:        [...DB_KEYS, 'UNSUBSCRIBE_SECRET'],
+
+  // Legal
+  signLegalAgreement:        [...DB_KEYS, 'APP_BASE_URL'],
   generateLegalAgreementPdf: [...DB_KEYS, 'APP_BASE_URL'],
-  'send-email':              ['RESEND_API_KEY'],
-  sendBookingEmails:         ['RESEND_API_KEY'],
-  sendCoachEmailVerification:['RESEND_API_KEY'],
-  sendCoachLinkEmail:        ['RESEND_API_KEY'],
 };
 
 const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT).setKey(API_KEY);
@@ -78,6 +101,7 @@ const fns = new Functions(client);
 
 console.log(`Configuring function variables on project ${PROJECT}\n`);
 
+let failures = 0;
 for (const [fnId, keys] of Object.entries(VAR_MATRIX)) {
   console.log(`[${fnId}]`);
   let existing;
@@ -85,27 +109,41 @@ for (const [fnId, keys] of Object.entries(VAR_MATRIX)) {
     existing = await fns.listVariables(fnId);
   } catch (err) {
     console.error(`  ✗ Could not read function (does it exist?): ${err?.message || err}`);
+    failures += 1;
     continue;
   }
 
   for (const key of keys) {
     const value = process.env[key];
     if (!value) {
-      console.error(`  ✗ ${key} not set in .env.local — skipping`);
+      if (OPTIONAL_KEYS.has(key)) {
+        console.log(`  - ${key} not set (optional, skipped)`);
+      } else {
+        console.error(`  ✗ ${key} not set in .env.local — skipping`);
+        failures += 1;
+      }
       continue;
     }
     const prior = existing.variables.find((v) => v.key === key);
     try {
+      // Update-in-place: never delete first, so a failed call can't strand a
+      // function without a previously-working secret.
       if (prior) {
-        await fns.deleteVariable(fnId, prior.$id);
+        await fns.updateVariable(fnId, prior.$id, key, value);
+      } else {
+        await fns.createVariable(fnId, key, value);
       }
-      await fns.createVariable(fnId, key, value);
       console.log(`  ${prior ? '↻' : '+'} ${key}`);
     } catch (err) {
       console.error(`  ✗ ${key}: ${err?.message || err}`);
+      failures += 1;
     }
   }
 }
 
 console.log('\nDone. Now deploy code:');
-console.log('  appwrite push functions --all');
+console.log('  node scripts/deploy-functions.mjs');
+if (failures > 0) {
+  console.error(`\n${failures} variable(s) could not be configured — review the log above.`);
+  process.exitCode = 1;
+}

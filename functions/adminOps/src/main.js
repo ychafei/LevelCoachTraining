@@ -1,0 +1,471 @@
+import { Client, Databases, Users, ID, Permission, Query, Role } from 'node-appwrite';
+import { randomBytes } from 'node:crypto';
+
+const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function services() {
+  const client = new Client()
+    .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1')
+    .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID)
+    .setKey(process.env.APPWRITE_API_KEY);
+  return { databases: new Databases(client), users: new Users(client) };
+}
+
+function body(req) {
+  if (req.bodyJson && typeof req.bodyJson === 'object') return req.bodyJson;
+  try { return JSON.parse(req.bodyRaw || req.body || '{}'); } catch { return {}; }
+}
+
+function header(req, names) {
+  for (const name of names) {
+    const value = req.headers?.[name] || req.headers?.[name.toLowerCase()] || req.headers?.[name.toUpperCase()];
+    if (value) return String(value);
+  }
+  return '';
+}
+
+function callerAccountId(req) {
+  return header(req, ['x-appwrite-user-id', 'X-Appwrite-User-Id', 'X-Appwrite-User-ID']);
+}
+
+async function profileForAccount(databases, accountId) {
+  const rows = await databases.listDocuments(DB_ID, 'profiles', [
+    Query.equal('account_id', accountId),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function emailIsBanned(databases, email) {
+  if (!email) return false;
+  const rows = await databases.listDocuments(DB_ID, 'user_bans', [
+    Query.equal('banned_email', email),
+    Query.equal('is_active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
+async function writeAudit(databases, entry) {
+  const data = { ...entry };
+  if (!['admin', 'super_admin'].includes(data.actor_role)) delete data.actor_role;
+  await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
+}
+
+async function sendEmail({ to, subject, html }, error) {
+  try {
+    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
+    const from = process.env.EMAIL_FROM || 'LevelCoach Training <no-reply@levelcoach.com>';
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to, subject, html }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.message || data?.error || `Resend returned ${response.status}`);
+    }
+  } catch (err) {
+    error?.(`email send failed: ${err?.message || err}`);
+  }
+}
+
+function str(value, min, max) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < min || trimmed.length > max) return undefined;
+  return trimmed;
+}
+
+function int(value, min, max) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) return undefined;
+  return n;
+}
+
+// --- Action handlers ----------------------------------------------------------
+
+async function inviteUser(ctx, payload) {
+  const { databases, users, actor, error } = ctx;
+  const email = String(payload.email || '').trim().toLowerCase();
+  const role = String(payload.role || 'user');
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    return { status: 400, body: { error: 'A valid email is required.' } };
+  }
+  // Admin roles are only grantable through grantAdminRole (master-admin locked).
+  if (!['user', 'coach'].includes(role)) {
+    return { status: 400, body: { error: 'role must be user or coach.' } };
+  }
+
+  const existingProfiles = await databases.listDocuments(DB_ID, 'profiles', [
+    Query.equal('email', email),
+    Query.limit(1),
+  ]);
+  if (existingProfiles.documents[0]) {
+    return { status: 409, body: { error: 'An account with this email already exists.' } };
+  }
+
+  // Random throwaway password — the invitee sets their own via password reset.
+  const password = randomBytes(32).toString('hex');
+  let account;
+  try {
+    account = await users.create(ID.unique(), email, undefined, password);
+  } catch (err) {
+    error?.(err?.message || String(err));
+    return { status: 409, body: { error: 'Could not create an account for this email.' } };
+  }
+  if (role === 'coach') {
+    await users.updateLabels(account.$id, ['coach']).catch(() => {});
+  }
+
+  const profile = await databases.createDocument(DB_ID, 'profiles', ID.unique(), {
+    account_id: account.$id,
+    email,
+    role,
+  }, [Permission.read(Role.user(account.$id))]);
+
+  const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+  await sendEmail({
+    to: email,
+    subject: 'LevelCoach Training - You have been invited',
+    html: `
+      <p>You have been invited to LevelCoach Training.</p>
+      <p>Visit <a href="${appBaseUrl}">${appBaseUrl}</a>, choose "Forgot password", and enter this email address to set your password and sign in.</p>
+    `,
+  }, error);
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'admin.invite_user',
+    entity_type: 'Profile',
+    entity_id: profile.$id,
+    after: JSON.stringify({ email, role }),
+    metadata: JSON.stringify({ account_id: account.$id }),
+  });
+  return { status: 200, body: { ok: true, profile_id: profile.$id, account_id: account.$id } };
+}
+
+async function grantCredits(ctx, payload) {
+  const { databases, actor } = ctx;
+  const profileId = String(payload.client_profile_id || '');
+  const packageName = str(payload.package_name, 1, 200);
+  const totalCredits = int(payload.total_credits, 1, 1000);
+  const durationMinutes = int(payload.session_duration_minutes, 15, 480);
+  if (!profileId) return { status: 400, body: { error: 'client_profile_id is required.' } };
+  if (packageName === undefined) return { status: 400, body: { error: 'package_name is required (max 200 chars).' } };
+  if (totalCredits === undefined) return { status: 400, body: { error: 'total_credits must be an integer 1-1000.' } };
+  if (durationMinutes === undefined) return { status: 400, body: { error: 'session_duration_minutes must be an integer 15-480.' } };
+
+  const profile = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
+  if (!profile?.email) return { status: 404, body: { error: 'Client profile not found.' } };
+
+  let coachId = '';
+  if (payload.coach_id) {
+    const coach = await databases.getDocument(DB_ID, 'coaches', String(payload.coach_id)).catch(() => null);
+    if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+    coachId = coach.$id;
+  }
+
+  const grants = profile.account_id ? [Permission.read(Role.user(profile.account_id))] : [];
+  const credit = await databases.createDocument(DB_ID, 'session_credits', ID.unique(), {
+    client_email: profile.email,
+    client_name: [profile.first_name, profile.last_name].filter(Boolean).join(' '),
+    package_id: 'admin_grant',
+    package_name: packageName,
+    total_credits: totalCredits,
+    used_credits: 0,
+    session_duration_minutes: durationMinutes,
+    payment_processor: 'admin_grant',
+    amount_cents: 0,
+    ...(coachId ? { coach_id: coachId } : {}),
+  }, grants);
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'credits.grant',
+    entity_type: 'SessionCredit',
+    entity_id: credit.$id,
+    after: JSON.stringify({ total_credits: totalCredits, session_duration_minutes: durationMinutes, amount_cents: 0 }),
+    metadata: JSON.stringify({ client_profile_id: profileId, coach_id: coachId }),
+  });
+  return { status: 200, body: { ok: true, credit_id: credit.$id } };
+}
+
+async function revokeCredits(ctx, payload) {
+  const { databases, actor } = ctx;
+  const creditId = String(payload.credit_id || '');
+  const reason = str(payload.reason, 3, 1000);
+  if (!creditId) return { status: 400, body: { error: 'credit_id is required.' } };
+  if (reason === undefined) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+
+  const credit = await databases.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return { status: 404, body: { error: 'Credit not found.' } };
+
+  await databases.updateDocument(DB_ID, 'session_credits', creditId, {
+    used_credits: credit.total_credits,
+  });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'credits.revoke',
+    entity_type: 'SessionCredit',
+    entity_id: creditId,
+    before: JSON.stringify({ used_credits: credit.used_credits, total_credits: credit.total_credits }),
+    after: JSON.stringify({ used_credits: credit.total_credits }),
+    reason,
+    metadata: JSON.stringify({ client_email: credit.client_email }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+async function banUser(ctx, payload) {
+  const { databases, users, actor, labels } = ctx;
+  const profileId = String(payload.profile_id || '');
+  const reason = str(payload.reason, 3, 1000);
+  if (!profileId) return { status: 400, body: { error: 'profile_id is required.' } };
+  if (reason === undefined) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+
+  const target = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
+  if (!target?.email) return { status: 404, body: { error: 'Profile not found.' } };
+  if (target.master_admin_locked) return { status: 403, body: { error: 'The master admin cannot be banned.' } };
+  if (target.account_id) {
+    const targetAccount = await users.get(target.account_id).catch(() => null);
+    const targetLabels = targetAccount?.labels || [];
+    if ((targetLabels.includes('admin') || targetLabels.includes('superadmin')) && !labels.includes('superadmin')) {
+      return { status: 403, body: { error: 'Only a super admin can ban an admin.' } };
+    }
+  }
+
+  const ban = await databases.createDocument(DB_ID, 'user_bans', ID.unique(), {
+    banned_email: target.email,
+    banned_by_email: actor.email,
+    reason,
+    is_permanent: payload.permanent === true,
+    is_active: true,
+  });
+  await databases.updateDocument(DB_ID, 'profiles', profileId, { suspended: true }).catch(() => {});
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'user.ban',
+    entity_type: 'Profile',
+    entity_id: profileId,
+    after: JSON.stringify({ banned: true, permanent: payload.permanent === true }),
+    reason,
+    metadata: JSON.stringify({ ban_id: ban.$id, banned_email: target.email }),
+  });
+  return { status: 200, body: { ok: true, ban_id: ban.$id } };
+}
+
+async function unbanUser(ctx, payload) {
+  const { databases, actor } = ctx;
+  const profileId = String(payload.profile_id || '');
+  if (!profileId) return { status: 400, body: { error: 'profile_id is required.' } };
+  const target = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
+  if (!target?.email) return { status: 404, body: { error: 'Profile not found.' } };
+
+  const now = new Date().toISOString();
+  const bans = await databases.listDocuments(DB_ID, 'user_bans', [
+    Query.equal('banned_email', target.email),
+    Query.equal('is_active', true),
+    Query.limit(50),
+  ]);
+  for (const ban of bans.documents) {
+    await databases.updateDocument(DB_ID, 'user_bans', ban.$id, {
+      is_active: false,
+      unbanned_by_email: actor.email,
+      unbanned_at: now,
+    });
+  }
+  await databases.updateDocument(DB_ID, 'profiles', profileId, { suspended: false }).catch(() => {});
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'user.unban',
+    entity_type: 'Profile',
+    entity_id: profileId,
+    after: JSON.stringify({ banned: false }),
+    metadata: JSON.stringify({ lifted_ban_ids: bans.documents.map((b) => b.$id) }),
+  });
+  return { status: 200, body: { ok: true, lifted: bans.documents.length } };
+}
+
+async function linkCoachAccount(ctx, payload) {
+  const { databases, users, actor } = ctx;
+  const coachId = String(payload.coach_id || '');
+  const profileId = String(payload.profile_id || '');
+  if (!coachId || !profileId) return { status: 400, body: { error: 'coach_id and profile_id are required.' } };
+
+  const [coach, profile] = await Promise.all([
+    databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null),
+    databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null),
+  ]);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+  if (!profile?.account_id) return { status: 404, body: { error: 'Profile not found or has no account.' } };
+
+  await databases.updateDocument(DB_ID, 'coaches', coachId, { user_id: profile.account_id });
+  await databases.updateDocument(DB_ID, 'profiles', profileId, { role: 'coach', coach_id: coachId });
+  const account = await users.get(profile.account_id).catch(() => null);
+  if (account) {
+    await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.link_account',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    after: JSON.stringify({ user_id: profile.account_id, profile_id: profileId }),
+    metadata: JSON.stringify({ profile_email: profile.email || '' }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+async function setCoachFee(ctx, payload) {
+  const { databases, actor, labels } = ctx;
+  if (!labels.includes('superadmin')) {
+    return { status: 403, body: { error: 'Super admin access required.' } };
+  }
+  const coachId = String(payload.coach_id || '');
+  const feeBps = int(payload.platform_fee_bps, 0, 5000);
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+  if (feeBps === undefined) return { status: 400, body: { error: 'platform_fee_bps must be an integer 0-5000.' } };
+
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  await databases.updateDocument(DB_ID, 'coaches', coachId, { platform_fee_bps: feeBps });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: 'super_admin',
+    action: 'coach.set_fee',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    before: JSON.stringify({ platform_fee_bps: coach.platform_fee_bps ?? null }),
+    after: JSON.stringify({ platform_fee_bps: feeBps }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+async function setCoachActive(ctx, payload) {
+  const { databases, actor } = ctx;
+  const coachId = String(payload.coach_id || '');
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+  if (typeof payload.is_active !== 'boolean') {
+    return { status: 400, body: { error: 'is_active must be a boolean.' } };
+  }
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  await databases.updateDocument(DB_ID, 'coaches', coachId, { is_active: payload.is_active });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.set_active',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    before: JSON.stringify({ is_active: coach.is_active }),
+    after: JSON.stringify({ is_active: payload.is_active }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+async function publishBlogPost(ctx, payload) {
+  const { databases, actor } = ctx;
+  const postId = String(payload.post_id || '');
+  if (!postId) return { status: 400, body: { error: 'post_id is required.' } };
+  if (typeof payload.publish !== 'boolean') {
+    return { status: 400, body: { error: 'publish must be a boolean.' } };
+  }
+  const post = await databases.getDocument(DB_ID, 'blog_posts', postId).catch(() => null);
+  if (!post) return { status: 404, body: { error: 'Blog post not found.' } };
+
+  // Published posts carry a per-document public read grant; unpublishing removes it.
+  const permissions = payload.publish ? [Permission.read(Role.any())] : [];
+  await databases.updateDocument(DB_ID, 'blog_posts', postId, {
+    status: payload.publish ? 'published' : 'draft',
+  }, permissions);
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: payload.publish ? 'blog.publish' : 'blog.unpublish',
+    entity_type: 'BlogPost',
+    entity_id: postId,
+    before: JSON.stringify({ status: post.status }),
+    after: JSON.stringify({ status: payload.publish ? 'published' : 'draft' }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+// --- Entrypoint -----------------------------------------------------------------
+
+export default async ({ req, res, error }) => {
+  try {
+    const accountId = callerAccountId(req);
+    if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
+
+    const { databases, users } = services();
+    const account = await users.get(accountId).catch(() => null);
+    const labels = account?.labels || [];
+    if (!labels.includes('admin') && !labels.includes('superadmin')) {
+      return res.json({ error: 'Admin access required.' }, 403);
+    }
+    const profile = await profileForAccount(databases, accountId);
+    const actor = {
+      email: profile?.email || account?.email || '',
+      role: labels.includes('superadmin') ? 'super_admin' : 'admin',
+    };
+    if (await emailIsBanned(databases, actor.email)) {
+      return res.json({ error: 'Account access is restricted.' }, 403);
+    }
+
+    const ctx = { databases, users, actor, labels, error };
+    const payload = body(req);
+    let result;
+    switch (payload.action) {
+      case 'inviteUser':
+        result = await inviteUser(ctx, payload);
+        break;
+      case 'grantCredits':
+        result = await grantCredits(ctx, payload);
+        break;
+      case 'revokeCredits':
+        result = await revokeCredits(ctx, payload);
+        break;
+      case 'banUser':
+        result = await banUser(ctx, payload);
+        break;
+      case 'unbanUser':
+        result = await unbanUser(ctx, payload);
+        break;
+      case 'linkCoachAccount':
+        result = await linkCoachAccount(ctx, payload);
+        break;
+      case 'setCoachFee':
+        result = await setCoachFee(ctx, payload);
+        break;
+      case 'setCoachActive':
+        result = await setCoachActive(ctx, payload);
+        break;
+      case 'publishBlogPost':
+        result = await publishBlogPost(ctx, payload);
+        break;
+      default:
+        result = { status: 400, body: { error: 'Unknown action.' } };
+    }
+    return res.json(result.body, result.status);
+  } catch (err) {
+    error?.(err?.message || String(err));
+    return res.json({ error: 'Admin request failed.' }, 500);
+  }
+};

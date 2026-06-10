@@ -21,8 +21,6 @@ import {
 } from '@/lib/metroDetroitPlaces';
 import { rpc } from '@/lib/rpc';
 import { pricingPackageRepo } from '@/api/repo';
-import { DEMO_COACH_PROFILES } from '@/lib/demoCoachProfiles';
-import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const SPORTS = ['All sports', 'Soccer', 'Basketball', 'Football', 'Baseball', 'Volleyball', 'Strength', 'Speed'];
 const AVAILABILITY = ['Any time', 'This week', 'Evenings', 'Weekends'];
@@ -68,20 +66,16 @@ export default function CoachSearch() {
       setLoading(true);
       setError('');
       try {
-        const [coachResult, packageRows, demosEnabled] = await Promise.all([
+        const [coachResult, packageRows] = await Promise.all([
           rpc.invoke('getPublicCoaches', {}).catch((err) => {
-            console.warn('Public coaches unavailable; showing demo profiles if enabled.', err);
+            console.warn('Public coaches unavailable.', err);
             return null;
           }),
           pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
-          loadDemoCoachProfilesEnabled(),
         ]);
         if (cancelled) return;
         const liveCoaches = (coachResult?.data?.coaches || coachResult?.coaches || []).map(normalizePublicCoach);
-        const list = demosEnabled
-          ? [...liveCoaches, ...DEMO_COACH_PROFILES]
-          : liveCoaches;
-        setCoaches(list);
+        setCoaches(liveCoaches);
         setPackages(packageRows);
       } catch (err) {
         console.error('CoachSearch load failed', err);

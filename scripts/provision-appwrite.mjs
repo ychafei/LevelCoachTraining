@@ -1,9 +1,16 @@
 // scripts/provision-appwrite.mjs
 //
-// One-shot, idempotent provisioner for the LevelCoach Training Appwrite project.
-// Creates the database, 15 collections (with attributes + indexes), and 6
-// storage buckets. Safe to re-run — collections/attributes/indexes/buckets
-// that already exist are skipped.
+// Provisioner v2 — production permission cutover for the LevelCoach Training
+// Appwrite project. Implements the permission matrix in docs/ARCHITECTURE.md §2.
+//
+// Idempotent and re-runnable. On every run it:
+//   - creates missing collections/attributes/indexes/buckets, AND
+//   - enforces the target permissions + documentSecurity/fileSecurity on
+//     EXISTING collections and buckets (updateCollection/updateBucket) —
+//     this is the cutover step for already-provisioned deployments.
+//
+// After running this, run `node scripts/backfill-permissions.mjs` to apply
+// per-document grants to pre-existing documents.
 //
 // Usage:
 //   node scripts/provision-appwrite.mjs
@@ -57,6 +64,47 @@ const storage   = new Storage(client);
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'lctraining';
 
+// --- Permission presets (docs/ARCHITECTURE.md §2) ----------------------------
+//
+// "server-only" = empty permission list: clients get nothing; Appwrite
+// Functions use the API key, which bypasses collection permissions.
+// documentSecurity ON = per-document grants written by functions at write time
+// (and by scripts/backfill-permissions.mjs for pre-existing documents).
+
+const ADMIN = Role.label('admin');
+
+const ADMIN_READ              = [Permission.read(ADMIN)];
+const ADMIN_READ_CREATE       = [Permission.read(ADMIN), Permission.create(ADMIN)];
+const ADMIN_READ_UPDATE       = [Permission.read(ADMIN), Permission.update(ADMIN)];
+const ADMIN_FULL              = [
+  Permission.read(ADMIN),
+  Permission.create(ADMIN),
+  Permission.update(ADMIN),
+  Permission.delete(ADMIN),
+];
+const PUBLIC_READ_ONLY        = [Permission.read(Role.any())];
+const USERS_READ_ONLY         = [Permission.read(Role.users())];
+const PUBLIC_READ_ADMIN_WRITE = [
+  Permission.read(Role.any()),
+  Permission.create(ADMIN),
+  Permission.update(ADMIN),
+  Permission.delete(ADMIN),
+];
+const SERVER_ONLY             = [];
+
+// Bucket presets. Private buckets carry NO bucket-level user permissions —
+// files are created server-side (or with explicit per-file permissions).
+const PUBLIC_BUCKET = [
+  Permission.read(Role.any()),
+  Permission.create(Role.users()),
+  Permission.update(ADMIN),
+  Permission.delete(ADMIN),
+];
+const PRIVATE_BUCKET = [];
+
+// Collected as collections/buckets are ensured; printed at the end.
+const CUTOVER_SUMMARY = { collections: [], buckets: [] };
+
 // --- Idempotent helpers -----------------------------------------------------
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -81,24 +129,16 @@ async function ensureDatabase() {
   await safe(`database "${DB_ID}"`, () => databases.create(DB_ID, 'LevelCoach Training'));
 }
 
-// Collection-level permissions used during provisioning.
-// Permissive enough for development; tighten per-document at cutover.
-const PUBLIC_READ_AUTH_WRITE = [
-  Permission.read(Role.any()),
-  Permission.create(Role.users()),
-  Permission.update(Role.users()),
-  Permission.delete(Role.users()),
-];
-
-const AUTH_ONLY = [
-  Permission.read(Role.users()),
-  Permission.create(Role.users()),
-  Permission.update(Role.users()),
-  Permission.delete(Role.users()),
-];
-
-async function ensureCollection(id, name, perms = AUTH_ONLY) {
-  await safe(`collection "${id}"`, () => databases.createCollection(DB_ID, id, name, perms));
+async function ensureCollection(id, name, permissions, documentSecurity) {
+  await safe(`collection "${id}"`, () =>
+    databases.createCollection(DB_ID, id, name, permissions, documentSecurity)
+  );
+  // Cutover: ALWAYS enforce the target permissions + documentSecurity, so
+  // permissions converge on existing deployments, not only fresh ones.
+  await safe(`collection "${id}" permissions (docSec=${documentSecurity ? 'on' : 'off'})`, () =>
+    databases.updateCollection(DB_ID, id, name, permissions, documentSecurity, true)
+  );
+  CUTOVER_SUMMARY.collections.push({ id, documentSecurity, permissions });
 }
 
 const attributeKeysByCollection = new Map();
@@ -153,10 +193,41 @@ async function attrEnum(coll, key, elements, required = false, def = null, array
     databases.createEnumAttribute(DB_ID, coll, key, elements, required, def, array)
   );
 }
+
+// Widen an existing enum attribute to include new elements (no-op when the
+// attribute already covers them). Appwrite allows updating enum elements in
+// place; if the call fails (older server, in-flight attribute) we warn so the
+// operator can widen it from the console instead of silently shipping a schema
+// that rejects new values.
+async function widenEnum(coll, key, elements, required = false, def = null) {
+  try {
+    const attr = await databases.getAttribute(DB_ID, coll, key);
+    const current = Array.isArray(attr?.elements) ? attr.elements : [];
+    const missing = elements.filter((el) => !current.includes(el));
+    if (missing.length === 0) return;
+    await databases.updateEnumAttribute(DB_ID, coll, key, elements, required, def);
+    console.log(`  ~ ${coll}.${key} enum widened (+${missing.join(',+')})`);
+  } catch (err) {
+    console.warn(`  ! ${coll}.${key} enum could not be widened automatically (${err?.message || err}). Update its elements to [${elements.join(', ')}] in the Appwrite console.`);
+  }
+}
 async function attrEmail(coll, key, required = false, def = null, array = false) {
   await ensureAttribute(`  ${coll}.${key} email`, coll, key, () =>
     databases.createEmailAttribute(DB_ID, coll, key, required, def, array)
   );
+}
+
+// Enums cannot be safely rewritten in place. When an existing enum drifts from
+// the target element list, warn so the operator can migrate it in the console.
+async function warnIfEnumDiffers(coll, key, expected) {
+  const keys = await getAttributeKeys(coll);
+  if (!keys.has(key)) return;
+  const attr = await databases.getAttribute(DB_ID, coll, key).catch(() => null);
+  const elements = attr?.elements || [];
+  const missing = expected.filter((el) => !elements.includes(el));
+  if (missing.length > 0) {
+    console.warn(`  ! ${coll}.${key} enum is [${elements.join(',')}] but target is [${expected.join(',')}] — a manual update in the Appwrite console may be needed.`);
+  }
 }
 
 // Wait until every attribute on a collection reports status "available".
@@ -178,7 +249,7 @@ async function ensureIndex(coll, key, type, attributes, orders = []) {
   );
 }
 
-async function ensureBucket(id, name, perms = AUTH_ONLY, opts = {}) {
+async function ensureBucket(id, name, perms, opts = {}) {
   const {
     fileSecurity = false,
     enabled = true,
@@ -193,14 +264,22 @@ async function ensureBucket(id, name, perms = AUTH_ONLY, opts = {}) {
       maximumFileSize, allowedFileExtensions, undefined, encryption, antivirus
     )
   );
+  // Cutover: ALWAYS enforce permissions/fileSecurity on existing buckets too.
+  await safe(`bucket "${id}" permissions (fileSecurity=${fileSecurity ? 'on' : 'off'})`, () =>
+    storage.updateBucket(
+      id, name, perms, fileSecurity, enabled,
+      maximumFileSize, allowedFileExtensions, undefined, encryption, antivirus
+    )
+  );
+  CUTOVER_SUMMARY.buckets.push({ id, fileSecurity, permissions: perms });
 }
 
 // --- Collection definitions -------------------------------------------------
 
 async function provisionProfiles() {
   console.log('\n[Collection] profiles');
-  await ensureCollection('profiles', 'Profiles');
-  await attrString('profiles', 'account_id', 64);                      // links to Appwrite Account.$id at cutover
+  await ensureCollection('profiles', 'Profiles', ADMIN_READ, true);
+  await attrString('profiles', 'account_id', 64);                      // links to Appwrite Account.$id
   await attrEnum('profiles', 'role', ['user', 'coach', 'admin', 'super_admin'], false, 'user');
   await attrString('profiles', 'first_name', 100);
   await attrString('profiles', 'last_name', 100);
@@ -233,6 +312,11 @@ async function provisionProfiles() {
   await attrString('profiles', 'primary_organization_id', 64);
   await attrBool('profiles', 'master_admin_locked', false, false);
   await attrDatetime('profiles', 'master_admin_bootstrapped_at');
+  await attrString('profiles', 'notification_prefs', 2000);            // JSON-serialized
+  await attrBool('profiles', 'suspended', false, false);
+  await attrString('profiles', 'location_label', 500);
+  await attrFloat('profiles', 'location_lat');
+  await attrFloat('profiles', 'location_lng');
 
   await waitAttributesReady('profiles');
   await ensureIndex('profiles', 'idx_email',          'unique', ['email']);
@@ -245,13 +329,15 @@ async function provisionProfiles() {
 
 async function provisionCoaches() {
   console.log('\n[Collection] coaches');
-  await ensureCollection('coaches', 'Coaches', PUBLIC_READ_AUTH_WRITE);
+  await ensureCollection('coaches', 'Coaches', PUBLIC_READ_ONLY, true);
   await attrString('coaches', 'first_name', 100, true);
   await attrString('coaches', 'last_name',  100, true);
   await attrEmail('coaches',  'email');
   await attrDatetime('coaches', 'email_verified_at');
   await attrString('coaches', 'phone', 30);
-  await attrEnum('coaches',   'county', ['Oakland', 'Macomb', 'Wayne'], true);
+  // Deprecated enum generalized: NEW deployments get an optional free-form
+  // string; existing deployments keep the legacy enum attribute untouched.
+  await attrString('coaches', 'county', 80);
   await attrString('coaches', 'training_area', 255);
   await attrString('coaches', 'service_city', 120);
   await attrString('coaches', 'service_state', 30);
@@ -274,6 +360,16 @@ async function provisionCoaches() {
   await attrFloat('coaches',  'platform_fee_value', false, null, null, 0);
   await attrString('coaches', 'user_id', 64);                            // link to profiles.account_id
   await attrString('coaches', 'stripe_account_id', 128);
+  // Multi-sport / production cutover additions
+  await attrString('coaches', 'timezone', 64, false, 'America/Detroit'); // IANA tz for availability
+  await attrString('coaches', 'sports', 120, false, null, true);         // string[] of sport_keys
+  await attrString('coaches', 'booking_rules', 20000);                   // JSON: min-notice/buffer/max-advance
+  await attrFloat('coaches',  'rating_avg');
+  await attrInt('coaches',    'review_count');
+  await attrBool('coaches',   'published', false, false);
+  await attrInt('coaches',    'platform_fee_bps');                       // nullable admin override (basis points)
+  await attrString('coaches', 'intro_video_url', 1000);
+  await attrInt('coaches',    'price_hint_cents');
 
   await waitAttributesReady('coaches');
   await ensureIndex('coaches', 'idx_is_active',     'key', ['is_active']);
@@ -282,11 +378,12 @@ async function provisionCoaches() {
   await ensureIndex('coaches', 'idx_service_state', 'key', ['service_state']);
   await ensureIndex('coaches', 'idx_display_order', 'key', ['display_order']);
   await ensureIndex('coaches', 'idx_user_id',       'key', ['user_id']);
+  await ensureIndex('coaches', 'idx_published',     'key', ['published']);
 }
 
 async function provisionSessions() {
   console.log('\n[Collection] sessions');
-  await ensureCollection('sessions', 'Sessions');
+  await ensureCollection('sessions', 'Sessions', ADMIN_READ, true);
   await attrString('sessions', 'coach_id', 64, true);
   await attrEmail('sessions',  'client_email', true);
   await attrString('sessions', 'client_name', 200, true);
@@ -294,7 +391,9 @@ async function provisionSessions() {
   await attrString('sessions', 'date', 10, true);                         // YYYY-MM-DD
   await attrString('sessions', 'start_time', 5, true);                    // HH:MM
   await attrInt('sessions',    'duration_minutes', true);
-  await attrEnum('sessions',   'status', ['pending', 'confirmed', 'cancelled', 'completed'], false, 'pending');
+  await attrEnum('sessions',   'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'], false, 'pending');
+  // Existing deployments created the enum before 'no_show' existed — widen it.
+  await widenEnum('sessions', 'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'], false, 'pending');
   await attrFloat('sessions',  'total_price');
   await attrEnum('sessions',   'payment_status', ['unpaid', 'paid'], false, 'unpaid');
   await attrEnum('sessions',   'payment_method', ['electronic', 'credits']);
@@ -305,18 +404,25 @@ async function provisionSessions() {
   await attrString('sessions', 'credit_id', 64);                          // link to session_credits
   await attrString('sessions', 'homework', 20000);                       // TEXT
   await attrString('sessions', 'client_visible_notes', 20000);           // TEXT
+  // Production cutover additions
+  await attrString('sessions', 'athlete_id', 64);                         // the athlete the session is for
+  await attrString('sessions', 'booked_by_profile_id', 64);               // who actually booked (guardian/self)
+  await attrString('sessions', 'timezone', 64);                           // copied from coach at booking
+  await attrDatetime('sessions', 'starts_at_utc');                        // derived, for sorting/conflicts
 
   await waitAttributesReady('sessions');
-  await ensureIndex('sessions', 'idx_coach_id',     'key', ['coach_id']);
-  await ensureIndex('sessions', 'idx_client_email', 'key', ['client_email']);
-  await ensureIndex('sessions', 'idx_date',         'key', ['date']);
-  await ensureIndex('sessions', 'idx_status',       'key', ['status']);
-  await ensureIndex('sessions', 'idx_credit_id',    'key', ['credit_id']);
+  await ensureIndex('sessions', 'idx_coach_id',      'key', ['coach_id']);
+  await ensureIndex('sessions', 'idx_client_email',  'key', ['client_email']);
+  await ensureIndex('sessions', 'idx_date',          'key', ['date']);
+  await ensureIndex('sessions', 'idx_status',        'key', ['status']);
+  await ensureIndex('sessions', 'idx_credit_id',     'key', ['credit_id']);
+  await ensureIndex('sessions', 'idx_athlete_id',    'key', ['athlete_id']);
+  await ensureIndex('sessions', 'idx_starts_at_utc', 'key', ['starts_at_utc']);
 }
 
 async function provisionSessionCredits() {
   console.log('\n[Collection] session_credits');
-  await ensureCollection('session_credits', 'Session Credits');
+  await ensureCollection('session_credits', 'Session Credits', ADMIN_READ, true);
   await attrEmail('session_credits',  'client_email', true);
   await attrString('session_credits', 'client_name', 200);
   await attrString('session_credits', 'package_id', 64, true);
@@ -327,15 +433,22 @@ async function provisionSessionCredits() {
   await attrFloat('session_credits',  'per_session_base_price');
   await attrEnum('session_credits',   'payment_processor',
     ['stripe', 'admin_grant']);
+  // Production cutover additions — money is always integer cents
+  await attrInt('session_credits',    'amount_cents');
+  await attrInt('session_credits',    'per_session_base_price_cents');
+  await attrString('session_credits', 'coach_id', 64);
+  await attrString('session_credits', 'client_profile_id', 64);
 
   await waitAttributesReady('session_credits');
-  await ensureIndex('session_credits', 'idx_client_email', 'key', ['client_email']);
-  await ensureIndex('session_credits', 'idx_package_id',   'key', ['package_id']);
+  await ensureIndex('session_credits', 'idx_client_email',   'key', ['client_email']);
+  await ensureIndex('session_credits', 'idx_package_id',     'key', ['package_id']);
+  await ensureIndex('session_credits', 'idx_coach_id',       'key', ['coach_id']);
+  await ensureIndex('session_credits', 'idx_client_profile', 'key', ['client_profile_id']);
 }
 
 async function provisionConversations() {
   console.log('\n[Collection] conversations');
-  await ensureCollection('conversations', 'Conversations');
+  await ensureCollection('conversations', 'Conversations', ADMIN_READ, true);
   await attrEnum('conversations',   'type', ['coach_client', 'client_match'], false, 'coach_client');
   await attrEmail('conversations',  'participant_emails', false, null, true);
   await attrString('conversations', 'participant_names', 200, false, null, true);
@@ -354,7 +467,7 @@ async function provisionConversations() {
 
 async function provisionMessages() {
   console.log('\n[Collection] messages');
-  await ensureCollection('messages', 'Messages');
+  await ensureCollection('messages', 'Messages', ADMIN_READ, true);
   await attrString('messages', 'conversation_id', 64, true);
   await attrEmail('messages',  'sender_email', true);
   await attrString('messages', 'sender_name', 200);
@@ -371,7 +484,7 @@ async function provisionMessages() {
 
 async function provisionMatchRequests() {
   console.log('\n[Collection] match_requests');
-  await ensureCollection('match_requests', 'Match Requests');
+  await ensureCollection('match_requests', 'Match Requests', ADMIN_READ, true);
   await attrEmail('match_requests',  'requester_email', true);
   await attrString('match_requests', 'requester_name', 200);
   await attrInt('match_requests',    'requester_player_age');
@@ -389,7 +502,7 @@ async function provisionMatchRequests() {
 
 async function provisionCoachApplications() {
   console.log('\n[Collection] coach_applications');
-  await ensureCollection('coach_applications', 'Coach Applications');
+  await ensureCollection('coach_applications', 'Coach Applications', ADMIN_READ_UPDATE, true);
   await attrString('coach_applications', 'first_name', 100, true);
   await attrString('coach_applications', 'last_name',  100, true);
   await attrEmail('coach_applications',  'email', true);
@@ -408,7 +521,7 @@ async function provisionCoachApplications() {
 
 async function provisionCoachBlocks() {
   console.log('\n[Collection] coach_blocks');
-  await ensureCollection('coach_blocks', 'Coach Blocks', PUBLIC_READ_AUTH_WRITE);
+  await ensureCollection('coach_blocks', 'Coach Blocks', USERS_READ_ONLY, false);
   await attrString('coach_blocks', 'coach_id', 64, true);
   await attrString('coach_blocks', 'label', 200);
   await attrString('coach_blocks', 'start_date', 10, true);
@@ -425,7 +538,7 @@ async function provisionCoachBlocks() {
 
 async function provisionPricingPackages() {
   console.log('\n[Collection] pricing_packages');
-  await ensureCollection('pricing_packages', 'Pricing Packages', PUBLIC_READ_AUTH_WRITE);
+  await ensureCollection('pricing_packages', 'Pricing Packages', PUBLIC_READ_ADMIN_WRITE, false);
   await attrString('pricing_packages', 'name', 200, true);
   await attrInt('pricing_packages',    'sessions');
   await attrFloat('pricing_packages',  'price', true);
@@ -442,7 +555,8 @@ async function provisionPricingPackages() {
 
 async function provisionBlogPosts() {
   console.log('\n[Collection] blog_posts');
-  await ensureCollection('blog_posts', 'Blog Posts', PUBLIC_READ_AUTH_WRITE);
+  // docSec ON: a "read any" per-document grant is added when a post publishes.
+  await ensureCollection('blog_posts', 'Blog Posts', ADMIN_READ_CREATE, true);
   await attrString('blog_posts', 'title', 300, true);
   await attrString('blog_posts', 'slug',  300, true);
   await attrString('blog_posts', 'cover_image', 1000);
@@ -462,7 +576,8 @@ async function provisionBlogPosts() {
 
 async function provisionAuditLogs() {
   console.log('\n[Collection] audit_logs');
-  await ensureCollection('audit_logs', 'Audit Logs');
+  // Append-only: read+create for admin label, no update/delete for anyone.
+  await ensureCollection('audit_logs', 'Audit Logs', ADMIN_READ_CREATE, false);
   await attrEmail('audit_logs',  'actor_email', true);
   await attrEnum('audit_logs',   'actor_role', ['admin', 'super_admin']);
   await attrString('audit_logs', 'action', 200, true);
@@ -481,7 +596,7 @@ async function provisionAuditLogs() {
 
 async function provisionSiteContent() {
   console.log('\n[Collection] site_content');
-  await ensureCollection('site_content', 'Site Content', PUBLIC_READ_AUTH_WRITE);
+  await ensureCollection('site_content', 'Site Content', PUBLIC_READ_ADMIN_WRITE, false);
   await attrString('site_content', 'key', 100, true);
   await attrString('site_content', 'value', 100000, true);
   await attrEnum('site_content',   'content_type', ['text', 'richtext', 'image', 'json'], false, 'text');
@@ -492,7 +607,8 @@ async function provisionSiteContent() {
 
 async function provisionUnsubscribeRecords() {
   console.log('\n[Collection] unsubscribe_records');
-  await ensureCollection('unsubscribe_records', 'Unsubscribe Records');
+  // Server-only: public unsubscribe goes through the emailDispatch function.
+  await ensureCollection('unsubscribe_records', 'Unsubscribe Records', SERVER_ONLY, false);
   await attrEmail('unsubscribe_records',  'email', true);
   await attrString('unsubscribe_records', 'reason', 500);
   await attrBool('unsubscribe_records',   'resubscribed', false, false);
@@ -504,7 +620,7 @@ async function provisionUnsubscribeRecords() {
 
 async function provisionUserBans() {
   console.log('\n[Collection] user_bans');
-  await ensureCollection('user_bans', 'User Bans');
+  await ensureCollection('user_bans', 'User Bans', ADMIN_FULL, false);
   await attrEmail('user_bans',  'banned_email', true);
   await attrEmail('user_bans',  'banned_by_email');
   await attrString('user_bans', 'reason', 1000, true);
@@ -524,7 +640,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'organizations',
     name: 'Organizations',
-    perms: PUBLIC_READ_AUTH_WRITE,
+    perms: PUBLIC_READ_ADMIN_WRITE, // writes otherwise server-only via orgAdmin fn
+    docSec: false,
     attrs: [
       { type: 'string', key: 'name', size: 200, required: true },
       { type: 'string', key: 'slug', size: 160, required: true },
@@ -538,7 +655,7 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'string', key: 'logo_file_id', size: 128 },
       { type: 'string', key: 'brand_color', size: 20 },
       { type: 'string', key: 'stripe_account_id', size: 128 },
-      { type: 'enum', key: 'payout_model', elements: ['organization', 'coach', 'split_future'], def: 'organization' },
+      { type: 'enum', key: 'payout_model', elements: ['organization', 'coach', 'split'], def: 'organization' },
       { type: 'string', key: 'created_by_profile_id', size: 64 },
       { type: 'email', key: 'contact_email' },
       { type: 'string', key: 'contact_phone', size: 30 },
@@ -559,6 +676,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'organization_members',
     name: 'Organization Members',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'organization_id', size: 64, required: true },
       { type: 'string', key: 'profile_id', size: 64, required: true },
@@ -576,6 +695,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'organization_coaches',
     name: 'Organization Coaches',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'organization_id', size: 64, required: true },
       { type: 'string', key: 'coach_id', size: 64, required: true },
@@ -595,6 +716,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'athlete_profiles',
     name: 'Athlete Profiles',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'profile_id', size: 64 },
       { type: 'string', key: 'parent_profile_id', size: 64 },
@@ -618,6 +741,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'guardian_athletes',
     name: 'Guardian Athletes',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'guardian_profile_id', size: 64, required: true },
       { type: 'string', key: 'athlete_id', size: 64, required: true },
@@ -635,7 +760,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'sports',
     name: 'Sports',
-    perms: PUBLIC_READ_AUTH_WRITE,
+    perms: PUBLIC_READ_ADMIN_WRITE,
+    docSec: false,
     attrs: [
       { type: 'string', key: 'sport_key', size: 100, required: true },
       { type: 'string', key: 'display_name', size: 160, required: true },
@@ -644,6 +770,10 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'bool', key: 'active', def: true },
       { type: 'string', key: 'recommended_specialties', size: 120, array: true },
       { type: 'string', key: 'profile_schema', size: 20000 },
+      { type: 'string', key: 'positions', size: 20000 },                  // JSON
+      { type: 'string', key: 'specialties', size: 20000 },                // JSON
+      { type: 'string', key: 'levels', size: 2000 },                      // JSON
+      { type: 'string', key: 'assessment_template', size: 100000 },       // JSON: categories → skills, 1–10 scale
     ],
     indexes: [
       { key: 'idx_sport_key', type: 'unique', attrs: ['sport_key'] },
@@ -653,6 +783,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'coach_sport_profiles',
     name: 'Coach Sport Profiles',
+    perms: PUBLIC_READ_ONLY, // writes server-only via coachSelf
+    docSec: false,
     attrs: [
       { type: 'string', key: 'coach_id', size: 64, required: true },
       { type: 'string', key: 'sport_key', size: 100, required: true },
@@ -672,6 +804,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'availability_blocks',
     name: 'Availability Blocks',
+    perms: PUBLIC_READ_ONLY, // writes server-only via coachSelf
+    docSec: false,
     attrs: [
       { type: 'string', key: 'coach_id', size: 64, required: true },
       { type: 'string', key: 'organization_id', size: 64 },
@@ -694,6 +828,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'athlete_availability_preferences',
     name: 'Athlete Availability Preferences',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'athlete_id', size: 64, required: true },
       { type: 'bool', key: 'flexible', def: false },
@@ -711,6 +847,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'legal_templates',
     name: 'Legal Templates',
+    perms: USERS_READ_ONLY, // writes server-only
+    docSec: false,
     attrs: [
       { type: 'string', key: 'template_key', size: 160, required: true },
       { type: 'enum', key: 'role', elements: ['athlete', 'guardian', 'coach', 'organization', 'admin', 'platform'], required: true },
@@ -732,6 +870,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'legal_agreements',
     name: 'Legal Agreements',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'template_id', size: 64, required: true },
       { type: 'string', key: 'template_key', size: 160 },
@@ -771,6 +911,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'legal_admin_notes',
     name: 'Legal Admin Notes',
+    perms: ADMIN_READ_CREATE,
+    docSec: false,
     attrs: [
       { type: 'string', key: 'agreement_id', size: 64, required: true },
       { type: 'string', key: 'admin_profile_id', size: 64, required: true },
@@ -784,6 +926,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'stripe_connected_accounts',
     name: 'Stripe Connected Accounts',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'enum', key: 'owner_type', elements: ['coach', 'org'], required: true },
       { type: 'string', key: 'owner_id', size: 64, required: true },
@@ -804,6 +948,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'stripe_payment_records',
     name: 'Stripe Payment Records',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'booking_id', size: 64 },
       { type: 'string', key: 'credit_id', size: 64 },
@@ -815,6 +961,9 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'int', key: 'application_fee' },
       { type: 'string', key: 'transfer_destination', size: 128 },
       { type: 'enum', key: 'status', elements: ['created', 'paid', 'failed', 'refunded', 'cancelled'], def: 'created' },
+      // Granular payment state (e.g. partially_refunded/disputed) — the legacy
+      // status enum cannot be extended in place, so a free-form state is added.
+      { type: 'string', key: 'state', size: 40 },
       { type: 'string', key: 'refund_id', size: 160 },
       { type: 'int', key: 'refunded_amount' },
       { type: 'string', key: 'failure_reason', size: 1000 },
@@ -832,6 +981,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'stripe_transfer_records',
     name: 'Stripe Transfer Records',
+    perms: ADMIN_READ,
+    docSec: true,
     attrs: [
       { type: 'string', key: 'payment_record_id', size: 64, required: true },
       { type: 'string', key: 'destination_account_id', size: 128 },
@@ -848,6 +999,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'stripe_webhook_events',
     name: 'Stripe Webhook Events',
+    perms: ADMIN_READ, // server-only writes
+    docSec: false,
     attrs: [
       { type: 'string', key: 'stripe_event_id', size: 160, required: true },
       { type: 'string', key: 'type', size: 160 },
@@ -865,6 +1018,8 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'admin_assignments',
     name: 'Admin Assignments',
+    perms: ADMIN_READ, // server-only writes
+    docSec: false,
     attrs: [
       { type: 'string', key: 'profile_id', size: 64, required: true },
       { type: 'enum', key: 'scope', elements: ['platform', 'org'], required: true },
@@ -878,6 +1033,269 @@ const PRODUCTION_COLLECTIONS = [
       { key: 'idx_admin_profile', type: 'key', attrs: ['profile_id'] },
       { key: 'idx_admin_scope', type: 'key', attrs: ['scope'] },
       { key: 'idx_admin_org', type: 'key', attrs: ['organization_id'] },
+    ],
+  },
+];
+
+// --- New cutover collections (docs/ARCHITECTURE.md §2, "new") ---------------
+
+const NEW_COLLECTIONS = [
+  {
+    id: 'coach_link_requests',
+    name: 'Coach Link Requests',
+    perms: ADMIN_READ, // server-only writes
+    docSec: false,
+    attrs: [
+      { type: 'string', key: 'token', size: 128, required: true },
+      { type: 'email', key: 'email', required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'enum', key: 'status', elements: ['pending', 'verified', 'expired', 'revoked'], def: 'pending' },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+      { type: 'int', key: 'attempts', def: 0 },
+      { type: 'datetime', key: 'expires_at' },
+    ],
+    indexes: [
+      { key: 'idx_link_token', type: 'key', attrs: ['token'] },
+      { key: 'idx_link_email', type: 'key', attrs: ['email'] },
+      { key: 'idx_link_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_link_status', type: 'key', attrs: ['status'] },
+    ],
+  },
+  {
+    id: 'payment_ledger_entries',
+    name: 'Payment Ledger Entries',
+    perms: ADMIN_READ, // append-only, server-authored; per-doc read for payee owner
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'payment_record_id', size: 64, required: true },
+      { type: 'enum', key: 'type', elements: ['charge', 'platform_fee', 'coach_payout', 'org_payout', 'refund', 'transfer_reversal', 'dispute'], required: true },
+      { type: 'int', key: 'amount_cents', required: true },
+      { type: 'string', key: 'currency', size: 12, def: 'usd' },
+      { type: 'enum', key: 'owner_type', elements: ['platform', 'coach', 'org', 'client'], required: true },
+      { type: 'string', key: 'owner_id', size: 64 },
+      { type: 'string', key: 'stripe_ref', size: 160 },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'string', key: 'metadata', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_ledger_payment', type: 'key', attrs: ['payment_record_id'] },
+      { key: 'idx_ledger_owner', type: 'key', attrs: ['owner_type', 'owner_id'] },
+      { key: 'idx_ledger_type', type: 'key', attrs: ['type'] },
+      { key: 'idx_ledger_ref', type: 'key', attrs: ['stripe_ref'] },
+    ],
+  },
+  {
+    id: 'payout_rules',
+    name: 'Payout Rules',
+    perms: ADMIN_READ, // per org-coach link; per-doc read for org admins + coach
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'organization_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'int', key: 'coach_share_bps', required: true, min: 0, max: 10000 },
+      { type: 'int', key: 'org_share_bps', required: true, min: 0, max: 10000 },
+      { type: 'int', key: 'platform_share_bps', required: true, min: 0, max: 10000 },
+      { type: 'bool', key: 'active', def: true },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_payout_org_coach', type: 'key', attrs: ['organization_id', 'coach_id'] },
+    ],
+  },
+  {
+    id: 'notifications',
+    name: 'Notifications',
+    perms: ADMIN_READ, // per-doc read+update (mark-read) for the recipient
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'recipient_profile_id', size: 64, required: true },
+      { type: 'string', key: 'recipient_account_id', size: 64 },
+      { type: 'string', key: 'type', size: 60 },
+      { type: 'string', key: 'title', size: 200 },
+      { type: 'string', key: 'body', size: 2000 },
+      { type: 'string', key: 'link', size: 500 },
+      { type: 'bool', key: 'read', def: false },
+      { type: 'string', key: 'data', size: 2000 },
+      { type: 'string', key: 'metadata', size: 2000 },
+    ],
+    indexes: [
+      { key: 'idx_notif_recipient', type: 'key', attrs: ['recipient_profile_id', 'read'] },
+    ],
+  },
+  {
+    id: 'coach_reviews',
+    name: 'Coach Reviews',
+    perms: ADMIN_READ, // writes server-only via reviews fn; read-any granted on publish
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'session_id', size: 64, required: true },
+      { type: 'string', key: 'reviewer_profile_id', size: 64, required: true },
+      { type: 'string', key: 'reviewer_name', size: 120 },
+      { type: 'int', key: 'rating', required: true, min: 1, max: 5 },
+      { type: 'string', key: 'comment', size: 5000 },
+      { type: 'enum', key: 'status', elements: ['published', 'unpublished', 'rejected'], def: 'published' },
+      { type: 'string', key: 'coach_response', size: 2000 },
+      { type: 'datetime', key: 'responded_at' },
+    ],
+    indexes: [
+      { key: 'idx_review_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_review_session', type: 'unique', attrs: ['session_id'] }, // one review per session
+      { key: 'idx_review_status', type: 'key', attrs: ['status'] },
+    ],
+  },
+  {
+    id: 'athlete_goals',
+    name: 'Athlete Goals',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'string', key: 'sport_key', size: 100 },
+      { type: 'string', key: 'title', size: 200, required: true },
+      { type: 'string', key: 'description', size: 5000 },
+      { type: 'datetime', key: 'target_date' },
+      { type: 'enum', key: 'status', elements: ['active', 'achieved', 'paused', 'archived'], def: 'active' },
+      { type: 'int', key: 'progress_pct', min: 0, max: 100, def: 0 },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_goal_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_goal_coach', type: 'key', attrs: ['coach_id'] },
+    ],
+  },
+  {
+    id: 'training_plans',
+    name: 'Training Plans',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'sport_key', size: 100 },
+      { type: 'string', key: 'title', size: 200, required: true },
+      { type: 'string', key: 'description', size: 20000 },
+      { type: 'enum', key: 'status', elements: ['draft', 'active', 'completed', 'archived'], def: 'draft' },
+      { type: 'string', key: 'starts_on', size: 10 }, // YYYY-MM-DD
+      { type: 'string', key: 'ends_on', size: 10 },   // YYYY-MM-DD
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_plan_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_plan_coach', type: 'key', attrs: ['coach_id'] },
+    ],
+  },
+  {
+    id: 'training_plan_items',
+    name: 'Training Plan Items',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'plan_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'string', key: 'athlete_id', size: 64 },
+      { type: 'string', key: 'title', size: 200, required: true },
+      { type: 'string', key: 'description', size: 20000 },
+      { type: 'int', key: 'week' },
+      { type: 'int', key: 'day' },
+      { type: 'enum', key: 'status', elements: ['planned', 'in_progress', 'completed', 'skipped'], def: 'planned' },
+      { type: 'int', key: 'position', def: 0 },
+    ],
+    indexes: [
+      { key: 'idx_item_plan', type: 'key', attrs: ['plan_id'] },
+    ],
+  },
+  {
+    id: 'homework_assignments',
+    name: 'Homework Assignments',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'session_id', size: 64 },
+      { type: 'string', key: 'sport_key', size: 100 },
+      { type: 'string', key: 'title', size: 200, required: true },
+      { type: 'string', key: 'instructions', size: 20000 },
+      { type: 'datetime', key: 'due_date' },
+      { type: 'enum', key: 'status', elements: ['assigned', 'submitted', 'reviewed', 'archived'], def: 'assigned' },
+      { type: 'string', key: 'athlete_notes', size: 5000 },
+      { type: 'string', key: 'coach_feedback', size: 5000 },
+      { type: 'datetime', key: 'submitted_at' },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_hw_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_hw_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_hw_session', type: 'key', attrs: ['session_id'] },
+    ],
+  },
+  {
+    id: 'athlete_assessments',
+    name: 'Athlete Assessments',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64, required: true },
+      { type: 'string', key: 'sport_key', size: 100 },
+      { type: 'string', key: 'template_version', size: 60 },
+      { type: 'string', key: 'scores', size: 20000 }, // JSON: categories → skills → 1–10
+      { type: 'string', key: 'summary', size: 5000 },
+      { type: 'string', key: 'notes', size: 20000 },
+      { type: 'datetime', key: 'assessed_at' },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+    ],
+    indexes: [
+      { key: 'idx_assess_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_assess_coach', type: 'key', attrs: ['coach_id'] },
+      { key: 'idx_assess_sport', type: 'key', attrs: ['sport_key'] },
+    ],
+  },
+  {
+    id: 'session_check_ins',
+    name: 'Session Check-Ins',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'athlete_id', size: 64, required: true },
+      { type: 'string', key: 'session_id', size: 64, required: true },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'int', key: 'energy', min: 1, max: 10 },
+      { type: 'int', key: 'soreness', min: 1, max: 10 },
+      { type: 'int', key: 'mood', min: 1, max: 10 },
+      { type: 'string', key: 'notes', size: 5000 },
+      { type: 'bool', key: 'injury_flag', def: false },
+      { type: 'string', key: 'created_by_profile_id', size: 64 },
+      { type: 'string', key: 'created_by_role', size: 20 },
+    ],
+    indexes: [
+      { key: 'idx_checkin_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_checkin_session', type: 'key', attrs: ['session_id'] },
+    ],
+  },
+  {
+    id: 'safety_reports',
+    name: 'Safety Reports',
+    perms: ADMIN_READ, // per-doc: reporter read only
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'reporter_profile_id', size: 64, required: true },
+      { type: 'string', key: 'reporter_account_id', size: 64 },
+      { type: 'enum', key: 'subject_type', elements: ['coach', 'user', 'organization', 'message', 'conversation'] },
+      { type: 'string', key: 'subject_id', size: 64 },
+      { type: 'string', key: 'conversation_id', size: 64 },
+      { type: 'string', key: 'message_id', size: 64 },
+      { type: 'string', key: 'category', size: 60 },
+      { type: 'string', key: 'detail', size: 20000 },
+      { type: 'enum', key: 'status', elements: ['open', 'reviewing', 'resolved', 'dismissed'], def: 'open' },
+      { type: 'string', key: 'resolution_notes', size: 5000 },
+    ],
+    indexes: [
+      { key: 'idx_report_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_report_subject', type: 'key', attrs: ['subject_type', 'subject_id'] },
     ],
   },
 ];
@@ -905,12 +1323,16 @@ async function attrFromDef(coll, defn) {
   }
 }
 
-async function provisionProductionCollections() {
-  for (const coll of PRODUCTION_COLLECTIONS) {
+async function provisionFromDefs(collections) {
+  for (const coll of collections) {
     console.log(`\n[Collection] ${coll.id}`);
-    await ensureCollection(coll.id, coll.name, coll.perms || AUTH_ONLY);
+    await ensureCollection(coll.id, coll.name, coll.perms, coll.docSec);
     for (const attr of coll.attrs) {
       await attrFromDef(coll.id, attr);
+    }
+    // Pre-cutover deployments carry the old payout_model enum; warn if so.
+    if (coll.id === 'organizations') {
+      await warnIfEnumDiffers('organizations', 'payout_model', ['organization', 'coach', 'split']);
     }
     await waitAttributesReady(coll.id);
     for (const index of coll.indexes || []) {
@@ -924,64 +1346,92 @@ async function provisionProductionCollections() {
 async function provisionBuckets() {
   console.log('\n[Storage] buckets');
 
-  // Public-read buckets — used for visible profile/CMS images.
-  const publicPerms = [
-    Permission.read(Role.any()),
-    Permission.create(Role.users()),
-    Permission.update(Role.users()),
-    Permission.delete(Role.users()),
-  ];
-
-  await ensureBucket('coach-photos',   'Coach Photos',   publicPerms, {
+  // Public buckets — read any, own uploads by users, admin moderation.
+  await ensureBucket('coach-photos',   'Coach Photos',   PUBLIC_BUCKET, {
     maximumFileSize: 10 * 1024 * 1024,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
   });
-  await ensureBucket('client-photos',  'Client Photos',  publicPerms, {
-    maximumFileSize: 10 * 1024 * 1024,
-    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-  });
-  await ensureBucket('blog-media',     'Blog Media',     publicPerms, {
+  await ensureBucket('blog-media',     'Blog Media',     PUBLIC_BUCKET, {
     maximumFileSize: 20 * 1024 * 1024,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
   });
-  await ensureBucket('site-content',   'Site Content',   publicPerms, {
+  await ensureBucket('site-content',   'Site Content',   PUBLIC_BUCKET, {
     maximumFileSize: 20 * 1024 * 1024,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'svg'],
   });
+  await ensureBucket('org-logos', 'Organization Logos', PUBLIC_BUCKET, {
+    maximumFileSize: 10 * 1024 * 1024,
+    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'svg'],
+  });
 
-  // Private buckets — accessed via signed URLs only.
-  await ensureBucket('coach-resumes',  'Coach Resumes',  AUTH_ONLY, {
+  // Private buckets — fileSecurity ON, NO bucket-level user permissions.
+  // Files are created server-side or with explicit per-file grants.
+  // client-photos becomes private: athlete photos may depict minors.
+  await ensureBucket('client-photos',  'Client Photos',  PRIVATE_BUCKET, {
+    fileSecurity: true,
+    maximumFileSize: 10 * 1024 * 1024,
+    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+  });
+  await ensureBucket('coach-resumes',  'Coach Resumes',  PRIVATE_BUCKET, {
+    fileSecurity: true,
     maximumFileSize: 10 * 1024 * 1024,
     allowedFileExtensions: ['pdf', 'doc', 'docx'],
   });
-  await ensureBucket('message-attachments', 'Message Attachments', AUTH_ONLY, {
+  await ensureBucket('message-attachments', 'Message Attachments', PRIVATE_BUCKET, {
+    fileSecurity: true,
     maximumFileSize: 25 * 1024 * 1024,
   });
-  await ensureBucket('legal-documents', 'Legal Documents', AUTH_ONLY, {
+  await ensureBucket('legal-documents', 'Legal Documents', PRIVATE_BUCKET, {
     fileSecurity: true,
     maximumFileSize: 30 * 1024 * 1024,
     allowedFileExtensions: ['pdf'],
   });
-  await ensureBucket('coach-documents', 'Coach Documents', AUTH_ONLY, {
+  await ensureBucket('coach-documents', 'Coach Documents', PRIVATE_BUCKET, {
     fileSecurity: true,
     maximumFileSize: 30 * 1024 * 1024,
     allowedFileExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
   });
-  await ensureBucket('org-logos', 'Organization Logos', publicPerms, {
-    maximumFileSize: 10 * 1024 * 1024,
-    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'svg'],
-  });
-  await ensureBucket('generated-receipts', 'Generated Receipts', AUTH_ONLY, {
+  await ensureBucket('generated-receipts', 'Generated Receipts', PRIVATE_BUCKET, {
     fileSecurity: true,
     maximumFileSize: 10 * 1024 * 1024,
     allowedFileExtensions: ['pdf'],
   });
+  await ensureBucket('progress-media', 'Progress Media', PRIVATE_BUCKET, {
+    fileSecurity: true,
+    maximumFileSize: 100 * 1024 * 1024,
+    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov'],
+  });
+}
+
+// --- Cutover summary ----------------------------------------------------------
+
+function describePerms(permissions) {
+  return permissions.length ? permissions.join('  ') : '(server-only — no client permissions)';
+}
+
+function printCutoverSummary() {
+  console.log('\n================== PERMISSION CUTOVER SUMMARY ==================');
+  console.log('\nCollections (docSec ON = per-document grants written by functions');
+  console.log('and by scripts/backfill-permissions.mjs for pre-existing data):\n');
+  for (const coll of CUTOVER_SUMMARY.collections) {
+    console.log(`  ${coll.documentSecurity ? '[docSec ON ]' : '[docSec off]'} ${coll.id}`);
+    console.log(`               ${describePerms(coll.permissions)}`);
+  }
+  console.log('\nBuckets (fileSecurity ON = per-file grants only):\n');
+  for (const bucket of CUTOVER_SUMMARY.buckets) {
+    console.log(`  ${bucket.fileSecurity ? '[fileSec ON ]' : '[fileSec off]'} ${bucket.id}`);
+    console.log(`               ${describePerms(bucket.permissions)}`);
+  }
+  console.log('\nNext steps:');
+  console.log('  1. node scripts/backfill-permissions.mjs --dry-run   (preview per-document grants)');
+  console.log('  2. node scripts/backfill-permissions.mjs             (apply per-document grants)');
+  console.log('================================================================');
 }
 
 // --- Main -------------------------------------------------------------------
 
 async function main() {
-  console.log('Appwrite provisioner');
+  console.log('Appwrite provisioner v2 (permission cutover)');
   console.log('  endpoint:', ENDPOINT);
   console.log('  project: ', PROJECT);
 
@@ -1002,11 +1452,13 @@ async function main() {
   await provisionSiteContent();
   await provisionUnsubscribeRecords();
   await provisionUserBans();
-  await provisionProductionCollections();
+  await provisionFromDefs(PRODUCTION_COLLECTIONS);
+  await provisionFromDefs(NEW_COLLECTIONS);
 
   await provisionBuckets();
 
-  console.log(`\nDone. ${15 + PRODUCTION_COLLECTIONS.length} collections + 10 buckets ensured in Appwrite.`);
+  printCutoverSummary();
+  console.log(`\nDone. ${CUTOVER_SUMMARY.collections.length} collections + ${CUTOVER_SUMMARY.buckets.length} buckets ensured, permissions enforced.`);
 }
 
 main().catch((err) => {

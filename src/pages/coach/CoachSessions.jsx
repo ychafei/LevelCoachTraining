@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { format, startOfDay, parseISO, isBefore, isWithinInterval } from 'date-fns';
 import { coachRepo, sessionRepo, sessionCreditRepo } from '@/api/repo';
 import { rpc } from '@/lib/rpc';
-import { email as emailLib } from '@/lib/email';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +19,7 @@ import {
   MessageSquare, MapPin, Search, AlertTriangle, UserCheck, ExternalLink,
   Filter,
 } from 'lucide-react';
-import { formatTimeET, formatLongDateET, formatSessionRangeET } from '@/lib/formatInET';
+import { formatTimeET, formatLongDateET } from '@/lib/formatInET';
 import { isSessionPast, isWithinHoursFromNow } from '@/lib/scheduleET';
 
 // Sessions page — coach-side operational view of every booking. Mirrors the
@@ -339,28 +338,8 @@ export default function CoachSessions() {
       });
       patchSession(rescheduleSession.id, { date: newDate, start_time: rescheduleTime });
 
-      // Send notification email to client.
-      try {
-        const dur = rescheduleSession.duration_minutes;
-        const oldWhen = `${formatLongDateET(rescheduleSession.date)} · ${formatSessionRangeET(rescheduleSession.date, rescheduleSession.start_time, dur)}`;
-        const newWhen = `${formatLongDateET(newDate)} · ${formatSessionRangeET(newDate, rescheduleTime, dur)}`;
-        const coachName = coach ? `${coach.first_name} ${coach.last_name}` : 'your coach';
-        await emailLib.send({
-          to: rescheduleSession.client_email,
-          subject: `Session rescheduled — ${formatLongDateET(newDate)}`,
-          body: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2563EB;">Session Rescheduled</h2>
-              <p>Hi ${rescheduleSession.client_name || 'there'},</p>
-              <p>Your session with <strong>${coachName}</strong> has been rescheduled.</p>
-              <p><strong>Previous:</strong> <span style="text-decoration:line-through; color:#888;">${oldWhen}</span></p>
-              <p><strong>New:</strong> ${newWhen} (${rescheduleSession.county} County)</p>
-            </div>
-          `,
-        });
-      } catch (err) {
-        console.warn('reschedule email failed', err);
-      }
+      // Reschedule notification emails are sent server-side by the booking
+      // function — the open-relay client email helper was removed.
 
       toast.success('Session rescheduled');
       setRescheduleSession(null);

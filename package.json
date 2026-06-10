@@ -17,7 +17,10 @@
     "phase5:verify": "node scripts/verify-phase5.mjs",
     "phase6:verify": "node scripts/verify-phase6.mjs",
     "legal:seed-templates": "node scripts/seed-legal-templates.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "phase7:verify": "node scripts/verify-phase7.mjs",
+    "sports:seed": "node scripts/seed-sports.mjs",
+    "verify:all": "npm run phase0:verify && npm run phase1:verify && npm run phase2:verify && npm run phase3:verify && npm run phase4:verify && npm run phase5:verify && npm run phase6:verify && npm run phase7:verify"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

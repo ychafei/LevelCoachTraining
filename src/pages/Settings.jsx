@@ -6,31 +6,44 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Always start from a fully-keyed shape so inputs stay controlled and no
+// render ever reads a property off an empty object before the user loads.
+const EMPTY_PROFILE = {
+  phone: '',
+  dob: '',
+  bio: '',
+  parent_first_name: '',
+  parent_last_name: '',
+  parent_email: '',
+  parent_phone: '',
+  parent_relationship: '',
+  matching_opted_in: false,
+  matching_age_group: '',
+};
+
 export default function Settings() {
   const { user, isCoach, refetch } = useCurrentUser();
-  const [profile, setProfile] = useState({});
+  const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
       setProfile({
+        ...EMPTY_PROFILE,
         phone: user.phone || '',
-        dob: user.dob || '',
-        position: user.position || '',
-        skill_level: user.skill_level || '',
+        dob: user.dob ? String(user.dob).slice(0, 10) : '',
         bio: user.bio || '',
         parent_first_name: user.parent_first_name || '',
         parent_last_name: user.parent_last_name || '',
         parent_email: user.parent_email || '',
         parent_phone: user.parent_phone || '',
         parent_relationship: user.parent_relationship || '',
-        matching_opted_in: user.matching_opted_in || false,
+        matching_opted_in: user.matching_opted_in === true,
         matching_age_group: user.matching_age_group || '',
       });
     }
@@ -38,10 +51,21 @@ export default function Settings() {
 
   const saveProfile = async () => {
     setSaving(true);
-    await auth.updateCurrentUser(profile);
-    await refetch();
-    setSaving(false);
-    toast.success('Profile saved');
+    try {
+      // Profile writes go through the server-side accountProfile whitelist.
+      // Omit empty optional values the server validates strictly (dob must be
+      // a real date, matching_age_group must be one of the known groups).
+      const payload = { ...profile };
+      if (!payload.dob) delete payload.dob;
+      if (!payload.matching_age_group) delete payload.matching_age_group;
+      await auth.updateCurrentUser(payload);
+      await refetch();
+      toast.success('Profile saved');
+    } catch (err) {
+      toast.error(err?.message || 'Could not save your profile.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -79,43 +103,17 @@ export default function Settings() {
           <TabsContent value="profile" className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label className="font-display tracking-wider uppercase text-xs">Phone</Label>
-                <Input value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} className="bg-card border-border mt-1" />
+                <Label htmlFor="settings-phone" className="font-display tracking-wider uppercase text-xs">Phone</Label>
+                <Input id="settings-phone" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} className="bg-card border-border mt-1" />
               </div>
               <div>
-                <Label className="font-display tracking-wider uppercase text-xs">Date of Birth</Label>
-                <Input type="date" value={profile.dob} onChange={e => setProfile({...profile, dob: e.target.value})} className="bg-card border-border mt-1" />
+                <Label htmlFor="settings-dob" className="font-display tracking-wider uppercase text-xs">Date of Birth</Label>
+                <Input id="settings-dob" type="date" value={profile.dob} onChange={e => setProfile({...profile, dob: e.target.value})} className="bg-card border-border mt-1" />
               </div>
             </div>
-            {!isCoach && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="font-display tracking-wider uppercase text-xs">Position</Label>
-                  <Select value={profile.position} onValueChange={v => setProfile({...profile, position: v})}>
-                    <SelectTrigger className="bg-card border-border mt-1"><SelectValue placeholder="Select position" /></SelectTrigger>
-                    <SelectContent>
-                      {['Goalkeeper', 'Center Back', 'Fullback', 'Defensive Midfielder', 'Central Midfielder', 'Attacking Midfielder', 'Winger', 'Striker', 'Forward', 'Other'].map(p => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="font-display tracking-wider uppercase text-xs">Skill Level</Label>
-                  <Select value={profile.skill_level} onValueChange={v => setProfile({...profile, skill_level: v})}>
-                    <SelectTrigger className="bg-card border-border mt-1"><SelectValue placeholder="Select level" /></SelectTrigger>
-                    <SelectContent>
-                      {['Beginner', 'Intermediate', 'Advanced', 'Competitive'].map(l => (
-                        <SelectItem key={l} value={l}>{l}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
             <div>
-              <Label className="font-display tracking-wider uppercase text-xs">Bio</Label>
-              <Textarea value={profile.bio} onChange={e => setProfile({...profile, bio: e.target.value})} className="bg-card border-border mt-1" rows={3} />
+              <Label htmlFor="settings-bio" className="font-display tracking-wider uppercase text-xs">Bio</Label>
+              <Textarea id="settings-bio" value={profile.bio} onChange={e => setProfile({...profile, bio: e.target.value})} className="bg-card border-border mt-1" rows={3} />
             </div>
 
             {!isCoach && (() => {
@@ -125,20 +123,20 @@ export default function Settings() {
                   <h3 className="font-display text-sm tracking-widest uppercase text-muted-foreground mb-4">Parent / Guardian Info</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Parent First Name</Label>
-                      <Input value={profile.parent_first_name} onChange={e => setProfile({...profile, parent_first_name: e.target.value})} className="bg-card border-border mt-1" />
+                      <Label htmlFor="settings-parent-first" className="font-display tracking-wider uppercase text-xs">Parent First Name</Label>
+                      <Input id="settings-parent-first" value={profile.parent_first_name} onChange={e => setProfile({...profile, parent_first_name: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Parent Last Name</Label>
-                      <Input value={profile.parent_last_name} onChange={e => setProfile({...profile, parent_last_name: e.target.value})} className="bg-card border-border mt-1" />
+                      <Label htmlFor="settings-parent-last" className="font-display tracking-wider uppercase text-xs">Parent Last Name</Label>
+                      <Input id="settings-parent-last" value={profile.parent_last_name} onChange={e => setProfile({...profile, parent_last_name: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Parent Email</Label>
-                      <Input value={profile.parent_email} onChange={e => setProfile({...profile, parent_email: e.target.value})} className="bg-card border-border mt-1" />
+                      <Label htmlFor="settings-parent-email" className="font-display tracking-wider uppercase text-xs">Parent Email</Label>
+                      <Input id="settings-parent-email" type="email" value={profile.parent_email} onChange={e => setProfile({...profile, parent_email: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Parent Phone</Label>
-                      <Input value={profile.parent_phone} onChange={e => setProfile({...profile, parent_phone: e.target.value})} className="bg-card border-border mt-1" />
+                      <Label htmlFor="settings-parent-phone" className="font-display tracking-wider uppercase text-xs">Parent Phone</Label>
+                      <Input id="settings-parent-phone" value={profile.parent_phone} onChange={e => setProfile({...profile, parent_phone: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                   </div>
                 </div>
@@ -155,14 +153,18 @@ export default function Settings() {
             <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
               <div>
                 <p className="font-display tracking-wider text-sm">Opt In to Player Matching</p>
-                <p className="text-xs text-muted-foreground mt-1">Allow other clients to see your first name and age for match requests.</p>
+                <p className="text-xs text-muted-foreground mt-1">Allow other clients to see your first name and age group.</p>
               </div>
-              <Switch checked={profile.matching_opted_in} onCheckedChange={v => setProfile({...profile, matching_opted_in: v})} />
+              <Switch
+                checked={profile.matching_opted_in}
+                onCheckedChange={v => setProfile({...profile, matching_opted_in: v})}
+                aria-label="Opt in to player matching"
+              />
             </div>
             {profile.matching_opted_in && (
               <div className="space-y-3">
                 <Label className="font-display tracking-wider uppercase text-xs">Preferred Age Group</Label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Preferred age group">
                   {[
                     { label: 'Ages 5–8', value: '5-8' },
                     { label: 'Ages 9–12', value: '9-12' },
@@ -170,6 +172,9 @@ export default function Settings() {
                   ].map(group => (
                     <button
                       key={group.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={profile.matching_age_group === group.value}
                       onClick={() => setProfile({...profile, matching_age_group: group.value})}
                       className={`p-3 rounded-lg border text-sm font-display tracking-wider uppercase text-center transition-all ${
                         profile.matching_age_group === group.value

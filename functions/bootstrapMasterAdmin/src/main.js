@@ -1,7 +1,8 @@
 import { Client, Databases, Users, ID, Query } from 'node-appwrite';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
-const MASTER_EMAIL = (process.env.MASTER_ADMIN_EMAIL || 'yousef.elchafei@gmail.com').trim().toLowerCase();
+// MASTER_ADMIN_EMAIL must come from the server environment — no hardcoded fallback.
+const MASTER_EMAIL = (process.env.MASTER_ADMIN_EMAIL || '').trim().toLowerCase();
 
 function services() {
   const client = new Client()
@@ -17,6 +18,9 @@ function callerAccountId(req) {
 
 export default async ({ req, res, error }) => {
   try {
+    if (!MASTER_EMAIL) {
+      return res.json({ error: 'MASTER_ADMIN_EMAIL is not configured.' }, 500);
+    }
     const accountId = callerAccountId(req);
     if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
 
@@ -75,6 +79,6 @@ export default async ({ req, res, error }) => {
     return res.json({ profile_id: profile.$id, role: profile.role, master_admin_locked: true });
   } catch (err) {
     error?.(err?.message || String(err));
-    return res.json({ error: 'Could not bootstrap master admin.', detail: err?.message || String(err) }, 500);
+    return res.json({ error: 'Could not bootstrap master admin.' }, 500);
   }
 };

@@ -1,10 +1,11 @@
 import { isOnboardingComplete, profileRole } from '@/lib/roles';
 
-const MASTER_ADMIN_EMAIL = 'yousef.elchafei@gmail.com';
-
-function isMasterAdminBootstrapAccount(user) {
-  return user?.master_admin_locked === true
-    || (user?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL;
+// Master-admin home applies only to the locked platform owner account:
+// superadmin authority (label-backed, computed server-side) AND the locked
+// profile flag. There is no client-side email special-case — the server
+// (bootstrapMasterAdmin) owns that check via env MASTER_ADMIN_EMAIL.
+function isLockedMasterAdmin(user) {
+  return user?.master_admin_locked === true && user?.is_super_admin === true;
 }
 
 export function onboardingPath(next = '', role = '') {
@@ -20,7 +21,7 @@ export function onboardingPath(next = '', role = '') {
 // Where a signed-in user should land by role.
 export function homePathForRole(user) {
   if (!user) return '/';
-  if (isMasterAdminBootstrapAccount(user)) return '/master-admin';
+  if (isLockedMasterAdmin(user)) return '/master-admin';
   if (!isOnboardingComplete(user)) return '/onboarding';
   const role = user?.role;
   if (role === 'super_admin') return '/master-admin';
@@ -35,7 +36,7 @@ export function homePathForRole(user) {
 
 export function postAuthRedirectPath(user, requestedNext = '') {
   if (!user) return requestedNext || '/';
-  if (isMasterAdminBootstrapAccount(user)) {
+  if (isLockedMasterAdmin(user)) {
     if (requestedNext && !requestedNext.startsWith('/onboarding')) return requestedNext;
     return '/master-admin';
   }

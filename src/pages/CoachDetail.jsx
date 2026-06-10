@@ -24,8 +24,6 @@ import {
   publicCoachDisplay,
 } from '@/lib/publicCoach';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
-import { DEMO_COACH_PROFILES } from '@/lib/demoCoachProfiles';
-import { loadDemoCoachProfilesEnabled } from '@/lib/demoCoachSettings';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -52,18 +50,16 @@ export default function CoachDetail() {
     let cancelled = false;
     (async () => {
       try {
-        const [coachRes, packageRows, demosEnabled] = await Promise.all([
+        const [coachRes, packageRows] = await Promise.all([
           rpc.invoke('getPublicCoaches', {}).catch((err) => {
-            console.warn('Public coaches unavailable; profile will fall back to demo profiles if enabled.', err);
+            console.warn('Public coaches unavailable.', err);
             return null;
           }),
           pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
-          loadDemoCoachProfilesEnabled(),
         ]);
         if (cancelled) return;
         const liveCoaches = (coachRes?.data?.coaches || coachRes?.coaches || []).map(normalizePublicCoach);
-        const list = demosEnabled ? [...liveCoaches, ...DEMO_COACH_PROFILES] : liveCoaches;
-        const match = list.find((item) => item.id === coachId);
+        const match = liveCoaches.find((item) => item.id === coachId);
         if (!match) {
           setError(true);
         } else {

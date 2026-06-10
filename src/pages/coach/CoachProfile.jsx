@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { coachRepo } from '@/api/repo';
 import { storage } from '@/lib/storage';
 import { rpc } from '@/lib/rpc';
-import { email as emailLib } from '@/lib/email';
 import { useAuth } from '@/lib/AuthContext';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -148,19 +147,7 @@ export default function CoachProfile() {
     const code = String(Math.floor(100000 + Math.random() * 900000));
     setEmailFlow('sending');
 
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0A0E14; color: #F8FAFC;">
-        <h2 style="color: #2563EB; margin: 0 0 16px;">Verify your LevelCoach Training coach email</h2>
-        <p style="color: #E2E8F0; line-height: 1.5;">Enter this 6-digit code in your Profile page to confirm <strong>${email}</strong> as your coach contact address.</p>
-        <div style="text-align:center; margin: 24px 0;">
-          <span style="display:inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #2563EB; background:#1a1a1a; padding: 16px 24px; border-radius: 8px;">${code}</span>
-        </div>
-        <p style="color: #94A3B8; font-size: 12px;">If you didn't request this, you can ignore this email.</p>
-      </div>
-    `;
-
     let serverFnError = null;
-    let coreError = null;
     let delivered = false;
 
     try {
@@ -179,15 +166,8 @@ export default function CoachProfile() {
       serverFnError = detail;
     }
 
-    if (!delivered) {
-      try {
-        await emailLib.send({ to: email, subject: 'LevelCoach Training — Email Verification Code', body: emailHtml });
-        delivered = true;
-      } catch (err) {
-        coreError = err?.message || String(err);
-      }
-    }
-
+    // The open-relay client email fallback was removed in the production
+    // cutover — verification codes only go out through the server function.
     if (delivered) {
       setExpectedCode(code);
       setEnteredCode('');
@@ -197,7 +177,7 @@ export default function CoachProfile() {
       setEmailFlow('idle');
       setEmailStatus({
         kind: 'error',
-        message: `Could not send email. Server fn: ${serverFnError || 'n/a'}. Core.SendEmail: ${coreError || 'n/a'}.`,
+        message: `Could not send email. ${serverFnError || ''}`.trim(),
       });
     }
   };

@@ -7,8 +7,6 @@ import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { legalSignerRoleForUser } from '@/lib/legal';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 
-const MASTER_ADMIN_EMAIL = 'yousef.elchafei@gmail.com';
-
 // Shared spinner — short-lived; never sits forever because guards resolve
 // after isLoadingAuth/isLoadingPublicSettings flip.
 function AuthSpinner() {
@@ -170,20 +168,18 @@ export function RequireSuperAdmin() {
   return <Outlet />;
 }
 
+// Master-admin gate. The locked platform owner (superadmin label + locked
+// profile flag) always passes. Any other AUTHENTICATED user is also allowed
+// through to /master-admin purely for the bootstrap UX: MasterAdminPortal
+// shows a "Bootstrap master admin" action and the SERVER (bootstrapMasterAdmin
+// function) validates the env MASTER_ADMIN_EMAIL — unauthorized users simply
+// get a clean denial message from the function. There is intentionally no
+// client-side email constant: route guards are UX, never the security
+// boundary (see docs/ARCHITECTURE.md §1).
 export function RequireMasterAdmin() {
-  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user, isSuperAdmin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
   if (!isAuthenticated || !user) return <SignInRequired />;
-  const isLockedMasterAdmin = isSuperAdmin && user.master_admin_locked === true;
-  const canBootstrapMasterAdmin = (user.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL;
-  if (!isLockedMasterAdmin && !canBootstrapMasterAdmin) {
-    return (
-      <AccessDenied
-        title="Master Admin Only"
-        message="This area is restricted to the locked platform owner account."
-      />
-    );
-  }
   return <Outlet />;
 }
 

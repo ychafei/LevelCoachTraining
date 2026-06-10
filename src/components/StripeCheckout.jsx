@@ -3,6 +3,17 @@ import { rpc } from '@/lib/rpc';
 import { Button } from '@/components/ui/button';
 import { CreditCard, ShieldCheck } from 'lucide-react';
 
+// The server computes the charge amount from pricing_packages — the client
+// never sends a price. Strip any price-shaped keys from extraPayload so a
+// caller can't accidentally (or deliberately) pass client-computed money.
+const PRICE_KEY_RE = /price|amount|cents|total|fee|discount/i;
+
+function sanitizeExtraPayload(extraPayload) {
+  return Object.fromEntries(
+    Object.entries(extraPayload || {}).filter(([key]) => !PRICE_KEY_RE.test(key)),
+  );
+}
+
 export default function StripeCheckout({
   packageId,
   coachId,
@@ -23,18 +34,17 @@ export default function StripeCheckout({
         packageId,
         coachId,
         sessionDurationMinutes,
-        ...extraPayload,
+        ...sanitizeExtraPayload(extraPayload),
       });
       if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
-        const diag = res.data?.diagnostics?.join(' | ') || '';
-        const errMsg = res.data?.error || 'No URL returned';
-        setError(`Stripe error: ${errMsg}${diag ? ' — Debug: ' + diag : ''}`);
+        setError(res.data?.error || 'Stripe did not return a checkout link. Please try again.');
       }
     } catch (err) {
-      const detail = err?.data?.detail || err?.data?.stripe_error || err?.data?.error || err?.message || 'Unknown error';
-      setError(`Payment failed: ${detail}`);
+      // Server validation messages are user-friendly — surface them verbatim
+      // (e.g. "Coach is not ready to accept payments yet.").
+      setError(err?.data?.error || err?.message || 'Payment could not be started. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -42,7 +52,9 @@ export default function StripeCheckout({
 
   return (
     <div>
-      {error && <p className="text-destructive text-sm mb-3">{error}</p>}
+      {error && (
+        <p role="alert" className="text-destructive text-sm mb-3">{error}</p>
+      )}
       <Button
         onClick={handleClick}
         disabled={loading || disabled}

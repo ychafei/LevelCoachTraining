@@ -1,67 +1,43 @@
-const TZ = 'America/Detroit';
+// Legacy ET display helpers — thin wrappers around the timezone-aware
+// formatters in src/lib/scheduleET.js, pinned to America/Detroit.
+//
+// Kept so existing call sites (Dashboard, CoachSessions, admin pages, ...)
+// continue to work unchanged. New code should use formatInTz/formatTimeInTz
+// from '@/lib/scheduleET' and pass session.timezone explicitly.
 
-function makeFormatter(options) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: TZ, ...options });
-}
-
-const dateTimeFmt = makeFormatter({
-  weekday: 'short',
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
-
-const timeFmt = makeFormatter({
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
-
-const longDateFmt = makeFormatter({
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-});
-
-function toDate(value) {
-  if (!value) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return isNaN(d.getTime()) ? null : d;
-}
+import {
+  DEFAULT_TIMEZONE,
+  formatInTz,
+  formatTimeInTz,
+  formatLongDateInTz,
+  formatRangeInTz,
+  formatInstantInTz,
+} from '@/lib/scheduleET';
 
 export function formatSessionDateTimeET(dateStr, startTime) {
-  if (!dateStr || !startTime) return '';
-  const d = toDate(`${dateStr}T${startTime}:00`);
-  if (!d) return '';
-  return `${dateTimeFmt.format(d)} ET`;
+  const text = formatInTz(dateStr, startTime, DEFAULT_TIMEZONE, { timeZoneName: undefined });
+  return text ? `${text} ET` : '';
 }
 
 export function formatTimeET(dateStr, startTime) {
-  if (!dateStr || !startTime) return '';
-  const d = toDate(`${dateStr}T${startTime}:00`);
-  if (!d) return '';
-  return `${timeFmt.format(d)} ET`;
+  const text = formatTimeInTz(dateStr, startTime, DEFAULT_TIMEZONE, { timeZoneName: undefined });
+  return text ? `${text} ET` : '';
 }
 
 export function formatLongDateET(dateStr) {
-  if (!dateStr) return '';
-  const d = toDate(`${dateStr}T00:00:00`);
-  if (!d) return '';
-  return longDateFmt.format(d);
+  return formatLongDateInTz(dateStr, DEFAULT_TIMEZONE);
 }
 
 export function formatDateTimeET(date) {
-  const d = toDate(date);
-  if (!d) return '';
-  return `${dateTimeFmt.format(d)} ET`;
+  const text = formatInstantInTz(date, DEFAULT_TIMEZONE, { weekday: 'short', timeZoneName: undefined });
+  return text ? `${text} ET` : '';
 }
 
 export function formatSessionRangeET(dateStr, startTime, durationMinutes) {
-  if (!dateStr || !startTime || !durationMinutes) return '';
-  const start = toDate(`${dateStr}T${startTime}:00`);
-  if (!start) return '';
-  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
-  return `${timeFmt.format(start)}–${timeFmt.format(end)} ET`;
+  const text = formatRangeInTz(dateStr, startTime, durationMinutes, DEFAULT_TIMEZONE);
+  if (!text) return '';
+  // Strip the trailing zone abbreviation from the range and use the legacy
+  // fixed "ET" suffix so existing string handling keeps working.
+  const stripped = text.replace(/\s[A-Z]{2,5}$/, '');
+  return `${stripped} ET`;
 }

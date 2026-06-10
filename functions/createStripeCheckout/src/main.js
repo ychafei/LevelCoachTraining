@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
+const COACH_NOT_READY = 'Coach is not ready to accept payments yet.';
 
 const DURATIONS = new Map([
   [60, { hours: 1, discount: 0 }],
@@ -50,6 +51,17 @@ async function profileForAccount(db, accountId) {
     Query.limit(1),
   ]);
   return rows.documents[0] || null;
+}
+
+// Banned users may not start checkouts. Active user_bans rows are matched by profile email.
+async function callerBanned(db, profile) {
+  if (!profile?.email) return false;
+  const rows = await db.listDocuments(DB_ID, 'user_bans', [
+    Query.equal('banned_email', profile.email),
+    Query.equal('is_active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
 }
 
 function signerRoleForProfile(profile) {
@@ -108,6 +120,37 @@ async function legalPacketComplete(db, profile) {
   );
 }
 
+// Coach payout gate: coach-role templates signed by the coach's linked profile.
+// No linked profile means the coach is not ready to be paid.
+async function coachLegalPacketComplete(db, coach) {
+  if (!coach.user_id) return false;
+  const profile = await profileForAccount(db, coach.user_id).catch(() => null);
+  if (!profile) return false;
+
+  const [templateRows, agreementRows] = await Promise.all([
+    db.listDocuments(DB_ID, 'legal_templates', [
+      Query.equal('role', 'coach'),
+      Query.equal('required', true),
+      Query.limit(100),
+    ]),
+    db.listDocuments(DB_ID, 'legal_agreements', [
+      Query.equal('signer_profile_id', profile.$id),
+      Query.equal('signer_role', 'coach'),
+      Query.equal('status', 'signed'),
+      Query.limit(200),
+    ]),
+  ]);
+
+  const templates = templateRows.documents.filter(activeRequired);
+  if (templates.length === 0) return false;
+  return templates.every((template) =>
+    agreementRows.documents.some((agreement) =>
+      (!agreement.coach_id || agreement.coach_id === coach.$id)
+      && agreementMatchesTemplate(agreement, template)
+    )
+  );
+}
+
 function calculateAmountCents(pkg, durationMinutes) {
   const duration = DURATIONS.get(Number(durationMinutes) || 60);
   if (!duration) return null;
@@ -119,100 +162,84 @@ function calculateAmountCents(pkg, durationMinutes) {
   return Math.round(perSessionPrice * sessions * 100);
 }
 
-function applicationFeeCents(amountCents, coach, sessions) {
-  const type = coach.platform_fee_type || 'none';
-  const value = Number(coach.platform_fee_value) || 0;
-  if (type === 'percent') return Math.min(amountCents, Math.max(0, Math.round(amountCents * (value / 100))));
-  if (type === 'fixed') return Math.min(amountCents, Math.max(0, Math.round(value * 100 * Math.max(1, sessions || 1))));
-  return 0;
+function bpsInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 10000 ? n : null;
 }
 
-async function connectedAccountFor(db, ownerType, ownerId) {
+function defaultPlatformBps(coach) {
+  const fromCoach = bpsInt(coach.platform_fee_bps);
+  if (fromCoach !== null) return fromCoach;
+  const fromEnv = bpsInt(Number.parseInt(process.env.PLATFORM_FEE_BPS || '', 10));
+  if (fromEnv !== null) return fromEnv;
+  return 1500;
+}
+
+async function readyConnectedAccount(db, ownerType, ownerId) {
   if (!ownerId) return null;
   const rows = await db.listDocuments(DB_ID, 'stripe_connected_accounts', [
     Query.equal('owner_type', ownerType),
     Query.equal('owner_id', ownerId),
     Query.limit(10),
   ]).catch(() => ({ documents: [] }));
-  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || rows.documents[0] || null;
+  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || null;
 }
 
-async function organizationDestinationForCoach(db, coachId) {
+async function activeOrganizationForCoach(db, coachId) {
   const links = await db.listDocuments(DB_ID, 'organization_coaches', [
     Query.equal('coach_id', coachId),
     Query.equal('status', 'active'),
-    Query.limit(20),
+    Query.limit(10),
   ]).catch(() => ({ documents: [] }));
-
   for (const link of links.documents) {
-    if (link.payout_recipient !== 'org') continue;
     const org = await db.getDocument(DB_ID, 'organizations', link.organization_id).catch(() => null);
-    if (!org || org.status !== 'active' || org.payout_model === 'coach') continue;
-    const account = await connectedAccountFor(db, 'org', org.$id);
-    if (account?.charges_enabled && account?.payouts_enabled) {
-      return { account, ownerType: 'org', ownerId: org.$id };
-    }
+    if (org && org.status === 'active') return org;
   }
   return null;
 }
 
-async function paymentDestination(db, coach) {
-  const orgDestination = await organizationDestinationForCoach(db, coach.$id);
-  if (orgDestination) return orgDestination;
-
-  const coachAccount = await connectedAccountFor(db, 'coach', coach.$id);
-  if (coachAccount?.charges_enabled && coachAccount?.payouts_enabled) {
-    return { account: coachAccount, ownerType: 'coach', ownerId: coach.$id };
-  }
-  return { account: null, ownerType: 'coach', ownerId: coach.$id };
+async function activePayoutRule(db, organizationId, coachId) {
+  const rows = await db.listDocuments(DB_ID, 'payout_rules', [
+    Query.equal('organization_id', organizationId),
+    Query.equal('coach_id', coachId),
+    Query.equal('active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
 }
 
-const METRO_PLACES = [
-  ['Detroit, MI', 42.3314, -83.0458, ['detroit', 'wayne']],
-  ['Royal Oak, MI', 42.4895, -83.1446, ['royal oak', 'oakland']],
-  ['Rochester Hills, MI', 42.6584, -83.1499, ['rochester hills', 'oakland']],
-  ['Rochester, MI', 42.6806, -83.1338, ['rochester', 'oakland']],
-  ['Sterling Heights, MI', 42.5803, -83.0302, ['sterling heights', 'macomb']],
-  ['Troy, MI', 42.6064, -83.1498, ['troy', 'oakland']],
-  ['Novi, MI', 42.4806, -83.4755, ['novi', 'oakland']],
-  ['Southfield, MI', 42.4734, -83.2219, ['southfield', 'oakland']],
-  ['Farmington Hills, MI', 42.4989, -83.3677, ['farmington hills', 'oakland']],
-  ['Dearborn, MI', 42.3223, -83.1763, ['dearborn', 'wayne']],
-  ['Warren, MI', 42.5145, -83.0147, ['warren', 'macomb']],
-  ['Livonia, MI', 42.3684, -83.3527, ['livonia', 'wayne']],
-  ['Birmingham, MI', 42.5467, -83.2113, ['birmingham', 'oakland']],
-  ['Macomb, MI', 42.7009, -82.9594, ['macomb', 'macomb township']],
-  ['Canton, MI', 42.3086, -83.4822, ['canton', 'wayne']],
-  ['Oakland County, MI', 42.6603, -83.3850, ['oakland county', 'oakland']],
-  ['Macomb County, MI', 42.6759, -82.7779, ['macomb county', 'macomb']],
-  ['Wayne County, MI', 42.2791, -83.3362, ['wayne county', 'wayne']],
-  ['Metro Detroit, MI', 42.4650, -83.1000, ['metro detroit', 'detroit metro']],
-].map(([label, lat, lng, aliases]) => ({ label, lat, lng, aliases }));
-
-function clean(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/\bmichigan\b/g, 'mi')
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+// Resolves the split (basis points) for a payment to this coach. All shares are
+// integers summing to 10000; never floats.
+async function resolvePayoutPlan(db, coach) {
+  const platformDefault = defaultPlatformBps(coach);
+  const org = await activeOrganizationForCoach(db, coach.$id);
+  if (org) {
+    const rule = await activePayoutRule(db, org.$id, coach.$id);
+    if (rule) {
+      const coachBps = bpsInt(rule.coach_share_bps);
+      const orgBps = bpsInt(rule.org_share_bps);
+      const platformBps = bpsInt(rule.platform_share_bps);
+      if (coachBps === null || orgBps === null || platformBps === null
+        || coachBps + orgBps + platformBps !== 10000) {
+        return { error: `invalid payout_rules row ${rule.$id}` };
+      }
+      return { platform_bps: platformBps, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id };
+    }
+    if (org.payout_model === 'split' || org.payout_model === 'split_future') {
+      return { platform_bps: 1500, coach_bps: 6000, org_bps: 2500, organization_id: org.$id };
+    }
+    if (org.payout_model === 'organization') {
+      return { platform_bps: platformDefault, coach_bps: 0, org_bps: 10000 - platformDefault, organization_id: org.$id };
+    }
+    // payout_model 'coach': the coach is paid directly even while org-affiliated.
+    return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: org.$id };
+  }
+  return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: '' };
 }
 
 function finiteNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
-}
-
-function resolveKnownPlace(value) {
-  const term = clean(value);
-  if (!term) return null;
-  return METRO_PLACES.find((place) => (
-    clean(place.label) === term
-    || place.aliases.some((alias) => clean(alias) === term)
-  )) || METRO_PLACES.find((place) => (
-    clean(place.label).includes(term)
-    || place.aliases.some((alias) => clean(alias).includes(term))
-  )) || null;
 }
 
 function distanceMiles(a, b) {
@@ -230,21 +257,11 @@ function distanceMiles(a, b) {
   return 3958.8 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+// Coach coordinates only — no gazetteer lookups.
 function coachLocationPoint(coach) {
-  const lat = finiteNumber(coach.location_lat ?? coach.lat ?? coach.latitude);
-  const lng = finiteNumber(coach.location_lng ?? coach.lng ?? coach.longitude);
-  if (lat !== null && lng !== null) return { label: 'coach coordinates', lat, lng };
-
-  const candidates = [
-    coach.training_area,
-    coach.city,
-    coach.location,
-    coach.county ? `${coach.county} County, MI` : '',
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    const match = resolveKnownPlace(candidate);
-    if (match) return match;
-  }
+  const lat = finiteNumber(coach.location_lat);
+  const lng = finiteNumber(coach.location_lng);
+  if (lat !== null && lng !== null) return { lat, lng };
   return null;
 }
 
@@ -323,10 +340,21 @@ function validateAvailabilityPayload(payload) {
   };
 }
 
+function validId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(value);
+}
+
 export default async ({ req, res, error }) => {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
-      return res.json({ error: 'STRIPE_SECRET_KEY is not configured.' }, 500);
+      error?.('[createStripeCheckout] STRIPE_SECRET_KEY is not configured.');
+      return res.json({ error: 'Service configuration error.' }, 500);
+    }
+    // APP_BASE_URL is required in production — no localhost fallback.
+    const appBaseUrl = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
+    if (!appBaseUrl) {
+      error?.('[createStripeCheckout] APP_BASE_URL is not configured.');
+      return res.json({ error: 'Service configuration error.' }, 500);
     }
 
     const accountId = callerAccountId(req);
@@ -336,23 +364,39 @@ export default async ({ req, res, error }) => {
     const packageId = payload.packageId || payload.package_id;
     const coachId = payload.coachId || payload.coach_id;
     const durationMinutes = Number(payload.sessionDurationMinutes || payload.session_duration_minutes || 60);
-    if (!packageId) return res.json({ error: 'packageId is required.' }, 400);
-    if (!coachId) return res.json({ error: 'coachId is required.' }, 400);
+    if (!validId(packageId)) return res.json({ error: 'packageId is required.' }, 400);
+    if (!validId(coachId)) return res.json({ error: 'coachId is required.' }, 400);
+    if (!DURATIONS.has(durationMinutes)) return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
+    if (payload.bookingId && !validId(payload.bookingId)) {
+      return res.json({ error: 'bookingId is invalid.' }, 400);
+    }
 
     const db = databases();
     const profile = await profileForAccount(db, accountId);
     if (!profile) return res.json({ error: 'No profile found for checkout user.' }, 404);
+    if (await callerBanned(db, profile)) return res.json({ error: 'Account access is restricted.' }, 403);
     if (!profile.email) return res.json({ error: 'Checkout user must have an email address.' }, 400);
     if (!(await legalPacketComplete(db, profile))) {
       return res.json({ error: 'Complete the current required legal packet before checkout.' }, 403);
     }
 
-    const [pkg, coach] = await Promise.all([
-      db.getDocument(DB_ID, 'pricing_packages', packageId),
-      db.getDocument(DB_ID, 'coaches', coachId),
-    ]);
+    const pkg = await db.getDocument(DB_ID, 'pricing_packages', packageId).catch(() => null);
+    const coach = await db.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+    if (!pkg || !coach) return res.json({ error: 'Package or coach not found.' }, 404);
     if (pkg.is_visible === false) return res.json({ error: 'This package is not available for checkout.' }, 400);
-    if (coach.is_active === false) return res.json({ error: 'This coach is not accepting bookings.' }, 400);
+
+    // Package binding: a coach-bound package can only be purchased for that coach.
+    // Read defensively — the attribute may not exist yet during rollout.
+    const pkgCoachId = typeof pkg.coach_id === 'string' ? pkg.coach_id : '';
+    if (pkgCoachId && pkgCoachId !== coach.$id) {
+      return res.json({ error: 'This package is not available for this coach.' }, 400);
+    }
+
+    // Publish gate: published coaches only. Fallback for rollout: documents that
+    // predate the published flag are treated as published unless inactive.
+    const published = typeof coach.published === 'boolean' ? coach.published : coach.is_active !== false;
+    if (!published || coach.is_active === false) return res.json({ error: COACH_NOT_READY }, 400);
+    if (!(await coachLegalPacketComplete(db, coach))) return res.json({ error: COACH_NOT_READY }, 400);
 
     const bookingLocation = validateBookingLocation(coach, payload);
     if (bookingLocation.error) return res.json({ error: bookingLocation.error }, 400);
@@ -362,12 +406,29 @@ export default async ({ req, res, error }) => {
     const amount = calculateAmountCents(pkg, durationMinutes);
     if (!amount || amount < 50) return res.json({ error: 'A valid package amount is required.' }, 400);
 
-    const destination = await paymentDestination(db, coach);
-    const fee = destination.account
-      ? applicationFeeCents(amount, coach, Number(pkg.sessions) || 1)
-      : 0;
+    const plan = await resolvePayoutPlan(db, coach);
+    if (plan.error) {
+      error?.(`[createStripeCheckout] payout resolution failed for coach ${coach.$id}: ${plan.error}`);
+      return res.json({ error: COACH_NOT_READY }, 400);
+    }
 
-    const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+    // Every payee leg with a positive share must have a ready Connect account
+    // (charges + payouts enabled). Otherwise funds would be trapped — refuse.
+    const coachAccount = plan.coach_bps > 0 ? await readyConnectedAccount(db, 'coach', coach.$id) : null;
+    if (plan.coach_bps > 0 && !coachAccount) return res.json({ error: COACH_NOT_READY }, 400);
+    const orgAccount = plan.org_bps > 0 ? await readyConnectedAccount(db, 'org', plan.organization_id) : null;
+    if (plan.org_bps > 0 && !orgAccount) return res.json({ error: COACH_NOT_READY }, 400);
+
+    const payoutPlan = {
+      platform_bps: plan.platform_bps,
+      coach_bps: plan.coach_bps,
+      org_bps: plan.org_bps,
+      coach_id: coach.$id,
+      organization_id: plan.organization_id || '',
+      coach_account_id: coachAccount?.stripe_account_id || '',
+      org_account_id: orgAccount?.stripe_account_id || '',
+    };
+
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
     const bookingReference = payload.bookingId || `checkout_${profile.$id}_${Date.now()}`;
     const metadata = {
@@ -381,9 +442,7 @@ export default async ({ req, res, error }) => {
       booking_id: bookingReference,
       coach_id: coach.$id,
       coach_name: [coach.first_name, coach.last_name].filter(Boolean).join(' '),
-      payee_owner_type: destination.ownerType,
-      payee_owner_id: destination.ownerId,
-      connected_account_status: destination.account ? 'ready' : 'missing',
+      payout_plan: JSON.stringify(payoutPlan),
       booking_location_status: bookingLocation.status,
       booking_location_label: bookingLocation.label || '',
       booking_location_lat: bookingLocation.lat !== null && bookingLocation.lat !== undefined ? String(bookingLocation.lat) : '',
@@ -402,14 +461,8 @@ export default async ({ req, res, error }) => {
       client_notes: truncateMetadata(payload.client_notes || payload.notes || ''),
     };
 
-    const paymentIntentData = {
-      metadata,
-      ...(destination.account ? {
-        transfer_data: { destination: destination.account.stripe_account_id },
-        ...(fee > 0 ? { application_fee_amount: fee } : {}),
-      } : {}),
-    };
-
+    // Platform is merchant of record: no transfer_data / application_fee_amount.
+    // Transfers are created by the webhook after the charge succeeds.
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       success_url: `${appBaseUrl}/book?stripe_success=1&session_id={CHECKOUT_SESSION_ID}`,
@@ -425,24 +478,28 @@ export default async ({ req, res, error }) => {
           product_data: { name: metadata.package_name },
         },
       }],
-      payment_intent_data: paymentIntentData,
+      payment_intent_data: { metadata },
       allow_promotion_codes: false,
     });
+
+    // Platform share in cents, rounded down — payees get floor(amount*bps/10000),
+    // the platform keeps the rounding remainder.
+    const applicationFee = Math.floor((amount * plan.platform_bps) / 10000);
 
     await db.createDocument(DB_ID, 'stripe_payment_records', ID.unique(), {
       booking_id: bookingReference,
       checkout_session_id: session.id,
       amount,
-      application_fee: fee,
+      application_fee: applicationFee,
       currency: 'usd',
-      transfer_destination: destination.account?.stripe_account_id || '',
+      transfer_destination: '',
       status: 'created',
       metadata: JSON.stringify(metadata),
     });
 
     return res.json({ url: session.url, checkout_session_id: session.id });
   } catch (err) {
-    error?.(err?.message || String(err));
-    return res.json({ error: 'Could not create Stripe Checkout session.', stripe_error: err?.message || String(err) }, 500);
+    error?.(`[createStripeCheckout] ${err?.message || err}`);
+    return res.json({ error: 'Could not create Stripe Checkout session.' }, 500);
   }
 };

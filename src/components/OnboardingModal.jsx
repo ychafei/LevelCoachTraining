@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { auth } from '@/lib/auth';
-import { email as emailLib } from '@/lib/email';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -75,42 +74,8 @@ export default function OnboardingModal({ user, onComplete }) {
       profile_setup_complete: true,
     });
 
-    // Notify parent/guardian via email if under 18
-    if (isUnder18 && form.parent_email) {
-      const childName = `${firstName} ${lastName}`.trim() || user?.email || 'Your child';
-      try {
-        await emailLib.send({
-          to: form.parent_email,
-          subject: 'Your Child Has Signed Up for LevelCoach Training',
-          body: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2563EB;">LevelCoach Training — Parent/Guardian Notification</h2>
-              <p>Hi ${form.parent_first_name},</p>
-              <p><strong>${childName}</strong> (age ${age}) has created an account on <strong>LevelCoach Training</strong>, a private soccer coaching platform.</p>
-              <h3 style="color: #2563EB;">What is LevelCoach Training?</h3>
-              <p>LevelCoach Training provides one-on-one and small group soccer coaching sessions for players of all ages and skill levels in Oakland, Macomb, and Wayne counties.</p>
-              <h3 style="color: #2563EB;">What your child can do on the platform:</h3>
-              <ul>
-                <li>Book private coaching sessions with certified coaches</li>
-                <li>Connect with other players their age through our matching system (first name and age only are visible)</li>
-                <li>Message matched players (all messages are monitored for safety)</li>
-              </ul>
-              <h3 style="color: #2563EB;">Your information on file:</h3>
-              <ul>
-                <li>Name: ${form.parent_first_name} ${form.parent_last_name}</li>
-                <li>Phone: ${form.parent_phone}</li>
-                <li>Email: ${form.parent_email}</li>
-              </ul>
-              <p>If you have any questions or did not authorize this, please contact us immediately at <a href="mailto:support@levelcoach.com" style="color: #2563EB;">support@levelcoach.com</a>.</p>
-              <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-              <p style="font-size: 12px; color: #999;">LevelCoach Training — Private Soccer Coaching<br/>${window.location.origin}</p>
-            </div>
-          `,
-        });
-      } catch {
-        // Email failure shouldn't block profile setup
-      }
-    }
+    // Parent/guardian notifications are sent server-side now — the open-relay
+    // client email helper was removed in the production cutover.
 
     setSaving(false);
     onComplete();
