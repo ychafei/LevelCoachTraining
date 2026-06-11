@@ -90,7 +90,6 @@ const PUBLIC_READ_ADMIN_WRITE = [
   Permission.update(ADMIN),
   Permission.delete(ADMIN),
 ];
-const SERVER_ONLY             = [];
 
 // Bucket presets. Private buckets carry NO bucket-level user permissions —
 // files are created server-side (or with explicit per-file permissions).
@@ -331,7 +330,11 @@ async function provisionProfiles() {
 
 async function provisionCoaches() {
   console.log('\n[Collection] coaches');
-  await ensureCollection('coaches', 'Coaches', PUBLIC_READ_ONLY, true);
+  // read(users), NOT read(any): coach records carry email/phone/fee config.
+  // Anonymous marketplace browsing goes through the getPublicCoaches function
+  // (execute:any, allowlisted safe fields); all direct reads are authenticated.
+  // Writes are server-only via coachSelf/adminOps/applications (API key). SEC-01.
+  await ensureCollection('coaches', 'Coaches', USERS_READ_ONLY, true);
   await attrString('coaches', 'first_name', 100, true);
   await attrString('coaches', 'last_name',  100, true);
   await attrEmail('coaches',  'email');
@@ -574,7 +577,7 @@ async function provisionPricingPackages() {
 async function provisionBlogPosts() {
   console.log('\n[Collection] blog_posts');
   // docSec ON: a "read any" per-document grant is added when a post publishes.
-  await ensureCollection('blog_posts', 'Blog Posts', ADMIN_READ_CREATE, true);
+  await ensureCollection('blog_posts', 'Blog Posts', ADMIN_FULL, true);
   await attrString('blog_posts', 'title', 300, true);
   await attrString('blog_posts', 'slug',  300, true);
   await attrString('blog_posts', 'cover_image', 1000);
@@ -626,7 +629,7 @@ async function provisionSiteContent() {
 async function provisionUnsubscribeRecords() {
   console.log('\n[Collection] unsubscribe_records');
   // Server-only: public unsubscribe goes through the emailDispatch function.
-  await ensureCollection('unsubscribe_records', 'Unsubscribe Records', SERVER_ONLY, false);
+  await ensureCollection('unsubscribe_records', 'Unsubscribe Records', ADMIN_READ, false);
   await attrEmail('unsubscribe_records',  'email', true);
   await attrString('unsubscribe_records', 'reason', 500);
   await attrBool('unsubscribe_records',   'resubscribed', false, false);
@@ -658,7 +661,9 @@ const PRODUCTION_COLLECTIONS = [
   {
     id: 'organizations',
     name: 'Organizations',
-    perms: PUBLIC_READ_ADMIN_WRITE, // writes otherwise server-only via orgAdmin fn
+    // read(any) for the public org directory, but NO user-level write (writes
+    // are server-only via orgAdmin/adminOps with the API key). SEC-02 + write-drift.
+    perms: PUBLIC_READ_ONLY,
     docSec: false,
     attrs: [
       { type: 'string', key: 'name', size: 200, required: true },
@@ -672,8 +677,9 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'float', key: 'radius_miles', def: 15 },
       { type: 'string', key: 'logo_file_id', size: 128 },
       { type: 'string', key: 'brand_color', size: 20 },
-      { type: 'string', key: 'stripe_account_id', size: 128 },
-      { type: 'enum', key: 'payout_model', elements: ['organization', 'coach', 'split'], def: 'organization' },
+      // NOTE: the org's real Connect account lives in stripe_connected_accounts
+      // (server-only); no stripe_account_id is denormalized onto the public org.
+      { type: 'enum', key: 'payout_model', elements: ['organization', 'coach', 'split'], def: 'split' },
       { type: 'string', key: 'created_by_profile_id', size: 64 },
       { type: 'email', key: 'contact_email' },
       { type: 'string', key: 'contact_phone', size: 30 },

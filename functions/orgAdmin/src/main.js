@@ -204,6 +204,10 @@ async function createOrg(databases, profile, accountId, payload) {
     type,
     status: 'draft',
     description,
+    // Default to the recommended split model so an org's coaches are paid by
+    // default (the schema default 'organization' would route 100%-minus-platform
+    // to the org and pay affiliated coaches $0 until an admin flips it). ORG-02.
+    payout_model: 'split',
     contact_email: contactEmail || undefined,
     contact_phone: contactPhone,
     website_url: websiteUrl,
