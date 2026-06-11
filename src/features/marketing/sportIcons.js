@@ -1,44 +1,59 @@
 import {
-  Activity,
-  CircleDashed,
-  CircleDot,
-  Crosshair,
-  Dumbbell,
-  Flag,
-  Footprints,
-  Goal,
-  LandPlot,
-  Snowflake,
-  Swords,
-  Target,
-  Trophy,
-  Volleyball,
-  Waves,
-  Zap,
-} from 'lucide-react';
+  GiAmericanFootballBall,
+  GiBaseballBat,
+  GiBaseballGlove,
+  GiBasketballBall,
+  GiGolfFlag,
+  GiHockey,
+  GiIceSkate,
+  GiPodiumWinner,
+  GiRunningShoe,
+  GiSoccerBall,
+  GiSportMedal,
+  GiSprint,
+  GiTennisRacket,
+  GiVolleyballBall,
+  GiWeightLiftingUp,
+} from 'react-icons/gi';
+import { MdPool } from 'react-icons/md';
+import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 
-// Maps the `icon` strings stored on SPORTS_CATALOG entries to lucide-react
-// components so marketing surfaces render a consistent icon per sport.
-const ICONS = {
-  goal: Goal,
-  'circle-dot': CircleDot,
-  flag: Flag,
-  target: Target,
-  'circle-dashed': CircleDashed,
-  volleyball: Volleyball,
-  crosshair: Crosshair,
-  swords: Swords,
-  snowflake: Snowflake,
-  'land-plot': LandPlot,
-  footprints: Footprints,
-  waves: Waves,
-  zap: Zap,
-  dumbbell: Dumbbell,
-  activity: Activity,
+// REAL sport glyphs (react-icons: Game Icons set + Material's swimmer), keyed
+// by catalog sport_key. These replaced the abstract lucide placeholders
+// (radar-for-soccer, snowflake-for-hockey) — every glyph below reads as its
+// sport at a glance. Filled single-path SVGs; size/color via className.
+const GLYPHS = {
+  soccer: GiSoccerBall,
+  basketball: GiBasketballBall,
+  football: GiAmericanFootballBall,
+  baseball: GiBaseballGlove,
+  softball: GiBaseballBat,
+  volleyball: GiVolleyballBall,
+  tennis: GiTennisRacket,
+  lacrosse: GiHockey, // crossed sticks — reads as the stick sport
+  hockey: GiIceSkate,
+  golf: GiGolfFlag,
+  track_field: GiSprint,
+  swimming: MdPool,
+  speed_agility: GiRunningShoe,
+  strength_conditioning: GiWeightLiftingUp,
+  general_performance: GiPodiumWinner,
 };
 
+// Canonical lookup by catalog sport_key. Falls back to a medal so a new
+// catalog entry never renders blank.
+export function sportGlyph(sportKey) {
+  return GLYPHS[sportKey] || GiSportMedal;
+}
+
+// Back-compat: callers that pass the legacy catalog `icon` string resolve
+// through the catalog to the same glyphs.
+const ICON_KEY_TO_SPORT = Object.fromEntries(
+  SPORTS_CATALOG.map((sport) => [sport.icon, sport.sport_key]),
+);
+
 export function sportIcon(iconKey) {
-  return ICONS[iconKey] || Trophy;
+  return sportGlyph(ICON_KEY_TO_SPORT[iconKey] || iconKey);
 }
 
 export default sportIcon;

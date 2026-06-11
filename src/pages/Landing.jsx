@@ -256,7 +256,7 @@ function IconConstellation() {
   return (
     <div className="relative mx-auto aspect-[5/6] w-full max-w-[460px]" aria-label="Browse sports">
       {/* Abstract training-field line work */}
-      <svg viewBox="0 0 400 480" className="absolute inset-0 h-full w-full text-white/[0.09]" fill="none" stroke="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 400 480" className="absolute inset-0 h-full w-full text-white/[0.13]" fill="none" stroke="currentColor" aria-hidden="true">
         <rect x="24" y="8" width="352" height="464" rx="18" strokeWidth="1.5" />
         <line x1="24" y1="240" x2="376" y2="240" strokeWidth="1.5" />
         <circle cx="200" cy="240" r="58" strokeWidth="1.5" />
@@ -271,16 +271,21 @@ function IconConstellation() {
         const sport = SPORTS_CATALOG.find((item) => item.sport_key === key);
         if (!sport) return null;
         const Icon = sportIcon(sport.icon);
+        // The soccer node is the amber focal point; everything else inverts
+        // to amber on hover. Real ball/equipment glyphs do the talking.
+        const focal = key === 'soccer';
         const node = (
           <Link
             to={`/sports/${key}`}
             aria-label={`${sport.display_name} coaching`}
-            className={`group grid place-items-center rounded-2xl border border-white/15 bg-white/[0.07] text-white shadow-lg shadow-blue-950/40 transition-colors duration-200 hover:border-transparent hover:bg-proof hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-proof ${
-              big ? 'h-16 w-16' : 'h-12 w-12'
-            }`}
+            className={`group grid place-items-center rounded-2xl border shadow-lg shadow-blue-950/40 transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-proof ${
+              focal
+                ? 'border-transparent bg-proof text-slate-950'
+                : 'border-white/15 bg-white/[0.09] text-white hover:border-transparent hover:bg-proof hover:text-slate-950'
+            } ${big ? 'h-[4.25rem] w-[4.25rem]' : 'h-[3.25rem] w-[3.25rem]'}`}
           >
             <Icon
-              className={`transition-transform duration-200 group-hover:scale-110 group-hover:stroke-[2.5] ${big ? 'h-7 w-7' : 'h-5 w-5'}`}
+              className={`transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6 ${big ? 'h-9 w-9' : 'h-6 w-6'}`}
               aria-hidden="true"
             />
           </Link>
@@ -333,10 +338,10 @@ function SportsGrid() {
                 to={`/sports/${sport.sport_key}`}
                 className="group flex min-h-16 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md focus-visible:ring-2 focus-visible:ring-blue-600"
               >
-                {/* Solid/outline play: chip inverts to navy + amber glyph with
-                    a thicker stroke on hover — the icon system as identity. */}
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition-all duration-200 group-hover:bg-slate-950 group-hover:text-proof group-hover:ring-slate-950">
-                  <Icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110 group-hover:stroke-[2.5]" aria-hidden="true" />
+                {/* Real sport glyphs on navy squircles; the chip flips to the
+                    amber accent on hover — the icon system as identity. */}
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[linear-gradient(135deg,#13357a_0%,#0b2350_100%)] text-white shadow-sm ring-1 ring-blue-900/20 transition-all duration-200 group-hover:bg-[linear-gradient(135deg,#f5a623_0%,#e3920c_100%)] group-hover:text-slate-950 group-hover:shadow-md">
+                  <Icon className="h-6 w-6 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" aria-hidden="true" />
                 </span>
                 <span className="leading-tight">{sport.display_name}</span>
               </Link>
