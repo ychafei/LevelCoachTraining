@@ -63,15 +63,27 @@ function chromiumPath() {
   return null;
 }
 
-const executablePath = chromiumPath();
-if (!executablePath) {
-  console.error('prerender: no Chromium found. Install Chrome, set CHROMIUM_PATH, or `npx playwright install chromium`.');
+// On CI (Vercel) the prerender is a best-effort enhancement: a Chromium
+// problem must never fail the deploy — the plain SPA build still works, it
+// just loses the crawler-visible HTML until the next successful run. Locally
+// we fail loudly so the gap can't go unnoticed.
+const FAIL_SOFT = !!process.env.VERCEL || !!process.env.CI;
+function bail(message) {
+  if (FAIL_SOFT) {
+    console.warn(`prerender: SKIPPED — ${message} (deploying plain SPA build)`);
+    process.exit(0);
+  }
+  console.error(`prerender: ${message}`);
   process.exit(1);
 }
 
+const executablePath = chromiumPath();
+if (!executablePath) {
+  bail('no Chromium found. Install Chrome, set CHROMIUM_PATH, or `npx playwright install chromium`.');
+}
+
 const { chromium } = await import('playwright-core').catch(async () => {
-  console.error('prerender: playwright-core is not installed. Run `npm i -D playwright-core`.');
-  process.exit(1);
+  bail('playwright-core is not installed. Run `npm i -D playwright-core`.');
 });
 
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
@@ -101,7 +113,19 @@ try {
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
     // Let lazy chunks/fonts settle; marketing pages have no auth-gated data.
     await page.waitForTimeout(400);
-    const html = await page.content();
+    let html = await page.content();
+    // The snapshot serializes the DOM after the font stylesheet's onload
+    // flipped media to "all" — restore the non-render-blocking print-swap
+    // pattern so the static HTML stays fast for first paint.
+    html = html.replace(
+      /(<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*?)media="all"/g,
+      '$1media="print"',
+    );
+    // Drop the modulepreload links Vite injected at RUNTIME while the page
+    // rendered (they carry as="script"; build-time entry preloads don't).
+    // Baked into the head they make the browser fetch every lazy-route dep
+    // before first paint — the opposite of their purpose.
+    html = html.replace(/<link rel="modulepreload" as="script"[^>]*>/g, '');
     const outDir = route === '/' ? join(root, 'dist') : join(root, 'dist', route.slice(1));
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'index.html'), `<!DOCTYPE html>\n${html.replace(/^<!DOCTYPE html>/i, '')}`);
@@ -110,6 +134,10 @@ try {
   }
   await browser.close();
   console.log(`prerender complete: ${written}/${ROUTES.length} routes.`);
+} catch (err) {
+  // A half-written dist/ is fine: each route file is complete when written,
+  // and un-prerendered routes fall through to the SPA shell.
+  bail(`failed mid-run — ${err?.message || err}`);
 } finally {
   try { process.kill(-server.pid); } catch { try { server.kill(); } catch { /* gone */ } }
 }

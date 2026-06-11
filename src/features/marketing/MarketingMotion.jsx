@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Shared motion + visual primitives for the public marketing surface.
@@ -9,21 +10,41 @@ import { motion, useReducedMotion } from 'framer-motion';
 
 const EASE = [0.16, 1, 0.3, 1];
 
+// True when the document arrived PRERENDERED (build:seo snapshots): the
+// first paint already shows final content, so re-running entrance animations
+// when React attaches — which under slow networks happens SECONDS after that
+// paint via suspended lazy chunks — would blank visible text and destroy LCP.
+// The route the user landed on therefore renders its reveals statically for
+// as long as they stay on it; the first in-app navigation restores full
+// motion everywhere.
+const PRERENDERED_DOC = typeof document !== 'undefined'
+  && !!document.getElementById('root')?.firstElementChild;
+const BOOT_PATH = typeof window !== 'undefined' ? window.location.pathname : '';
+let navigatedAway = false;
+
+function useStaticBoot() {
+  const { pathname } = useLocation();
+  if (pathname !== BOOT_PATH) navigatedAway = true;
+  return PRERENDERED_DOC && !navigatedAway;
+}
+
 // Fade-and-rise on scroll into view. `as` lets callers pick the rendered tag.
 export function Reveal({
   children,
   as = 'div',
   delay = 0,
   y = 16,
+  duration = 0.6,
   className = '',
   once = true,
   amount = 0.3,
   ...rest
 }) {
   const reduce = useReducedMotion();
+  const staticBoot = useStaticBoot();
   const MotionTag = motion[as] || motion.div;
 
-  if (reduce) {
+  if (reduce || staticBoot) {
     const Tag = as;
     return (
       <Tag className={className} {...rest}>
@@ -38,7 +59,7 @@ export function Reveal({
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once, amount }}
-      transition={{ duration: 0.6, ease: EASE, delay }}
+      transition={{ duration, ease: EASE, delay }}
       {...rest}
     >
       {children}
@@ -57,9 +78,10 @@ export function Stagger({
   ...rest
 }) {
   const reduce = useReducedMotion();
+  const staticBoot = useStaticBoot();
   const MotionTag = motion[as] || motion.div;
 
-  if (reduce) {
+  if (reduce || staticBoot) {
     const Tag = as;
     return (
       <Tag className={className} {...rest}>
@@ -87,9 +109,10 @@ export function Stagger({
 
 function StaggerItem({ children, as = 'div', className = '', y = 18, ...rest }) {
   const reduce = useReducedMotion();
+  const staticBoot = useStaticBoot();
   const MotionTag = motion[as] || motion.div;
 
-  if (reduce) {
+  if (reduce || staticBoot) {
     const Tag = as;
     return (
       <Tag className={className} {...rest}>

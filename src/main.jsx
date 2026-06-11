@@ -1,15 +1,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
-import { client } from '@/api/appwriteClient'
 import '@/index.css'
 
-// Verifies the SDK can reach the Appwrite backend. Output appears in the
-// browser console on every app load.
-client.ping()
-  .then(() => console.log('[appwrite] ping ok'))
-  .catch((err) => console.error('[appwrite] ping failed:', err));
+const rootEl = document.getElementById('root')
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <App />
-)
+// Prerendered documents (npm run build:seo) arrive with the marketing page
+// already in the DOM. hydrateRoot attaches to that markup instead of
+// discarding and repainting it — the first paint IS the LCP. Plain SPA
+// loads (empty #root) fall back to a normal client render.
+if (rootEl.firstElementChild) {
+  ReactDOM.hydrateRoot(rootEl, <App />)
+} else {
+  ReactDOM.createRoot(rootEl).render(<App />)
+}

@@ -16,14 +16,13 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import SelectMenu from '@/components/forms/SelectMenu';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import { sportIcon } from '@/features/marketing/sportIcons';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { CtaBand } from '@/features/marketing/MarketingBlocks';
-import { Reveal, Stagger, GradientImage, HeroPattern } from '@/features/marketing/MarketingMotion';
-import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
+import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import { Reveal, Stagger, HeroPattern } from '@/features/marketing/MarketingMotion';
 
 const HOW_IT_WORKS = [
   {
@@ -122,7 +121,7 @@ function HeroSearch() {
   return (
     <form
       onSubmit={submit}
-      className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-blue-900/15 ring-1 ring-white/40 backdrop-blur"
+      className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-blue-900/15 ring-1 ring-white/40 transition-[box-shadow,transform] duration-300 focus-within:ring-4 focus-within:ring-blue-400/40 focus-within:shadow-[0_30px_70px_rgba(37,99,235,0.35)] motion-safe:focus-within:-translate-y-0.5"
       role="search"
       aria-label="Find a coach"
     >
@@ -164,54 +163,140 @@ function HeroSearch() {
         </label>
 
         <div className="bg-slate-50 p-2">
-          <Button type="submit" className="h-12 w-full rounded-xl bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700 sm:h-full">
+          <MagneticButton
+            type="submit"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:translate-y-px sm:h-full"
+          >
             <Search className="h-4 w-4" aria-hidden="true" />
             Find coaches
-          </Button>
+          </MagneticButton>
         </div>
       </div>
     </form>
   );
 }
 
-function HeroImageCollage() {
-  return (
-    <div className="relative">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <GradientImage
-          src={MARKETING_IMAGES.landingHero.src}
-          alt={MARKETING_IMAGES.landingHero.alt}
-          eager
-          className="col-span-2 aspect-[16/10] rounded-3xl shadow-2xl shadow-blue-900/30 ring-1 ring-white/30"
-          gradientClassName="bg-[linear-gradient(135deg,#0b2350_0%,#13357a_45%,#2563eb_100%)]"
-          overlayClassName="bg-gradient-to-t from-slate-950/35 via-transparent to-transparent"
-        />
-        <GradientImage
-          src={MARKETING_IMAGES.basketballAction.src}
-          alt={MARKETING_IMAGES.basketballAction.alt}
-          className="aspect-[4/5] rounded-2xl shadow-xl shadow-blue-900/25 ring-1 ring-white/20"
-          gradientClassName="bg-[linear-gradient(135deg,#13357a_0%,#2563eb_100%)]"
-        />
-        <GradientImage
-          src={MARKETING_IMAGES.soccerTraining.src}
-          alt={MARKETING_IMAGES.soccerTraining.alt}
-          className="aspect-[4/5] rounded-2xl shadow-xl shadow-blue-900/25 ring-1 ring-white/20"
-          gradientClassName="bg-[linear-gradient(135deg,#0b2350_0%,#1e4fc2_100%)]"
-        />
-      </div>
+// One magnetic primary CTA (motion spec): the button leans toward the pointer
+// and springs back. Mouse-only and motion-safe — touch and reduced-motion
+// users get a plain button.
+function MagneticButton({ children, className = '', ...props }) {
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const springX = useSpring(x, { stiffness: 320, damping: 22 });
+  const springY = useSpring(y, { stiffness: 320, damping: 22 });
 
-      {/* Floating glass stat chip — honest platform mechanic, not a statistic. */}
-      <div className="absolute -bottom-4 left-1/2 w-[min(20rem,90%)] -translate-x-1/2 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl shadow-blue-900/25 backdrop-blur sm:-left-6 sm:translate-x-0">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-sm font-bold leading-tight text-slate-950">Every booking is protected</p>
-            <p className="text-xs leading-snug text-slate-500">Signed waivers, Stripe payments, guardian gates</p>
-          </div>
-        </div>
-      </div>
+  if (reduce) {
+    return <button className={className} {...props}>{children}</button>;
+  }
+  return (
+    <motion.button
+      style={{ x: springX, y: springY }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        x.set(((event.clientX - rect.left) / rect.width - 0.5) * 12);
+        y.set(((event.clientY - rect.top) / rect.height - 0.5) * 10);
+      }}
+      onPointerLeave={() => { x.set(0); y.set(0); }}
+      className={className}
+      {...props}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
+// Kinetic amber underline drawn under the headline's key phrase — the brand
+// accent doing the work a gradient blob would fake.
+function KineticUnderline() {
+  const reduce = useReducedMotion();
+  return (
+    <svg
+      className="absolute -bottom-2 left-0 h-3 w-full"
+      viewBox="0 0 220 12"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <motion.path
+        d="M4 9 C 60 3, 150 2.5, 216 7"
+        fill="none"
+        stroke="hsl(38 92% 50%)"
+        strokeWidth="5"
+        strokeLinecap="round"
+        initial={reduce ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.45, delay: 0.15, ease: 'easeOut' }}
+      />
+    </svg>
+  );
+}
+
+// Signature moment: the sport icon system arranged as an interactive
+// constellation over an abstract training-field diagram. Deterministic
+// positions (prerender-stable), idle drift, amber inversion on hover. Each
+// node deep-links to its sport landing page.
+const CONSTELLATION = [
+  ['soccer', 44, 4, true, 8],
+  ['football', 10, 12, false, 9],
+  ['basketball', 76, 13, true, 10],
+  ['golf', 27, 30, false, 11],
+  ['lacrosse', 60, 32, false, 9],
+  ['baseball', 5, 44, false, 10],
+  ['tennis', 87, 42, true, 8],
+  ['track_field', 22, 62, true, 11],
+  ['volleyball', 68, 62, false, 9],
+  ['strength_conditioning', 8, 82, false, 8],
+  ['swimming', 46, 84, true, 10],
+  ['hockey', 86, 80, false, 11],
+];
+
+function IconConstellation() {
+  const reduce = useReducedMotion();
+  return (
+    <div className="relative mx-auto aspect-[5/6] w-full max-w-[460px]" aria-label="Browse sports">
+      {/* Abstract training-field line work */}
+      <svg viewBox="0 0 400 480" className="absolute inset-0 h-full w-full text-white/[0.09]" fill="none" stroke="currentColor" aria-hidden="true">
+        <rect x="24" y="8" width="352" height="464" rx="18" strokeWidth="1.5" />
+        <line x1="24" y1="240" x2="376" y2="240" strokeWidth="1.5" />
+        <circle cx="200" cy="240" r="58" strokeWidth="1.5" />
+        <circle cx="200" cy="240" r="3" fill="currentColor" stroke="none" />
+        <rect x="120" y="8" width="160" height="62" strokeWidth="1.5" />
+        <rect x="120" y="410" width="160" height="62" strokeWidth="1.5" />
+        <path d="M156 70 A 52 52 0 0 0 244 70" strokeWidth="1.5" />
+        <path d="M156 410 A 52 52 0 0 1 244 410" strokeWidth="1.5" />
+      </svg>
+
+      {CONSTELLATION.map(([key, left, top, big, drift], index) => {
+        const sport = SPORTS_CATALOG.find((item) => item.sport_key === key);
+        if (!sport) return null;
+        const Icon = sportIcon(sport.icon);
+        const node = (
+          <Link
+            to={`/sports/${key}`}
+            aria-label={`${sport.display_name} coaching`}
+            className={`group grid place-items-center rounded-2xl border border-white/15 bg-white/[0.07] text-white shadow-lg shadow-blue-950/40 transition-colors duration-200 hover:border-transparent hover:bg-proof hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-proof ${
+              big ? 'h-16 w-16' : 'h-12 w-12'
+            }`}
+          >
+            <Icon
+              className={`transition-transform duration-200 group-hover:scale-110 group-hover:stroke-[2.5] ${big ? 'h-7 w-7' : 'h-5 w-5'}`}
+              aria-hidden="true"
+            />
+          </Link>
+        );
+        return (
+          <motion.div
+            key={key}
+            className="absolute"
+            style={{ left: `${left}%`, top: `${top}%` }}
+            animate={reduce ? undefined : { y: [0, index % 2 ? -7 : -5, 0] }}
+            transition={reduce ? undefined : { duration: drift, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            {node}
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -248,8 +333,10 @@ function SportsGrid() {
                 to={`/sports/${sport.sport_key}`}
                 className="group flex min-h-16 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md focus-visible:ring-2 focus-visible:ring-blue-600"
               >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
+                {/* Solid/outline play: chip inverts to navy + amber glyph with
+                    a thicker stroke on hover — the icon system as identity. */}
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition-all duration-200 group-hover:bg-slate-950 group-hover:text-proof group-hover:ring-slate-950">
+                  <Icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110 group-hover:stroke-[2.5]" aria-hidden="true" />
                 </span>
                 <span className="leading-tight">{sport.display_name}</span>
               </Link>
@@ -285,16 +372,19 @@ export default function Landing() {
         <HeroPattern className="text-white/[0.07]" />
         <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
           <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
-            <Reveal as="div" y={20}>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 backdrop-blur">
-                <Sparkles className="h-4 w-4 text-blue-300" aria-hidden="true" />
+            <Reveal as="div" y={20} duration={0.5}>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2">
+                <Sparkles className="h-4 w-4 text-proof" aria-hidden="true" />
                 <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">Multi-sport coaching marketplace</span>
               </div>
 
-              <h1 className="mt-7 font-display text-4xl font-extrabold leading-[1.03] tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
-                Find the right coach for your{' '}
-                <span className="bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
+              <h1 className="mt-7 font-display text-[2.7rem] font-extrabold leading-[1.02] tracking-[-0.02em] text-white sm:text-6xl lg:text-7xl">
+                Find the right coach
+                <br />
+                for your{' '}
+                <span className="relative inline-block whitespace-nowrap">
                   next level
+                  <KineticUnderline />
                 </span>
               </h1>
 
@@ -333,8 +423,8 @@ export default function Landing() {
               </p>
             </Reveal>
 
-            <Reveal as="div" y={24} delay={0.1} className="hidden lg:block">
-              <HeroImageCollage />
+            <Reveal as="div" y={24} delay={0.08} duration={0.5} className="hidden lg:block">
+              <IconConstellation />
             </Reveal>
           </div>
         </div>

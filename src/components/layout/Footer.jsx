@@ -63,13 +63,15 @@ const POPULAR_SPORTS = [
 ];
 
 export default function Footer() {
-  const { isAuthenticated, isLoadingAuth } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // Signed-in surfaces get a minimal footer: no marketing columns or
   // "Create Free Account" / "Sign In" prompts that make a member feel logged
-  // out. While the session check is still resolving, default to the minimal
-  // variant so members never flash the marketing footer.
-  if (isAuthenticated || isLoadingAuth) {
+  // out. During the session check we render the guest footer — it must match
+  // the prerendered snapshot byte-for-byte or hydration bails and the LCP
+  // win from build:seo is lost. (Members see the marketing footer for the
+  // ~half second the check takes; that trade buys every visitor a fast LCP.)
+  if (isAuthenticated) {
     return (
       <footer className="border-t border-border bg-background">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

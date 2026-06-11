@@ -141,12 +141,12 @@ const RoleHomeRoute = () => {
 };
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
+  const { authError } = useAuth();
 
-  if (isLoadingPublicSettings || isLoadingAuth) {
-    return <PageLoader />;
-  }
-
+  // No global auth gate: public pages render immediately (the prerendered
+  // paint survives instead of being replaced by a loader while Appwrite
+  // resolves the session). Route guards handle isLoadingAuth themselves, and
+  // RootRoute redirects signed-in users once the session check lands.
   if (authError?.type === 'user_not_registered') {
     return <UserNotRegisteredError />;
   }
