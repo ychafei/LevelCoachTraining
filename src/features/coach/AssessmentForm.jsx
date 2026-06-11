@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ClipboardCheck } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
@@ -18,6 +18,28 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  // Track whether the coach has manually overridden the sport so a late-arriving
+  // resolved default (athlete's sport loads async) doesn't stomp their choice.
+  const userPicked = useRef(false);
+  // Whether the current sport matches the athlete-derived default — used to show
+  // the "tailored to this athlete" hint.
+  const tailored = !!defaultSportKey && sportKey === defaultSportKey;
+
+  // Adopt the resolved default sport when it arrives, unless the coach already
+  // picked one themselves. Pre-selecting keeps the evaluation sport-tailored.
+  useEffect(() => {
+    if (userPicked.current) return;
+    if (defaultSportKey && defaultSportKey !== sportKey) {
+      setSportKey(defaultSportKey);
+      setScores({});
+    }
+  }, [defaultSportKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickSport = (value) => {
+    userPicked.current = true;
+    setSportKey(value);
+    setScores({});
+  };
 
   const sport = useMemo(() => getSport(sportKey), [sportKey]);
   const template = sport?.assessment_template;
@@ -63,10 +85,7 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
 
       <div>
         <Label htmlFor="assessment-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
-        <Select
-          value={sportKey}
-          onValueChange={(value) => { setSportKey(value); setScores({}); }}
-        >
+        <Select value={sportKey} onValueChange={pickSport}>
           <SelectTrigger id="assessment-sport" className="bg-secondary border-border mt-1 w-full sm:w-72">
             <SelectValue placeholder="Choose a sport" />
           </SelectTrigger>
@@ -76,6 +95,16 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
             ))}
           </SelectContent>
         </Select>
+        {tailored ? (
+          <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-accent">
+            <Sparkles className="w-3 h-3" aria-hidden="true" />
+            Tailored to this athlete's sport. Switch above to evaluate a different sport.
+          </p>
+        ) : (
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            The evaluation below is built from this sport's skill template.
+          </p>
+        )}
       </div>
 
       {!template ? (

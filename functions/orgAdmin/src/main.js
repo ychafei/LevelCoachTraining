@@ -82,6 +82,12 @@ function str(value, min, max) {
   return trimmed;
 }
 
+function int(value, min, max) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) return undefined;
+  return n;
+}
+
 function bps(value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n > 10000) return undefined;
@@ -580,6 +586,115 @@ async function removeMember(databases, profile, payload) {
   return { status: 200, body: { ok: true } };
 }
 
+// --- Packages (per-organization pricing) ---------------------------------------
+// An organization owns packages its affiliated coaches can offer. Mirrors the
+// coach package model (coachSelf), scoped to the org: organization_id set,
+// coach_id empty. price_cents is the authoritative total; duration_minutes the
+// session length.
+
+const SESSION_TYPES = ['private', 'small_group', 'team', 'evaluation', 'virtual'];
+const MIN_PRICE_CENTS = 500;            // $5.00 floor
+const MAX_PRICE_CENTS = 5_000_00;       // $5,000 ceiling per package
+
+function packageView(doc) {
+  return {
+    id: doc.$id,
+    coach_id: doc.coach_id || '',
+    organization_id: doc.organization_id || '',
+    name: doc.name || '',
+    sessions: Number(doc.sessions) || 1,
+    duration_minutes: Number(doc.duration_minutes) || 60,
+    price_cents: Number(doc.price_cents) || 0,
+    session_type: doc.session_type || '',
+    description: doc.description || '',
+    badge: doc.badge || '',
+    is_active: doc.is_active !== false,
+    display_order: Number(doc.display_order) || 0,
+  };
+}
+
+async function listPackages(databases, profile, payload) {
+  const orgId = String(payload.organization_id || '');
+  const member = await requireRole(databases, orgId, profile, ORG_ADMIN_ROLES);
+  if (!member) return { status: 403, body: { error: 'Organization owner or admin access required.' } };
+
+  const rows = await databases.listDocuments(DB_ID, 'pricing_packages', [
+    Query.equal('organization_id', orgId),
+    Query.limit(100),
+  ]).catch(() => ({ documents: [] }));
+  const packages = rows.documents
+    .map(packageView)
+    .sort((a, b) => a.display_order - b.display_order || a.price_cents - b.price_cents);
+  return { status: 200, body: { packages } };
+}
+
+async function savePackage(databases, profile, payload) {
+  const orgId = String(payload.organization_id || '');
+  const member = await requireRole(databases, orgId, profile, ORG_ADMIN_ROLES);
+  if (!member) return { status: 403, body: { error: 'Organization owner or admin access required.' } };
+
+  const name = str(payload.name, 1, 200);
+  const sessions = int(payload.sessions, 1, 100);
+  const duration = int(payload.duration_minutes, 15, 480);
+  const priceCents = int(payload.price_cents, MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+  if (name === undefined) return { status: 400, body: { error: 'A package name is required.' } };
+  if (sessions === undefined) return { status: 400, body: { error: 'Sessions must be an integer between 1 and 100.' } };
+  if (duration === undefined) return { status: 400, body: { error: 'Session length must be 15–480 minutes.' } };
+  if (priceCents === undefined) return { status: 400, body: { error: `Price must be between $${MIN_PRICE_CENTS / 100} and $${MAX_PRICE_CENTS / 100}.` } };
+
+  const sessionType = payload.session_type ? (SESSION_TYPES.includes(payload.session_type) ? payload.session_type : undefined) : '';
+  if (sessionType === undefined) return { status: 400, body: { error: 'Invalid session type.' } };
+  const description = payload.description != null ? str(payload.description, 0, 1000) ?? '' : '';
+  const badge = payload.badge != null ? str(payload.badge, 0, 100) ?? '' : '';
+  const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
+  const isActive = payload.is_active !== false;
+
+  const data = {
+    organization_id: orgId,
+    coach_id: '',
+    name,
+    sessions,
+    duration_minutes: duration,
+    price_cents: priceCents,
+    price: Math.round(priceCents) / 100,   // legacy dollar mirror (back-compat)
+    session_type: sessionType,
+    description,
+    badge,
+    display_order: displayOrder,
+    is_active: isActive,
+    is_visible: isActive,                  // legacy visibility mirror
+  };
+
+  let doc;
+  if (payload.package_id) {
+    const existing = await databases.getDocument(DB_ID, 'pricing_packages', String(payload.package_id)).catch(() => null);
+    if (!existing) return { status: 404, body: { error: 'Package not found.' } };
+    if ((existing.organization_id || '') !== orgId) {
+      return { status: 403, body: { error: 'You can only edit your organization’s packages.' } };
+    }
+    doc = await databases.updateDocument(DB_ID, 'pricing_packages', existing.$id, data);
+  } else {
+    doc = await databases.createDocument(DB_ID, 'pricing_packages', ID.unique(), data);
+  }
+  return { status: 200, body: { ok: true, package: packageView(doc) } };
+}
+
+async function deletePackage(databases, profile, payload) {
+  const orgId = String(payload.organization_id || '');
+  const member = await requireRole(databases, orgId, profile, ORG_ADMIN_ROLES);
+  if (!member) return { status: 403, body: { error: 'Organization owner or admin access required.' } };
+
+  const id = String(payload.package_id || '');
+  if (!id) return { status: 400, body: { error: 'package_id is required.' } };
+  const existing = await databases.getDocument(DB_ID, 'pricing_packages', id).catch(() => null);
+  if (!existing) return { status: 404, body: { error: 'Package not found.' } };
+  if ((existing.organization_id || '') !== orgId) {
+    return { status: 403, body: { error: 'You can only delete your organization’s packages.' } };
+  }
+  await databases.deleteDocument(DB_ID, 'pricing_packages', id);
+  return { status: 200, body: { ok: true } };
+}
+
 // --- Publish gate (ARCHITECTURE.md section 8) ----------------------------------
 
 function activeRequired(template, now = Date.now()) {
@@ -709,6 +824,15 @@ export default async ({ req, res, error }) => {
         break;
       case 'removeMember':
         result = await removeMember(databases, profile, payload);
+        break;
+      case 'listPackages':
+        result = await listPackages(databases, profile, payload);
+        break;
+      case 'savePackage':
+        result = await savePackage(databases, profile, payload);
+        break;
+      case 'deletePackage':
+        result = await deletePackage(databases, profile, payload);
         break;
       case 'publish':
         result = await publishOrg(databases, profile, payload);

@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
 import PackagesManager from '@/features/coach/PackagesManager';
+import USLocationFields from '@/components/forms/USLocationFields';
 
 const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -742,37 +743,32 @@ export default function CoachProfile() {
 
           {/* Service area */}
           <Section title="Service Area">
+            {/* Location entry — shared US fields: state dropdown, city type-ahead,
+                zip auto-resolve. Only city/state/zip are persisted (the live
+                coaches collection has no lat/lng columns). */}
+            <div className="mb-3">
+              <p className="font-display tracking-wider uppercase text-xs text-foreground mb-2">Location</p>
+              <USLocationFields
+                idPrefix="svc"
+                fields={['state', 'city', 'zip']}
+                columns="grid grid-cols-1 sm:grid-cols-3 gap-3"
+                value={{
+                  city: draft.service_city || '',
+                  state: draft.service_state || '',
+                  zip: draft.service_zip || '',
+                }}
+                onChange={(patch) => {
+                  // Map the shared field names onto the coach's service_* draft
+                  // keys. Ignore county/lat/lng — they are not persisted here.
+                  const mapped = {};
+                  if ('city' in patch) mapped.service_city = patch.city;
+                  if ('state' in patch) mapped.service_state = patch.state;
+                  if ('zip' in patch) mapped.service_zip = patch.zip;
+                  if (Object.keys(mapped).length) updateDraft(mapped);
+                }}
+              />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="svc-city" className="font-display tracking-wider uppercase text-xs">City</Label>
-                <Input
-                  id="svc-city"
-                  value={draft.service_city || ''}
-                  onChange={e => updateDraft({ service_city: e.target.value })}
-                  className="bg-secondary border-border mt-1"
-                  placeholder="e.g. Royal Oak"
-                />
-              </div>
-              <div>
-                <Label htmlFor="svc-state" className="font-display tracking-wider uppercase text-xs">State</Label>
-                <Input
-                  id="svc-state"
-                  value={draft.service_state || ''}
-                  onChange={e => updateDraft({ service_state: e.target.value })}
-                  className="bg-secondary border-border mt-1"
-                  placeholder="e.g. MI"
-                />
-              </div>
-              <div>
-                <Label htmlFor="svc-zip" className="font-display tracking-wider uppercase text-xs">ZIP</Label>
-                <Input
-                  id="svc-zip"
-                  value={draft.service_zip || ''}
-                  onChange={e => updateDraft({ service_zip: e.target.value })}
-                  className="bg-secondary border-border mt-1"
-                  placeholder="e.g. 48067"
-                />
-              </div>
               <div>
                 <Label htmlFor="svc-radius" className="font-display tracking-wider uppercase text-xs">Travel Radius (miles)</Label>
                 <Input

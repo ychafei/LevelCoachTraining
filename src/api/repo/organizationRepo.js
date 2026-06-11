@@ -46,6 +46,16 @@ export const organizationRepo = {
   setPlatformFee: (organization_id, platform_fee_bps) =>
     callFn('adminOps', { action: 'setOrgFee', organization_id, platform_fee_bps }),
 
+  // --- Packages & Pricing ----------------------------------------------------
+  // Org packages are server-only writable through orgAdmin (caller must be an
+  // org owner/admin). They carry organization_id and an empty coach_id, and are
+  // offered when booking the org's affiliated coaches.
+  listPackages: async (organization_id) =>
+    (await callFn('orgAdmin', { action: 'listPackages', organization_id }))?.packages || [],
+  savePackage: (pkg) => callFn('orgAdmin', { action: 'savePackage', ...pkg }),
+  deletePackage: (organization_id, package_id) =>
+    callFn('orgAdmin', { action: 'deletePackage', organization_id, package_id }),
+
   // --- Members ---------------------------------------------------------------
   inviteMember: (payload) => callFn('orgAdmin', { action: 'inviteMember', ...payload }),
   acceptMemberInvite: (payload) => callFn('orgAdmin', { action: 'acceptMemberInvite', ...payload }),

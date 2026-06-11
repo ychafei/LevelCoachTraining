@@ -1011,9 +1011,64 @@ function CheckInsPanel({ coachId, athleteId }) {
   );
 }
 
+// ── Resolve the athlete's sport for default selection ──────────────────────────
+
+// The coaches collection can't read athlete_profiles (owner/guardian only), and
+// sessions don't carry a sport. The training artifacts the coach DOES read
+// (assessments, goals, plans, homework) carry `sport_key`, so we derive the
+// athlete's sport from the most-used sport_key across those rows. We prefer the
+// athlete's own history, then fall back to the coach's primary sport.
+function pickMostCommonSport(rows) {
+  const counts = new Map();
+  for (const row of rows || []) {
+    const key = row?.sport_key;
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let best = '';
+  let bestCount = 0;
+  for (const [key, count] of counts.entries()) {
+    if (count > bestCount) { best = key; bestCount = count; }
+  }
+  return best;
+}
+
+function useAthleteSport(coachId, athleteId, fallbackSportKey) {
+  const [resolved, setResolved] = useState(fallbackSportKey || '');
+
+  useEffect(() => {
+    if (!coachId || !athleteId) { setResolved(fallbackSportKey || ''); return undefined; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const where = { coach_id: coachId, athlete_id: athleteId };
+        // Assessments are the strongest signal (already sport-specific), then
+        // the rest of the athlete's structured work.
+        const [assessments, goals, plans, homework] = await Promise.all([
+          trainingRepo.listAssessments(where).catch(() => []),
+          trainingRepo.listGoals(where).catch(() => []),
+          trainingRepo.listPlans(where).catch(() => []),
+          trainingRepo.listHomework(where).catch(() => []),
+        ]);
+        if (cancelled) return;
+        const fromHistory = pickMostCommonSport(assessments)
+          || pickMostCommonSport([...goals, ...plans, ...homework]);
+        setResolved(fromHistory || fallbackSportKey || '');
+      } catch {
+        if (!cancelled) setResolved(fallbackSportKey || '');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [coachId, athleteId, fallbackSportKey]);
+
+  return resolved;
+}
+
 // ── Toolkit shell ─────────────────────────────────────────────────────────────
 
 export default function TrainingToolkit({ coachId, athleteId, defaultSportKey = '' }) {
+  const resolvedSportKey = useAthleteSport(coachId, athleteId, defaultSportKey);
+
   if (!athleteId) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
@@ -1038,16 +1093,16 @@ export default function TrainingToolkit({ coachId, athleteId, defaultSportKey = 
           <TabsTrigger value="checkins" className="font-display tracking-wider uppercase text-xs">Check-ins</TabsTrigger>
         </TabsList>
         <TabsContent value="goals" className="mt-4">
-          <GoalsPanel coachId={coachId} athleteId={athleteId} defaultSportKey={defaultSportKey} />
+          <GoalsPanel coachId={coachId} athleteId={athleteId} defaultSportKey={resolvedSportKey} />
         </TabsContent>
         <TabsContent value="plans" className="mt-4">
-          <PlansPanel coachId={coachId} athleteId={athleteId} defaultSportKey={defaultSportKey} />
+          <PlansPanel coachId={coachId} athleteId={athleteId} defaultSportKey={resolvedSportKey} />
         </TabsContent>
         <TabsContent value="homework" className="mt-4">
-          <HomeworkPanel coachId={coachId} athleteId={athleteId} defaultSportKey={defaultSportKey} />
+          <HomeworkPanel coachId={coachId} athleteId={athleteId} defaultSportKey={resolvedSportKey} />
         </TabsContent>
         <TabsContent value="assessments" className="mt-4">
-          <AssessmentsPanel coachId={coachId} athleteId={athleteId} defaultSportKey={defaultSportKey} />
+          <AssessmentsPanel coachId={coachId} athleteId={athleteId} defaultSportKey={resolvedSportKey} />
         </TabsContent>
         <TabsContent value="checkins" className="mt-4">
           <CheckInsPanel coachId={coachId} athleteId={athleteId} />

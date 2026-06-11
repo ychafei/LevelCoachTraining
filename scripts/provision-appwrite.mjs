@@ -555,6 +555,9 @@ async function provisionPricingPackages() {
   // self-contained: price_cents is the total charge, duration_minutes the
   // session length. coach_id empty = legacy/platform-default package.
   await attrString('pricing_packages', 'coach_id', 64);
+  // A package belongs to a coach (coach_id) OR an organization (organization_id).
+  // Org packages are offered when booking that org's affiliated coaches.
+  await attrString('pricing_packages', 'organization_id', 64);
   await attrInt('pricing_packages',    'price_cents');                      // authoritative total in cents
   await attrInt('pricing_packages',    'duration_minutes');                 // session length
   await attrString('pricing_packages', 'session_type', 120);
@@ -564,6 +567,7 @@ async function provisionPricingPackages() {
   await ensureIndex('pricing_packages', 'idx_is_visible',    'key', ['is_visible']);
   await ensureIndex('pricing_packages', 'idx_display_order', 'key', ['display_order']);
   await ensureIndex('pricing_packages', 'idx_pkg_coach',     'key', ['coach_id']);
+  await ensureIndex('pricing_packages', 'idx_pkg_org',       'key', ['organization_id']);
   await ensureIndex('pricing_packages', 'idx_pkg_active',    'key', ['is_active']);
 }
 

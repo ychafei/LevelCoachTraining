@@ -12,7 +12,6 @@ import {
   Link as LinkIcon,
   Lock,
   Mail,
-  MapPin,
   Palette,
   Phone,
   UploadCloud,
@@ -27,6 +26,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { storage } from '@/lib/storage';
 import { SPORT_SELECT_OPTIONS } from '@/lib/athleteOnboardingFields';
 import { onboardingPath } from '@/lib/roleHome';
+import USLocationFields from '@/components/forms/USLocationFields';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/.+\..+/i;
@@ -58,7 +58,7 @@ export default function CreateOrganization() {
   const [form, setForm] = useState({
     organizationName: '',
     organizationType: '',
-    serviceArea: '',
+    location: { city: '', state: '', zip: '', county: '', lat: undefined, lng: undefined },
     coachCount: '',
     organizationEmail: '',
     organizationPhone: '',
@@ -123,6 +123,15 @@ export default function CreateOrganization() {
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
 
+  // Merge the changed subset from USLocationFields into the structured location.
+  const updateLocation = (patch) => {
+    setForm((current) => ({ ...current, location: { ...current.location, ...patch } }));
+    setErrors((current) => ({ ...current, serviceArea: undefined }));
+  };
+
+  // The service_area_label the orgAdmin.create function persists ("City, ST").
+  const serviceAreaLabel = [form.location.city.trim(), form.location.state].filter(Boolean).join(', ');
+
   const updateOrganizationName = (value) => {
     setForm((current) => ({ ...current, organizationName: value }));
     setErrors((current) => ({ ...current, organizationName: undefined }));
@@ -163,7 +172,7 @@ export default function CreateOrganization() {
     const next = {};
     if (form.organizationName.trim().length < 2) next.organizationName = 'Organization name is required (2+ characters).';
     if (!form.organizationType) next.organizationType = 'Organization type is required.';
-    if (!form.serviceArea.trim()) next.serviceArea = 'Service area is required.';
+    if (!form.location.city.trim() || !form.location.state) next.serviceArea = 'Service area is required (state and city).';
     if (selectedSports.length === 0) next.sports = 'Select at least one sport.';
     if (!form.coachCount) next.coachCount = 'Coach count is required.';
     if (!form.organizationEmail.trim()) next.organizationEmail = 'Organization email is required.';
@@ -230,7 +239,7 @@ export default function CreateOrganization() {
         contact_email: form.organizationEmail.trim(),
         contact_phone: form.organizationPhone.trim(),
         website_url: form.website.trim(),
-        service_area_label: form.serviceArea.trim(),
+        service_area_label: serviceAreaLabel,
         sports: selectedSports,
       });
       const organization = created?.organization;
@@ -417,17 +426,22 @@ export default function CreateOrganization() {
                           <option key={type} value={type}>{type}</option>
                         ))}
                       </SelectField>
-                      <AuthField
-                        id="organization-service-area"
-                        label="Primary location / service area"
-                        icon={MapPin}
-                        placeholder="City, State or Region"
-                        value={form.serviceArea}
-                        onChange={(event) => updateForm('serviceArea', event.target.value)}
-                        error={errors.serviceArea}
-                        disabled={submitting}
-                      />
                     </div>
+
+                    <fieldset className="mt-4">
+                      <legend className="mb-2 block text-sm font-bold text-slate-950">Primary location / service area</legend>
+                      <USLocationFields
+                        idPrefix="organization-service-area"
+                        fields={['state', 'city', 'zip']}
+                        required
+                        disabled={submitting}
+                        value={form.location}
+                        onChange={updateLocation}
+                        errors={{ city: errors.serviceArea, state: errors.serviceArea }}
+                        columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
+                      />
+                      {errors.serviceArea && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.serviceArea}</p>}
+                    </fieldset>
 
                     <div className="mt-4">
                       <p className="mb-2 block text-sm font-bold text-slate-950">

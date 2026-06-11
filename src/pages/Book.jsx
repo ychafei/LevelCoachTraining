@@ -237,20 +237,33 @@ export default function Book() {
 
   // Packages are per-coach: load the selected coach's own packages (falling
   // back to platform-default templates only if the coach has none). This is the
-  // marketplace model — each coach sets their own prices.
+  // marketplace model — each coach sets their own prices. When the coach has an
+  // active organization affiliation, that org's packages are loaded too and
+  // shown alongside the coach's own (each tagged with its source so the UI can
+  // label org packages "From {Org}"). createStripeCheckout independently
+  // validates that an org package is bookable for this coach.
+  const coachOrgId = coach?.organization?.id || '';
+  const coachOrgName = coach?.organization?.name || '';
   useEffect(() => {
     let cancelled = false;
     if (!coach?.id) { setPackages([]); return undefined; }
     (async () => {
-      let rows = await pricingPackageRepo.listForCoach(coach.id).catch(() => []);
-      if (!rows.length) rows = await pricingPackageRepo.listPlatformDefaults().catch(() => []);
+      let coachRows = await pricingPackageRepo.listForCoach(coach.id).catch(() => []);
+      if (!coachRows.length) coachRows = await pricingPackageRepo.listPlatformDefaults().catch(() => []);
+      const orgRows = coachOrgId
+        ? await pricingPackageRepo.listForOrg(coachOrgId).catch(() => [])
+        : [];
       if (cancelled) return;
-      setPackages(rows);
-      // Drop a stale package selection that doesn't belong to this coach.
-      setSelectedPackage(prev => (prev && rows.some(r => r.id === prev.id) ? prev : null));
+      const tagged = [
+        ...coachRows.map((p) => ({ ...p, source: 'coach' })),
+        ...orgRows.map((p) => ({ ...p, source: 'org', org_name: coachOrgName })),
+      ];
+      setPackages(tagged);
+      // Drop a stale package selection that doesn't belong to this coach/org.
+      setSelectedPackage(prev => (prev && tagged.some(r => r.id === prev.id) ? prev : null));
     })();
     return () => { cancelled = true; };
-  }, [coach?.id]);
+  }, [coach?.id, coachOrgId, coachOrgName]);
 
   // One-shot: pre-select coach from /coaches/:id "Book with this coach" link.
   useEffect(() => {
@@ -947,6 +960,11 @@ export default function Book() {
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
                       <span className="absolute top-3 right-3 text-xs font-display tracking-wide bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
+                    )}
+                    {pkg.source === 'org' && pkg.org_name && (
+                      <span className="inline-block mb-2 text-[10px] font-display tracking-wide uppercase bg-primary/15 text-primary px-2 py-0.5 rounded">
+                        From {pkg.org_name}
+                      </span>
                     )}
                     <Package className={`w-5 h-5 mb-3 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
                     <p className="font-display text-xl font-bold tracking-wider">{(pkg.name || '').toUpperCase()}</p>

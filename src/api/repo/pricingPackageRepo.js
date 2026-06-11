@@ -22,6 +22,21 @@ export const pricingPackageRepo = {
       .sort((a, b) => (a.display_order || 0) - (b.display_order || 0) || (a.price_cents || 0) - (b.price_cents || 0));
   },
 
+  // An organization's own active, bookable packages, ordered for display.
+  // Offered when booking that org's affiliated coaches (read defensively — the
+  // organization_id attribute may not exist yet during rollout).
+  listForOrg: async (orgId) => {
+    if (!orgId) return [];
+    const res = await databases.listDocuments(DB_ID, COL.PricingPackage, [
+      Query.equal('organization_id', orgId),
+      Query.equal('is_active', true),
+      Query.limit(100),
+    ]).catch(() => ({ documents: [] }));
+    return res.documents
+      .map(mapDoc)
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0) || (a.price_cents || 0) - (b.price_cents || 0));
+  },
+
   // Legacy/platform-default packages (no coach binding) — booking fallback only.
   listPlatformDefaults: async () => {
     const res = await databases.listDocuments(DB_ID, COL.PricingPackage, [

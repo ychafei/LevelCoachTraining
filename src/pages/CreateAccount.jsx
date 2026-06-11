@@ -22,19 +22,17 @@ import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import {
-  CITY_OPTIONS,
   EMAIL_RE,
   buildAthleteBio,
   buildLocationLabel,
-  citySuggestions,
   normalizePhoneForStorage,
   requiresGuardian,
-  resolveCityPlace,
   validateDob,
   validateLocation,
   validatePersonName,
   validatePhone,
 } from '@/lib/athleteOnboardingFields';
+import USLocationFields from '@/components/forms/USLocationFields';
 import {
   AthleteSportFields,
   GuardianContactFields,
@@ -180,7 +178,7 @@ export function AthleteSignup() {
     email: '',
     phone: '',
     dob: '',
-    city: '',
+    location: { city: '', state: '', zip: '', county: '', lat: undefined, lng: undefined },
     locationDetail: '',
     trainingGoal: '',
     password: '',
@@ -198,7 +196,12 @@ export function AthleteSignup() {
 
   const explicitNext = params.get('next');
   const needsGuardian = requiresGuardian(form.dob);
-  const locationSuggestions = useMemo(() => citySuggestions(form.city, 10), [form.city]);
+
+  // Merge the changed subset from USLocationFields into the structured location.
+  const updateLocation = (patch) => {
+    setForm((current) => ({ ...current, location: { ...current.location, ...patch } }));
+    setErrors((current) => ({ ...current, city: undefined, state: undefined }));
+  };
 
   useEffect(() => {
     if (!isLoadingAuth && isAuthenticated && user && !submitting) {
@@ -226,7 +229,6 @@ export function AthleteSignup() {
     const lastNameError = validatePersonName(form.lastName, 'Last name');
     const phoneError = validatePhone(form.phone, 'Phone number');
     const dobError = validateDob(form.dob);
-    const cityError = validateLocation(form.city);
 
     if (firstNameError) next.firstName = firstNameError;
     if (lastNameError) next.lastName = lastNameError;
@@ -234,7 +236,8 @@ export function AthleteSignup() {
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
     if (phoneError) next.phone = phoneError;
     if (dobError) next.dob = dobError;
-    if (cityError) next.city = cityError;
+    if (validateLocation(form.location.city)) next.city = 'Training city is required.';
+    if (!form.location.state) next.state = 'Select your state.';
     if (!form.password) next.password = 'Password is required.';
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
@@ -258,7 +261,9 @@ export function AthleteSignup() {
 
     try {
       setSubmitting(true);
-      const cityPlace = resolveCityPlace(form.city);
+      const { city, state, lat, lng } = form.location;
+      const cityStateLabel = [city.trim(), state].filter(Boolean).join(', ');
+      const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
       await auth.signOut();
       await auth.signUp(form.email.trim(), form.password);
       // All profile writes go through the accountProfile.update whitelist.
@@ -275,8 +280,8 @@ export function AthleteSignup() {
         parent_phone: needsGuardian ? normalizePhoneForStorage(guardian.parentPhone) : '',
         parent_relationship: needsGuardian ? guardian.parentRelationship.trim() : '',
         terms_accepted: true,
-        location_label: buildLocationLabel(cityPlace?.label || form.city, form.locationDetail),
-        ...(cityPlace ? { location_lat: cityPlace.lat, location_lng: cityPlace.lng } : {}),
+        location_label: buildLocationLabel(cityStateLabel, form.locationDetail),
+        ...(hasCoords ? { location_lat: lat, location_lng: lng } : {}),
         bio: buildAthleteBio({
           ...sportDetails,
           trainingGoal: form.trainingGoal,
@@ -330,11 +335,6 @@ export function AthleteSignup() {
                 </p>
 
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
-                  <datalist id="athlete-signup-city-options">
-                    {(form.city.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
-                      <option key={place.label} value={place.label} />
-                    ))}
-                  </datalist>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="firstName"
@@ -410,33 +410,30 @@ export function AthleteSignup() {
                     idPrefix="athlete-signup"
                   />
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
-                      id="athlete-city"
-                      label="Training city / state"
-                      icon={MapPin}
-                      placeholder="e.g., Troy, MI"
-                      list="athlete-signup-city-options"
-                      value={form.city}
-                      onChange={(event) => updateForm('city', event.target.value)}
-                      onBlur={() => {
-                        const city = resolveCityPlace(form.city);
-                        if (city) updateForm('city', city.label);
-                      }}
+                  <fieldset>
+                    <legend className="mb-2 block text-sm font-bold text-slate-950">Training location</legend>
+                    <USLocationFields
+                      idPrefix="athlete-signup-loc"
+                      fields={['state', 'city', 'zip']}
+                      required
                       disabled={submitting}
-                      error={errors.city}
+                      value={form.location}
+                      onChange={updateLocation}
+                      errors={{ city: errors.city, state: errors.state }}
+                      columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
                     />
-                    <AuthField
-                      id="athlete-location-detail"
-                      label="Location details (optional)"
-                      icon={MapPin}
-                      placeholder="Neighborhood, facility, travel range…"
-                      value={form.locationDetail}
-                      onChange={(event) => updateForm('locationDetail', event.target.value)}
-                      disabled={submitting}
-                      error={errors.locationDetail}
-                    />
-                  </div>
+                  </fieldset>
+
+                  <AuthField
+                    id="athlete-location-detail"
+                    label="Location details (optional)"
+                    icon={MapPin}
+                    placeholder="Neighborhood, facility, travel range…"
+                    value={form.locationDetail}
+                    onChange={(event) => updateForm('locationDetail', event.target.value)}
+                    disabled={submitting}
+                    error={errors.locationDetail}
+                  />
 
                   <div>
                     <label htmlFor="athlete-training-goal" className="mb-1.5 block text-sm font-bold text-slate-950">

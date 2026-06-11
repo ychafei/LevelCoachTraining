@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckCircle2, Clock3, Mail, MapPin, Rocket } from 'lucide-react';
-import LocationAutocomplete from '@/components/forms/LocationAutocomplete';
+import USLocationFields from '@/components/forms/USLocationFields';
 
 export function WhatHappensNext({ heading = 'What happens next' }) {
   const steps = [
@@ -66,7 +66,7 @@ export function ApplicationForm({
     phone: '',
     dob: '',
     county: '',
-    service_area: '',
+    location: { city: '', state: '', zip: '', county: '', lat: undefined, lng: undefined },
     credentials: '',
     coaching_background: '',
     resume_url: '',
@@ -84,6 +84,23 @@ export function ApplicationForm({
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
 
+  // Merge the changed subset from USLocationFields; mirror the picked county
+  // into `county` so the service_county payload is unchanged.
+  const updateLocation = (patch) => {
+    setForm((current) => ({
+      ...current,
+      location: { ...current.location, ...patch },
+      ...(patch.county !== undefined ? { county: patch.county || '' } : {}),
+    }));
+    setErrors((current) => ({ ...current, service_area: undefined }));
+  };
+
+  // "City, ST ZIP" — the service_location string sent to the applications fn.
+  const serviceArea = [
+    [form.location.city.trim(), form.location.state].filter(Boolean).join(', '),
+    form.location.zip,
+  ].filter(Boolean).join(' ').trim();
+
   const toggleSport = (label) => {
     setSports((current) => (
       current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
@@ -98,7 +115,7 @@ export function ApplicationForm({
     if (!form.email.trim()) next.email = 'Email is required.';
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
     if (sports.length === 0) next.sports = 'Select at least one sport.';
-    if (!form.service_area.trim()) next.service_area = 'Service area is required.';
+    if (!form.location.city.trim() || !form.location.state) next.service_area = 'Service area is required (state and city).';
     if (form.coaching_background.trim().length < 20) {
       next.coaching_background = 'Tell us a bit more (at least 20 characters).';
     }
@@ -120,7 +137,7 @@ export function ApplicationForm({
     try {
       const background = [
         `Sports: ${sports.join(', ')}`,
-        `Service area: ${form.service_area.trim()}`,
+        `Service area: ${serviceArea}`,
         form.credentials.trim() ? `Credentials & certifications:\n${form.credentials.trim()}` : '',
         `Background / message:\n${form.coaching_background.trim()}`,
       ].filter(Boolean).join('\n\n');
@@ -133,7 +150,7 @@ export function ApplicationForm({
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         ...(form.dob ? { dob: form.dob } : {}),
-        ...(form.service_area.trim() ? { service_location: form.service_area.trim() } : {}),
+        ...(serviceArea ? { service_location: serviceArea } : {}),
         ...(form.county.trim() ? { service_county: form.county.trim() } : {}),
         coaching_background: background,
         resume_url: form.resume_url.trim(),
@@ -237,28 +254,32 @@ export function ApplicationForm({
             {errors.sports && <p className="mt-1 text-xs text-destructive">{errors.sports}</p>}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <LocationAutocomplete
-              id="application-service-area"
-              label="Service area *"
-              placeholder="City, state, or ZIP — anywhere in the USA"
-              value={form.service_area}
-              error={errors.service_area}
-              onClear={() => { update('service_area', ''); update('county', ''); }}
-              onSelect={(place) => { update('service_area', place.label); update('county', place.county || ''); }}
-            />
-            <div>
+          <fieldset>
+            <legend className="font-display tracking-wider uppercase text-xs font-medium text-foreground">Service area *</legend>
+            <div className="mt-1">
+              <USLocationFields
+                idPrefix="application-service-area"
+                fields={['city', 'state', 'zip']}
+                required
+                value={form.location}
+                onChange={updateLocation}
+                errors={{ city: errors.service_area, state: errors.service_area }}
+                columns="grid grid-cols-1 sm:grid-cols-3 gap-4"
+              />
+            </div>
+            {errors.service_area && <p className="mt-1 text-xs text-destructive">{errors.service_area}</p>}
+            <div className="mt-3">
               <Label className="font-display tracking-wider uppercase text-xs">County</Label>
               <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-sm mt-1">
                 <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <span className={form.county ? 'text-foreground' : 'text-muted-foreground'}>
                   {form.county
                     ? (form.county.toLowerCase().includes('county') ? form.county : `${form.county} County`)
-                    : 'Auto-filled from your location'}
+                    : 'Auto-filled from the city you select'}
                 </span>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <div>
             <Label htmlFor="application-credentials" className="font-display tracking-wider uppercase text-xs">Credentials &amp; Certifications</Label>

@@ -38,6 +38,8 @@ import { sportIconFor } from '@/features/athlete/sportMeta';
 import { parseJsonObject } from '@/features/athlete/portalShared';
 import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { SignedAgreementsList } from '@/features/athlete/AthleteDocuments';
+import USLocationFields from '@/components/forms/USLocationFields';
+import { toStateCode } from '@/lib/usStates';
 
 // Athlete settings — every saved control persists for real through the
 // server-side `accountProfile.update` whitelist (via auth.updateCurrentUser).
@@ -77,6 +79,24 @@ function parseNotificationPrefs(raw) {
     out[item.key] = typeof stored === 'boolean' ? stored : !item.defaultOff;
   }
   return out;
+}
+
+// Parse a stored "City, ST" location_label into the structured location the
+// shared USLocationFields component expects. Anything that doesn't match the
+// "City, ST" shape is treated as a free-text city so nothing is lost.
+function parseLocationLabel(label) {
+  const text = String(label || '').trim();
+  if (!text) return { city: '', state: '' };
+  const parts = text.split(',').map((p) => p.trim());
+  if (parts.length >= 2) {
+    const code = toStateCode(parts[parts.length - 1]);
+    if (code) return { city: parts.slice(0, -1).join(', '), state: code };
+  }
+  return { city: text, state: '' };
+}
+
+function buildCityStateLabel(location) {
+  return [String(location.city || '').trim(), location.state].filter(Boolean).join(', ');
 }
 
 function SettingsCard({ title, icon: Icon, blurb, children }) {
@@ -323,7 +343,7 @@ function SportSection({ athlete }) {
     sports: initialSports,
     skill_level: initialLevel,
     sport_position: initialPosition,
-    location_label: '',
+    location: { city: '', state: '', zip: '', county: '', lat: undefined, lng: undefined },
     bio: '',
   });
   const [saving, setSaving] = useState(false);
@@ -333,7 +353,7 @@ function SportSection({ athlete }) {
       sports: initialSports,
       skill_level: initialLevel,
       sport_position: initialPosition,
-      location_label: user?.location_label || '',
+      location: { ...parseLocationLabel(user?.location_label), zip: '', county: '', lat: undefined, lng: undefined },
       bio: user?.bio || '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -346,6 +366,9 @@ function SportSection({ athlete }) {
   ]);
 
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const setLocation = (patch) => setForm((current) => ({ ...current, location: { ...current.location, ...patch } }));
+  const locationLabel = buildCityStateLabel(form.location);
 
   const toggleSport = (key) => {
     setForm((current) => {
@@ -363,7 +386,7 @@ function SportSection({ athlete }) {
   const dirty = !sameSet(form.sports, initialSports)
     || form.skill_level !== initialLevel
     || form.sport_position !== initialPosition
-    || form.location_label !== (user?.location_label || '')
+    || locationLabel !== (user?.location_label || '')
     || form.bio !== (user?.bio || '');
 
   const save = async () => {
@@ -373,7 +396,7 @@ function SportSection({ athlete }) {
         sports: form.sports,
         skill_level: form.skill_level,
         sport_position: form.sport_position.trim(),
-        location_label: form.location_label.trim(),
+        location_label: locationLabel,
         bio: form.bio.trim(),
       });
       await refetchUser();
@@ -465,15 +488,16 @@ function SportSection({ athlete }) {
 
         {/* Editable: location + bio (whitelisted fields) */}
         <div>
-          <Label htmlFor="sport-location">Training location</Label>
-          <Input
-            id="sport-location"
-            value={form.location_label}
-            onChange={(e) => set('location_label', e.target.value)}
-            maxLength={500}
-            className="mt-1 max-w-md bg-background"
-            placeholder="City, neighborhood, or facility"
-          />
+          <Label htmlFor="sport-location-state">Training location</Label>
+          <div className="mt-1">
+            <USLocationFields
+              idPrefix="sport-location"
+              fields={['state', 'city', 'zip']}
+              value={form.location}
+              onChange={setLocation}
+              columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
+            />
+          </div>
           <p className="mt-1 text-[11px] text-muted-foreground">Helps coaches gauge travel and venue fit.</p>
         </div>
 

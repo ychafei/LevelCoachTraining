@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useOrganization } from '@/features/org/useOrganization';
 import OrgProfileTab from '@/features/org/OrgProfileTab';
 import OrgRosterTab from '@/features/org/OrgRosterTab';
+import OrgPackagesTab from '@/features/org/OrgPackagesTab';
 import OrgMembersTab from '@/features/org/OrgMembersTab';
 import OrgRevenueTab from '@/features/org/OrgRevenueTab';
 import OrgBookingsTab from '@/features/org/OrgBookingsTab';
@@ -98,6 +99,7 @@ export default function OrganizationPortal() {
           <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-secondary/60 p-1">
             <TabsTrigger value="profile" className="font-display text-xs uppercase tracking-wider">Profile</TabsTrigger>
             <TabsTrigger value="roster" className="font-display text-xs uppercase tracking-wider">Roster</TabsTrigger>
+            <TabsTrigger value="packages" className="font-display text-xs uppercase tracking-wider">Packages</TabsTrigger>
             <TabsTrigger value="members" className="font-display text-xs uppercase tracking-wider">Members</TabsTrigger>
             <TabsTrigger value="revenue" className="font-display text-xs uppercase tracking-wider">Revenue</TabsTrigger>
             <TabsTrigger value="bookings" className="font-display text-xs uppercase tracking-wider">Bookings</TabsTrigger>
@@ -113,6 +115,9 @@ export default function OrganizationPortal() {
           </TabsContent>
           <TabsContent value="roster" className="mt-5">
             <OrgRosterTab organizationId={orgId} isOrgAdmin={isOrgAdmin} />
+          </TabsContent>
+          <TabsContent value="packages" className="mt-5">
+            <OrgPackagesTab organizationId={orgId} isOrgAdmin={isOrgAdmin} />
           </TabsContent>
           <TabsContent value="members" className="mt-5">
             <OrgMembersTab

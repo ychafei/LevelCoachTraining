@@ -235,6 +235,19 @@ async function readyConnectedAccount(db, ownerType, ownerId) {
   return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || null;
 }
 
+// True when the coach has an ACTIVE organization_coaches link to this org —
+// the gate for purchasing an org-bound package for that coach.
+async function activeOrgCoachLink(db, organizationId, coachId) {
+  if (!organizationId || !coachId) return false;
+  const rows = await db.listDocuments(DB_ID, 'organization_coaches', [
+    Query.equal('organization_id', organizationId),
+    Query.equal('coach_id', coachId),
+    Query.equal('status', 'active'),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
 async function activeOrganizationForCoach(db, coachId) {
   const links = await db.listDocuments(DB_ID, 'organization_coaches', [
     Query.equal('coach_id', coachId),
@@ -449,6 +462,12 @@ export default async ({ req, res, error }) => {
     // Read defensively — the attribute may not exist yet during rollout.
     const pkgCoachId = typeof pkg.coach_id === 'string' ? pkg.coach_id : '';
     if (pkgCoachId && pkgCoachId !== coach.$id) {
+      return res.json({ error: 'This package is not available for this coach.' }, 400);
+    }
+    // Org-bound package: only bookable for a coach with an ACTIVE link to that
+    // org. Read defensively — organization_id may not exist yet during rollout.
+    const pkgOrgId = typeof pkg.organization_id === 'string' ? pkg.organization_id : '';
+    if (pkgOrgId && !(await activeOrgCoachLink(db, pkgOrgId, coach.$id))) {
       return res.json({ error: 'This package is not available for this coach.' }, 400);
     }
     if (pkg.is_active === false) return res.json({ error: 'This package is not available for checkout.' }, 400);

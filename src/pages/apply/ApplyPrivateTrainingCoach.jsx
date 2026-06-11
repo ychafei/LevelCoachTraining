@@ -26,7 +26,7 @@ import { coachApplicationRepo } from '@/api/repo';
 import { SPORT_SELECT_OPTIONS, EMAIL_RE, normalizePhoneForStorage } from '@/lib/athleteOnboardingFields';
 import { WhatHappensNext } from '@/components/apply/ApplicationForm';
 import { onboardingPath } from '@/lib/roleHome';
-import LocationAutocomplete from '@/components/forms/LocationAutocomplete';
+import USLocationFields from '@/components/forms/USLocationFields';
 
 const PASSWORD_RULES = [
   { id: 'length', label: '8+ characters', test: (value) => value.length >= 8 },
@@ -47,7 +47,7 @@ export default function ApplyPrivateTrainingCoach() {
     dob: '',
     password: '',
     confirmPassword: '',
-    serviceArea: '',
+    location: { city: '', state: '', zip: '', county: '', lat: undefined, lng: undefined },
     county: '',
     yearsExperience: '',
     credentials: '',
@@ -115,6 +115,24 @@ export default function ApplyPrivateTrainingCoach() {
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
 
+  // Merge the changed subset from USLocationFields. A city pick (or ZIP resolve)
+  // also returns a county, which we mirror into the existing `county` field so
+  // the submit payload (service_county) is unchanged.
+  const updateLocation = (patch) => {
+    setForm((current) => ({
+      ...current,
+      location: { ...current.location, ...patch },
+      ...(patch.county !== undefined ? { county: patch.county || '' } : {}),
+    }));
+    setErrors((current) => ({ ...current, serviceArea: undefined, county: undefined }));
+  };
+
+  // "City, ST ZIP" — the service_location string sent to the applications fn.
+  const serviceArea = [
+    [form.location.city.trim(), form.location.state].filter(Boolean).join(', '),
+    form.location.zip,
+  ].filter(Boolean).join(' ').trim();
+
   const toggleSport = (label) => {
     setSports((current) => (
       current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
@@ -137,8 +155,8 @@ export default function ApplyPrivateTrainingCoach() {
       if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     }
     if (sports.length === 0) next.sports = 'Select at least one sport you coach.';
-    if (!form.serviceArea.trim()) next.serviceArea = 'Select your primary location.';
-    if (!form.county.trim()) next.county = 'Pick a location with a county from the suggestions.';
+    if (!form.location.city.trim() || !form.location.state) next.serviceArea = 'Select your primary location (state and city).';
+    if (!form.county.trim()) next.county = 'Pick a city from the suggestions so we can fill the county.';
     if (form.experience.trim().length < 20) next.experience = 'Tell us a bit more (at least 20 characters).';
     if (form.resumeUrl.trim() && !/^https?:\/\//i.test(form.resumeUrl.trim())) {
       next.resumeUrl = 'Use a full link, like https://…';
@@ -187,7 +205,7 @@ export default function ApplyPrivateTrainingCoach() {
     try {
       const background = [
         `Sports coached: ${sports.join(', ')}`,
-        `Service area: ${form.serviceArea.trim()}`,
+        `Service area: ${serviceArea}`,
         form.yearsExperience ? `Years of experience: ${form.yearsExperience}` : '',
         form.credentials.trim() ? `Credentials & certifications:\n${form.credentials.trim()}` : '',
         `Coaching experience & background:\n${form.experience.trim()}`,
@@ -201,7 +219,7 @@ export default function ApplyPrivateTrainingCoach() {
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         dob: form.dob,
-        service_location: form.serviceArea.trim(),
+        service_location: serviceArea,
         ...(form.county.trim() ? { service_county: form.county.trim() } : {}),
         coaching_background: background,
         resume_url: form.resumeUrl.trim(),
@@ -518,36 +536,36 @@ export default function ApplyPrivateTrainingCoach() {
                     {errors.sports && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.sports}</p>}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <LocationAutocomplete
-                      id="coach-service-area"
-                      label="Primary location / service area"
+                  <fieldset>
+                    <legend className="mb-2 block text-sm font-bold text-slate-950">
+                      Primary location / service area<span aria-hidden="true" className="text-red-600"> *</span>
+                    </legend>
+                    <USLocationFields
+                      idPrefix="coach-service-area"
+                      fields={['city', 'state', 'zip']}
                       required
-                      placeholder="City, state, or ZIP — anywhere in the USA"
-                      value={form.serviceArea}
-                      error={errors.serviceArea}
                       disabled={submitting}
-                      onClear={() => setForm((prev) => ({ ...prev, serviceArea: '', county: '' }))}
-                      onSelect={(place) => {
-                        setForm((prev) => ({ ...prev, serviceArea: place.label, county: place.county || '' }));
-                        setErrors((current) => ({ ...current, serviceArea: undefined, county: undefined }));
-                      }}
+                      value={form.location}
+                      onChange={updateLocation}
+                      errors={{ city: errors.serviceArea, state: errors.serviceArea }}
+                      columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
                     />
-                    <div>
-                      <label htmlFor="coach-county" className="block text-sm font-medium text-foreground mb-1">
-                        County<span className="text-destructive"> *</span>
-                      </label>
+                    {errors.serviceArea && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.serviceArea}</p>}
+                    <div className="mt-3">
+                      <span className="block text-sm font-medium text-slate-700 mb-1">
+                        County<span className="text-red-600"> *</span>
+                      </span>
                       <div className={`flex h-11 items-center gap-2 rounded-md border bg-secondary/40 px-3 text-sm ${errors.county ? 'border-destructive' : 'border-border'}`}>
                         <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                         <span className={form.county ? 'text-foreground' : 'text-muted-foreground'} id="coach-county">
                           {form.county
                             ? (form.county.toLowerCase().includes('county') ? form.county : `${form.county} County`)
-                            : 'Auto-filled from your location'}
+                            : 'Auto-filled from the city you select'}
                         </span>
                       </div>
                       {errors.county && <p className="mt-1 text-xs text-destructive">{errors.county}</p>}
                     </div>
-                  </div>
+                  </fieldset>
 
                   <TextAreaField
                     id="coach-credentials"

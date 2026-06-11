@@ -81,7 +81,10 @@ export default function CoachClientDetail() {
     () => sessions.find((s) => s.booked_by_profile_id)?.booked_by_profile_id || '',
     [sessions],
   );
-  const defaultSportKey = Array.isArray(coach?.sports) && coach.sports.length === 1 ? coach.sports[0] : '';
+  // Fallback sport when the athlete has no training history yet: the coach's
+  // primary (first selected) sport. TrainingToolkit prefers the athlete's own
+  // sport derived from their existing assessments/goals/plans/homework.
+  const defaultSportKey = Array.isArray(coach?.sports) && coach.sports.length > 0 ? coach.sports[0] : '';
 
   const openMessaging = () => {
     if (existingConvo) {
