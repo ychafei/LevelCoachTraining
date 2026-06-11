@@ -113,6 +113,10 @@ async function submit(databases, req, payload) {
   if (payload.dob) {
     const parsed = new Date(payload.dob);
     if (Number.isNaN(parsed.getTime())) return { status: 400, body: { error: 'dob is invalid.' } };
+    // Coaches must be adults — enforce server-side, not just in the form
+    // (the public form promises "we confirm this from your date of birth").
+    const age = (Date.now() - parsed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    if (age < 18) return { status: 400, body: { error: 'Coaches must be 18 or older.' } };
     dob = parsed.toISOString();
   }
   // Location is now free-form and nationwide (no Detroit-only county enum).

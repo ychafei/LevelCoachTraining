@@ -7,8 +7,8 @@ const PATHS = [
   {
     to: '/apply/private-training-coach',
     icon: Briefcase,
-    title: 'Create Coach Account',
-    desc: 'Set up a free private coach profile.',
+    title: 'Apply to coach',
+    desc: 'Every application is reviewed by a person — approval arrives by email with onboarding steps.',
   },
   {
     to: '/apply/training-organization',

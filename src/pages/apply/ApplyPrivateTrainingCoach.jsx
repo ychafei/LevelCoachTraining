@@ -348,6 +348,26 @@ export default function ApplyPrivateTrainingCoach() {
                   <div className="mt-4 h-10 animate-pulse rounded-md bg-slate-100" aria-busy="true" aria-label="Checking for an existing application" />
                 )}
 
+                {!usingExistingAccount && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleGoogle}
+                      disabled={submitting || isLoadingAuth}
+                      className="mt-5 flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <GoogleIcon className="h-4 w-4" />
+                      Continue with Google
+                    </button>
+
+                    <div className="my-3 flex items-center gap-4">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <span className="text-xs font-medium text-slate-500">or start with</span>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
+                  </>
+                )}
+
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
                   {/* Honeypot — hidden from real users. */}
                   <div className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
@@ -411,16 +431,21 @@ export default function ApplyPrivateTrainingCoach() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
-                      id="coach-dob"
-                      label="Date of birth"
-                      type="date"
-                      icon={CalendarCheck}
-                      value={form.dob}
-                      onChange={(event) => updateForm('dob', event.target.value)}
-                      error={errors.dob}
-                      disabled={submitting}
-                    />
+                    <div>
+                      <AuthField
+                        id="coach-dob"
+                        label="Date of birth"
+                        type="date"
+                        icon={CalendarCheck}
+                        value={form.dob}
+                        onChange={(event) => updateForm('dob', event.target.value)}
+                        error={errors.dob}
+                        disabled={submitting}
+                      />
+                      <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                        Coaches must be 18 or older — we confirm this from your date of birth.
+                      </p>
+                    </div>
                     <AuthField
                       id="coach-years"
                       label="Years of coaching experience"
@@ -502,8 +527,7 @@ export default function ApplyPrivateTrainingCoach() {
                         </div>
                       )}
                       <p className="text-xs leading-5 text-slate-500">
-                        You can apply without a password — we'll email you either way. Creating one lets
-                        you sign in and track your application status.
+                        Create a password so you can sign in and track your application status.
                       </p>
                     </>
                   )}
@@ -614,6 +638,9 @@ export default function ApplyPrivateTrainingCoach() {
                         </span>
                       </span>
                     </CheckboxRow>
+                    <p className="pl-6 text-xs leading-5 text-slate-500">
+                      This is consent only — nothing runs today. We'll email you the scope and timing before any check happens.
+                    </p>
                     {errors.backgroundCheckConsent && <p className="text-xs font-semibold text-red-600">{errors.backgroundCheckConsent}</p>}
 
                     <CheckboxRow
@@ -659,30 +686,12 @@ export default function ApplyPrivateTrainingCoach() {
                 </form>
 
                 {!usingExistingAccount && (
-                  <>
-                    <div className="my-3 flex items-center gap-4">
-                      <span className="h-px flex-1 bg-slate-200" />
-                      <span className="text-xs font-medium text-slate-500">or start with</span>
-                      <span className="h-px flex-1 bg-slate-200" />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleGoogle}
-                      disabled={submitting || isLoadingAuth}
-                      className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <GoogleIcon className="h-4 w-4" />
-                      Continue with Google
-                    </button>
-
-                    <p className="mt-4 text-center text-sm text-slate-600">
-                      Already have an account?{' '}
-                      <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
-                        Sign in
-                      </Link>
-                    </p>
-                  </>
+                  <p className="mt-4 text-center text-sm text-slate-600">
+                    Already have an account?{' '}
+                    <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
+                      Sign in
+                    </Link>
+                  </p>
                 )}
               </div>
             </div>

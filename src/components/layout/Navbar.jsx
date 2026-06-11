@@ -62,14 +62,14 @@ export default function Navbar() {
     // Admins: coach portal + admin only.
     if (isAdmin) {
       return [
-        { label: 'Coaching Portal', path: '/coach', icon: Briefcase },
+        { label: 'Coaching portal', path: '/coach', icon: Briefcase },
         { label: 'Admin', path: '/admin', icon: Shield },
       ];
     }
 
     // Coaches (non-admin): coach portal only.
     if (isCoach) {
-      return [{ label: 'Coaching Portal', path: '/coach', icon: Briefcase }];
+      return [{ label: 'Coaching portal', path: '/coach', icon: Briefcase }];
     }
 
     // Organization admins: org portal + marketplace.
@@ -148,8 +148,8 @@ export default function Navbar() {
                               : 'border-transparent text-slate-950 hover:text-blue-700'
                           }`
                         : isGroupActive(link)
-                          ? 'font-display text-sm tracking-wide uppercase text-accent'
-                          : 'font-display text-sm tracking-wide uppercase text-muted-foreground hover:text-foreground'
+                          ? 'text-sm font-semibold text-accent'
+                          : 'text-sm font-semibold text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {link.icon && <link.icon className="w-3.5 h-3.5" />}
@@ -173,8 +173,8 @@ export default function Navbar() {
                                 ? 'font-semibold text-blue-700 bg-blue-50'
                                 : 'font-semibold text-slate-700 hover:text-blue-700 focus:text-blue-700'
                               : isActive(item.path)
-                                ? 'font-display tracking-wide uppercase text-accent bg-accent/10'
-                                : 'font-display tracking-wide uppercase text-foreground hover:text-accent focus:text-accent'
+                                ? 'font-semibold text-accent bg-accent/10'
+                                : 'font-semibold text-foreground hover:text-accent focus:text-accent'
                           }`}
                         >
                           {item.label}
@@ -196,8 +196,8 @@ export default function Navbar() {
                             : 'text-slate-950 border-transparent hover:text-blue-700'
                         }`
                       : isActive(link.path)
-                        ? 'font-display text-sm tracking-wide uppercase text-accent border-accent'
-                        : 'font-display text-sm tracking-wide uppercase text-muted-foreground border-transparent hover:text-foreground'
+                        ? 'text-sm font-semibold text-accent border-accent'
+                        : 'text-sm font-semibold text-muted-foreground border-transparent hover:text-foreground'
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -211,12 +211,12 @@ export default function Navbar() {
               {authenticated ? (
                 <div className="flex items-center gap-3">
                   {greetingName(user) !== 'there' && (
-                    <span className="font-display tracking-wide uppercase text-xs text-muted-foreground hidden lg:inline">
+                    <span className="text-sm font-semibold text-muted-foreground hidden lg:inline">
                       Hi, <span className="text-accent">{greetingName(user)}</span>
                     </span>
                   )}
                   <Link to="/settings">
-                    <Button variant="ghost" size="sm" className="font-display tracking-wide uppercase text-xs">
+                    <Button variant="ghost" size="sm" className="text-sm font-semibold">
                       Settings
                     </Button>
                   </Link>
@@ -224,9 +224,9 @@ export default function Navbar() {
                     variant="outline"
                     size="sm"
                     onClick={() => logout()}
-                    className="font-display tracking-wide uppercase text-xs border-border"
+                    className="text-sm font-semibold border-border"
                   >
-                    Logout
+                    Log out
                   </Button>
                 </div>
               ) : (
@@ -242,10 +242,10 @@ export default function Navbar() {
                               ? 'text-blue-700 underline decoration-blue-600 decoration-2 underline-offset-[10px]'
                               : 'text-slate-950'
                           }`
-                        : 'font-display tracking-wide uppercase text-xs'
+                        : 'text-sm font-semibold'
                     }`}
                   >
-                    Sign In
+                    Sign in
                   </Button>
                   <Button
                     size="sm"
@@ -284,7 +284,7 @@ export default function Navbar() {
                   <button
                     onClick={() => toggleMobileExpand(link.path)}
                     aria-expanded={!!mobileExpanded[link.path]}
-                    className={`w-full flex items-center justify-between px-4 py-3 text-sm font-display tracking-wide uppercase rounded-md transition-colors ${
+                    className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold rounded-md transition-colors ${
                       isGuestPlatform
                         ? isGroupActive(link)
                           ? 'text-blue-700 bg-blue-50'
@@ -309,7 +309,7 @@ export default function Navbar() {
                           key={item.path}
                           to={item.path}
                           onClick={closeMobile}
-                          className={`block px-4 py-2.5 text-xs font-display tracking-wide uppercase rounded-md transition-colors ${
+                          className={`block px-4 py-2.5 text-sm font-semibold rounded-md transition-colors ${
                             isGuestPlatform
                               ? isActive(item.path)
                                 ? 'text-blue-700 bg-blue-50'
@@ -330,7 +330,7 @@ export default function Navbar() {
                   key={link.path}
                   to={link.path}
                   onClick={() => handleNavClick(link.path)}
-                  className={`block px-4 py-3 text-sm font-display tracking-wide uppercase rounded-md transition-colors ${
+                  className={`block px-4 py-3 text-sm font-semibold rounded-md transition-colors ${
                     isGuestPlatform
                       ? isActive(link.path)
                         ? 'text-blue-700 bg-blue-50'
@@ -351,16 +351,16 @@ export default function Navbar() {
               {authenticated ? (
                 <>
                   <Link to="/settings" onClick={closeMobile}>
-                    <Button variant="ghost" className="w-full justify-start font-display tracking-wide uppercase text-xs">
+                    <Button variant="ghost" className="w-full justify-start text-sm font-semibold">
                       Settings
                     </Button>
                   </Link>
                   <Button
                     variant="outline"
-                    className="w-full font-display tracking-wide uppercase text-xs"
+                    className="w-full text-sm font-semibold"
                     onClick={() => logout()}
                   >
-                    Logout
+                    Log out
                   </Button>
                 </>
               ) : (
@@ -370,17 +370,17 @@ export default function Navbar() {
                     className={`w-full ${
                       isGuestPlatform
                         ? 'font-semibold normal-case tracking-normal text-slate-950'
-                        : 'font-display tracking-wide uppercase text-xs'
+                        : 'text-sm font-semibold'
                     }`}
                     onClick={() => {
                       closeMobile();
                       navigate('/sign-in');
                     }}
                   >
-                    Sign In
+                    Sign in
                   </Button>
                   <Button
-                    className={`w-full font-display tracking-wide uppercase text-xs ${
+                    className={`w-full text-sm font-semibold ${
                       isGuestPlatform ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-accent text-accent-foreground'
                     }`}
                     onClick={() => {

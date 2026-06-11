@@ -374,7 +374,7 @@ export default function CoachSearch() {
               <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
               <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
             </div>
-            <h1 className="mt-5 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
+            <h1 className="mt-5 font-display text-4xl font-extrabold leading-tight tracking-[-0.02em] text-slate-950 sm:text-5xl lg:text-6xl">
               Find a coach
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
@@ -538,6 +538,12 @@ export default function CoachSearch() {
           </div>
         )}
 
+        {!loading && !loadError && filters.price !== 'any' && PRICE_BANDS.some((band) => band.value === filters.price) && (
+          <p className="mb-4 text-sm text-slate-500">
+            Showing coaches with published rates — coaches without rates are hidden by this filter.
+          </p>
+        )}
+
         {!loading && !loadError && filtered.expanded && (
           <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
             <p className="font-bold text-blue-900">
@@ -601,16 +607,17 @@ export default function CoachSearch() {
               Try broadening the sport, radius, or other filters. New coaches appear here the moment
               their profiles are published.
             </p>
-            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button onClick={clearFilters} variant="outline" className="rounded-lg border-blue-200 px-5 font-bold text-blue-700 hover:bg-blue-50">
-                Clear all filters
+            <div className="mt-5 flex flex-col items-center justify-center gap-3">
+              <Button onClick={clearFilters} className="rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+                Clear filters and browse all coaches
               </Button>
-              <Button asChild className="rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
-                <Link to="/apply/private-training-coach">
-                  Coach here? Be the first in your area
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              </Button>
+              <Link
+                to="/apply/private-training-coach"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 hover:underline"
+              >
+                Coach here? Be the first in your area
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
             </div>
           </div>
         )}

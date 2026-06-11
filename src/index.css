@@ -16,7 +16,7 @@
     --color-brand-slate: #475569;
     --color-brand-surface: #FFFFFF;
 
-    --background: 210 40% 98%;
+    --background: 40 27% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -40,6 +40,11 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
+    /* Proof accent — reserved for evidence moments (ratings, live stats,
+       savings). Scarcity of this color is what makes it read as signal. */
+    --proof: 38 92% 50%;
+    --proof-foreground: 26 83% 14%;
+
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 221 83% 53%;
@@ -50,7 +55,7 @@
     --chart-4: 38 92% 50%;
     --chart-5: 262 83% 58%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 47% 11%;
@@ -118,6 +123,17 @@
 }
 
 @layer components {
+  /* Proof numbers: stats, prices, ratings — calm, aligned, unmistakably data. */
+  .proof-number {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.18em];
+  }
+
   .brand-divider {
     height: 2px;
     background: linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.32) 40%, transparent 100%);

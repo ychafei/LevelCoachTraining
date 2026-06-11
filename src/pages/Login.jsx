@@ -40,7 +40,6 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
@@ -156,7 +155,23 @@ export default function Login() {
                   Sign in to continue to your LevelCoach account.
                 </p>
 
-                <form onSubmit={handlePasswordLogin} noValidate className="mt-9 space-y-6">
+                <button
+                  type="button"
+                  onClick={handleGoogle}
+                  disabled={submitting}
+                  className="mt-8 flex h-[58px] w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <GoogleIcon className="h-6 w-6" />
+                  Continue with Google
+                </button>
+
+                <div className="my-8 flex items-center gap-4">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="text-base font-medium text-slate-500">or continue with</span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                <form onSubmit={handlePasswordLogin} noValidate className="space-y-6">
                   <AuthField
                     id="email"
                     label="Email address"
@@ -193,16 +208,7 @@ export default function Login() {
                     }
                   />
 
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                        className="h-5 w-5 rounded border-slate-300 text-blue-600 accent-blue-600 focus:ring-blue-500"
-                      />
-                      Remember me
-                    </label>
+                  <div className="flex items-center justify-end">
                     <Link
                       to="/forgot-password"
                       className="text-sm font-semibold text-blue-700 transition-colors hover:text-blue-800 hover:underline"
@@ -230,22 +236,6 @@ export default function Login() {
                     {submitting ? 'Signing in...' : 'Sign In'}
                   </button>
                 </form>
-
-                <div className="my-8 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-base font-medium text-slate-500">or continue with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="flex h-[58px] w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-6 w-6" />
-                  Continue with Google
-                </button>
 
                 <p className="mt-8 text-center text-base text-slate-600">
                   Don&apos;t have an account?{' '}

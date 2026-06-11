@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Mail } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 
 const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
@@ -46,6 +47,41 @@ const COLUMNS = [
 ];
 
 export default function Footer() {
+  const { isAuthenticated, isLoadingAuth } = useAuth();
+
+  // Signed-in surfaces get a minimal footer: no marketing columns or
+  // "Create Free Account" / "Sign In" prompts that make a member feel logged
+  // out. While the session check is still resolving, default to the minimal
+  // variant so members never flash the marketing footer.
+  if (isAuthenticated || isLoadingAuth) {
+    return (
+      <footer className="border-t border-border bg-background">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <LevelCoachLogo />
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="inline-flex items-center gap-2 break-all text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Support: {SUPPORT_EMAIL}
+            </a>
+          </div>
+          <div className="mt-6 flex flex-col items-start justify-between gap-3 border-t border-border pt-5 sm:flex-row sm:items-center">
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} LevelCoach Training. All rights reserved.
+            </p>
+            <div className="flex items-center gap-5 text-xs font-semibold text-muted-foreground">
+              <Link to="/terms" className="transition-colors hover:text-foreground">Terms</Link>
+              <Link to="/privacy" className="transition-colors hover:text-foreground">Privacy</Link>
+              <Link to="/unsubscribe" className="transition-colors hover:text-foreground">Unsubscribe</Link>
+            </div>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="relative border-t border-slate-200 bg-white">
       {/* Brand accent bar */}

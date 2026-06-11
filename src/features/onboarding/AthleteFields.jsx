@@ -215,8 +215,11 @@ export function HealthAndEmergencyFields({ value, onChange, errors = {}, disable
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-bold text-slate-950">
+        <p className="mb-1 text-sm font-bold text-slate-950">
           Emergency contact<span aria-hidden="true" className="text-red-600"> *</span>
+        </p>
+        <p className="mb-2 text-xs leading-5 text-slate-500">
+          Kept private to your account — used by LevelCoach support if someone ever needs to be reached for you. Never shared publicly or with coaches.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <TextInput

@@ -6,9 +6,10 @@ import {
   BadgeCheck,
   Building2,
   CalendarDays,
+  CreditCard,
+  FileSignature,
   Flag,
   MapPin,
-  MessageCircle,
   RefreshCcw,
   ShieldCheck,
   Star,
@@ -292,13 +293,42 @@ export default function CoachDetail() {
                   </div>
                 )}
               </div>
-              <Button asChild className="mt-5 h-12 w-full rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700">
+              <div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200 pt-4">
+                {model.rateLabel ? (
+                  <p className="text-slate-950">
+                    <span className="proof-number text-2xl">{model.rateLabel}</span>
+                    <span className="ml-1.5 text-sm font-semibold text-slate-500">/ session</span>
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-500">Rates shown at booking</p>
+                )}
+                {reviewCount > 0 && ratingAvg > 0 && (
+                  <p className="text-sm font-semibold text-slate-600">
+                    <span className="text-proof" aria-hidden="true">★</span>{' '}
+                    <span className="proof-number text-proof">{ratingAvg.toFixed(1)}</span>
+                    {' · '}
+                    {reviewCount} review{reviewCount === 1 ? '' : 's'}
+                  </p>
+                )}
+              </div>
+              <Button asChild className="mt-3 h-12 w-full rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700">
                 <Link to={bookHref}>
                   Book training
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="mt-2 h-11 w-full rounded-lg border-blue-200 bg-white text-sm font-bold text-blue-700 hover:bg-blue-50">
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Cancel 24 or more hours before a session starts and your credit is restored automatically. Inside 24 hours the credit is forfeited, unless the coach cancels.
+              </p>
+              <div className="mt-4">
+                <p className="eyebrow text-slate-500">What happens next</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-slate-600">
+                  <li>Pick a package and time</li>
+                  <li>Sign the legal packet at checkout</li>
+                  <li>Message your coach and track progress</li>
+                </ol>
+              </div>
+              <Button asChild variant="outline" className="mt-4 h-11 w-full rounded-lg border-blue-200 bg-white text-sm font-bold text-blue-700 hover:bg-blue-50">
                 <Link to="/coaches">Compare other coaches</Link>
               </Button>
             </aside>
@@ -460,7 +490,7 @@ export default function CoachDetail() {
           )}
 
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm" aria-label="Safety information">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Safety on LevelCoach</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">What we verify</p>
             <div className="mt-4 space-y-4">
               <div className="flex gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
@@ -479,15 +509,28 @@ export default function CoachDetail() {
               </div>
               <div className="flex gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  <FileSignature className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-sm font-bold text-slate-950">In-platform messaging</p>
+                  <p className="text-sm font-bold text-slate-950">Signed legal packet</p>
                   <p className="mt-0.5 text-xs leading-5 text-slate-600">
-                    Coach-client messages stay inside LevelCoach; guardians of minors can read their child's conversations.
+                    Coaches must sign the current required legal packet before they can publish a profile.
                   </p>
                 </div>
               </div>
+              <div className="flex gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                  <CreditCard className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-slate-950">Stripe payout onboarding</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                    Coaches must complete Stripe payout onboarding before they can publish; every payment is processed by Stripe.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 border-t border-slate-200 pt-4">
               <div className="flex gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-red-50 text-red-700 ring-1 ring-red-100">
                   <Flag className="h-4 w-4" aria-hidden="true" />
@@ -519,6 +562,9 @@ export default function CoachDetail() {
             <Button asChild className="mt-4 w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
               <Link to={bookHref}>Book training</Link>
             </Button>
+            <p className="mt-3 text-xs leading-5 text-slate-600">
+              Cancel 24 or more hours before a session starts and your credit is restored automatically. Inside 24 hours the credit is forfeited, unless the coach cancels.
+            </p>
           </div>
         </aside>
       </section>

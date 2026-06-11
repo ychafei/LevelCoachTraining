@@ -193,7 +193,7 @@ export default function CreateOrganization() {
       if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
       else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     }
-    if (!form.termsAccepted) next.termsAccepted = 'You must agree to the terms and code of conduct.';
+    if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Terms of Service and Privacy Policy.';
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -392,6 +392,26 @@ export default function CreateOrganization() {
                   Launch your branded training portal and manage coaches, athletes, and programs in one place.
                 </p>
 
+                {!usingExistingAccount && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleGoogle}
+                      disabled={submitting || isLoadingAuth}
+                      className="mt-5 flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <GoogleIcon className="h-4 w-4" />
+                      Continue with Google
+                    </button>
+
+                    <div className="my-3 flex items-center gap-4">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <span className="text-xs font-medium text-slate-500">or sign up with</span>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
+                  </>
+                )}
+
                 <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-5">
                   <FormSection title="Organization details">
                     <AuthField
@@ -407,7 +427,7 @@ export default function CreateOrganization() {
 
                     <p className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
                       <LinkIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      Portal URL preview: levelcoach.com/{slugify(form.organizationName) || 'your-organization'}
+                      Portal URL preview: levelcoachtraining.com/organizations/{slugify(form.organizationName) || 'your-organization'}
                       <span className="font-normal text-blue-700/80">(final URL is assigned when the organization is created)</span>
                     </p>
 
@@ -487,6 +507,10 @@ export default function CreateOrganization() {
                         ))}
                       </SelectField>
                     </div>
+
+                    <p className="mt-4 text-xs leading-5 text-slate-500">
+                      Marketplace bookings are processed by Stripe; LevelCoach applies a platform fee and routes your share automatically once Stripe payout onboarding is complete — you control coach payout splits later.
+                    </p>
                   </FormSection>
 
                   <FormSection title="Contact and branding">
@@ -729,12 +753,12 @@ export default function CreateOrganization() {
                       I agree to the{' '}
                       <Link to="/terms" className="font-semibold text-blue-700 hover:underline">
                         Terms of Service
-                      </Link>
-                      ,{' '}
+                      </Link>{' '}
+                      and{' '}
                       <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
                         Privacy Policy
                       </Link>
-                      , and LevelCoach Code of Conduct.
+                      .
                     </CheckboxRow>
                     {errors.termsAccepted && <p className="text-xs font-semibold text-red-600">{errors.termsAccepted}</p>}
                   </div>
@@ -759,30 +783,12 @@ export default function CreateOrganization() {
                 </form>
 
                 {!usingExistingAccount && (
-                  <>
-                    <div className="my-3 flex items-center gap-4">
-                      <span className="h-px flex-1 bg-slate-200" />
-                      <span className="text-xs font-medium text-slate-500">or sign up with</span>
-                      <span className="h-px flex-1 bg-slate-200" />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleGoogle}
-                      disabled={submitting || isLoadingAuth}
-                      className="flex h-9 w-full items-center justify-center gap-3 rounded-md border border-blue-200 bg-white text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <GoogleIcon className="h-4 w-4" />
-                      Continue with Google
-                    </button>
-
-                    <p className="mt-4 text-center text-sm text-slate-600">
-                      Already have an account?{' '}
-                      <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
-                        Sign in
-                      </Link>
-                    </p>
-                  </>
+                  <p className="mt-4 text-center text-sm text-slate-600">
+                    Already have an account?{' '}
+                    <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
+                      Sign in
+                    </Link>
+                  </p>
                 )}
               </div>
             </div>

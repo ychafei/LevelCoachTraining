@@ -334,7 +334,23 @@ export function AthleteSignup() {
                   Start your training journey with the right coach and the right tools.
                 </p>
 
-                <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
+                <button
+                  type="button"
+                  onClick={handleGoogle}
+                  disabled={submitting}
+                  className="mt-5 flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <GoogleIcon className="h-5 w-5" />
+                  Continue with Google
+                </button>
+
+                <div className="my-4 flex items-center gap-4">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                <form onSubmit={handleSubmit} noValidate className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="firstName"
@@ -386,17 +402,22 @@ export function AthleteSignup() {
                       disabled={submitting}
                       error={errors.phone}
                     />
-                    <AuthField
-                      id="dob"
-                      label="Date of birth"
-                      type="date"
-                      icon={CalendarCheck}
-                      autoComplete="bday"
-                      value={form.dob}
-                      onChange={(event) => updateForm('dob', event.target.value)}
-                      disabled={submitting}
-                      error={errors.dob}
-                    />
+                    <div>
+                      <AuthField
+                        id="dob"
+                        label="Date of birth"
+                        type="date"
+                        icon={CalendarCheck}
+                        autoComplete="bday"
+                        value={form.dob}
+                        onChange={(event) => updateForm('dob', event.target.value)}
+                        disabled={submitting}
+                        error={errors.dob}
+                      />
+                      <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                        Under 18? Bookings and payments route through your parent or guardian — that's how we keep minors safe.
+                      </p>
+                    </div>
                   </div>
 
                   <AthleteSportFields
@@ -572,22 +593,6 @@ export function AthleteSignup() {
                   </p>
                 </form>
 
-                <div className="my-4 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-5 w-5" />
-                  Continue with Google
-                </button>
-
                 <p className="mt-4 text-center text-sm text-slate-600">
                   Already have an account?{' '}
                   <Link to="/sign-in" className="font-semibold text-blue-700 hover:underline">
@@ -741,7 +746,23 @@ export function ParentSignup() {
                   ))}
                 </ol>
 
-                <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
+                <button
+                  type="button"
+                  onClick={handleGoogle}
+                  disabled={submitting}
+                  className="mt-5 flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <GoogleIcon className="h-5 w-5" />
+                  Continue with Google
+                </button>
+
+                <div className="my-4 flex items-center gap-4">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                <form onSubmit={handleSubmit} noValidate className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="parent-account-first-name"
@@ -902,22 +923,6 @@ export function ParentSignup() {
                     Next: add each child athlete you manage, then sign their legal packet.
                   </p>
                 </form>
-
-                <div className="my-4 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-5 w-5" />
-                  Continue with Google
-                </button>
 
                 <p className="mt-4 text-center text-sm text-slate-600">
                   Already have an account?{' '}

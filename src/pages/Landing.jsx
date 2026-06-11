@@ -98,7 +98,7 @@ const TRUST_ITEMS = [
 
 const HERO_HIGHLIGHTS = [
   { label: '15 sports & training types', icon: Trophy },
-  { label: 'Verified coach profiles', icon: BadgeCheck },
+  { label: 'Reviews only from completed sessions', icon: BadgeCheck },
   { label: 'Stripe-protected checkout', icon: ShieldCheck },
 ];
 
@@ -222,7 +222,7 @@ function SportsGrid() {
       <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">15 sports &amp; training types</p>
-          <h2 id="sports-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">
+          <h2 id="sports-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             Explore by sport
           </h2>
         </div>
@@ -272,7 +272,7 @@ export default function Landing() {
                 <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">Multi-sport coaching marketplace</span>
               </div>
 
-              <h1 className="mt-7 font-display text-4xl font-bold leading-[1.03] tracking-tight text-white sm:text-6xl">
+              <h1 className="mt-7 font-display text-4xl font-extrabold leading-[1.03] tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
                 Find the right coach for your{' '}
                 <span className="bg-gradient-to-r from-sky-300 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
                   next level
@@ -285,6 +285,16 @@ export default function Landing() {
               </p>
 
               <HeroSearch />
+
+              <p className="mt-4">
+                <Link
+                  to="/create-account"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-slate-400 transition hover:text-slate-200 hover:underline"
+                >
+                  Create a free account
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </Link>
+              </p>
 
               <ul className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
                 {HERO_HIGHLIGHTS.map(({ label, icon: Icon }) => (
@@ -315,13 +325,44 @@ export default function Landing() {
 
       <SportsGrid />
 
+      {/* Trust — real platform mechanics only, on a rich dark band */}
+      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_85%_0%,#102a5c_0%,#081226_60%,#05080f_100%)] text-white" aria-labelledby="trust-heading">
+        <HeroPattern className="text-white/[0.06]" />
+        <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 lg:px-8">
+          <Reveal className="max-w-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-300">Trust &amp; safety</p>
+            <h2 id="trust-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-white sm:text-4xl">
+              Safeguards built into every booking
+            </h2>
+            <p className="mt-3 text-base leading-7 text-slate-300">
+              These are platform rules enforced on our servers — not marketing promises.
+            </p>
+          </Reveal>
+          <Stagger className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {TRUST_ITEMS.map(({ title, body, icon: Icon }) => (
+              <Stagger.Item key={title}>
+                <article className="flex h-full gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-6 shadow-lg backdrop-blur transition hover:bg-white/[0.09]">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/25">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3 className="font-display text-lg font-bold tracking-normal text-white">{title}</h3>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-300">{body}</p>
+                  </div>
+                </article>
+              </Stagger.Item>
+            ))}
+          </Stagger>
+        </div>
+      </section>
+
       {/* How it works */}
       <section className="border-y border-slate-200 bg-slate-50" aria-labelledby="how-heading">
         <div className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
           <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">How it works</p>
-              <h2 id="how-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">
+              <h2 id="how-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
                 Three steps to better training
               </h2>
             </div>
@@ -353,7 +394,7 @@ export default function Landing() {
       <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="audience-heading">
         <Reveal>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Built for everyone in training</p>
-          <h2 id="audience-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">
+          <h2 id="audience-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             One platform, four roles
           </h2>
         </Reveal>
@@ -378,37 +419,6 @@ export default function Landing() {
             </Stagger.Item>
           ))}
         </Stagger>
-      </section>
-
-      {/* Trust — real platform mechanics only, on a rich dark band */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_85%_0%,#102a5c_0%,#081226_60%,#05080f_100%)] text-white" aria-labelledby="trust-heading">
-        <HeroPattern className="text-white/[0.06]" />
-        <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 lg:px-8">
-          <Reveal className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-300">Trust &amp; safety</p>
-            <h2 id="trust-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-white sm:text-4xl">
-              Safeguards built into every booking
-            </h2>
-            <p className="mt-3 text-base leading-7 text-slate-300">
-              These are platform rules enforced on our servers — not marketing promises.
-            </p>
-          </Reveal>
-          <Stagger className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {TRUST_ITEMS.map(({ title, body, icon: Icon }) => (
-              <Stagger.Item key={title}>
-                <article className="flex h-full gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-6 shadow-lg backdrop-blur transition hover:bg-white/[0.09]">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/25">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <h3 className="font-display text-lg font-bold tracking-normal text-white">{title}</h3>
-                    <p className="mt-1.5 text-sm leading-6 text-slate-300">{body}</p>
-                  </div>
-                </article>
-              </Stagger.Item>
-            ))}
-          </Stagger>
-        </div>
       </section>
 
       <div className="pt-12">

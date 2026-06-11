@@ -125,6 +125,15 @@ function remainingCredits(credit) {
   return (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0);
 }
 
+// Whole dollars stay clean ($75); fractional amounts always show two
+// decimals ($75.50, never $75.5).
+function formatMoney(amount) {
+  const value = Number(amount) || 0;
+  return Number.isInteger(value)
+    ? value.toLocaleString('en-US')
+    : value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function Book() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
@@ -422,6 +431,11 @@ export default function Book() {
     : [];
 
   const sessionPrice = calcPrice(selectedPackage, duration);
+  // Total actually charged today (display-only — the server recomputes the
+  // charge in cents from pricing_packages).
+  const packageTotal = packagePriceCents(selectedPackage) != null
+    ? packagePriceCents(selectedPackage) / 100
+    : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null);
   // createStripeCheckout now verifies per-athlete legal consent (mirroring
   // booking), so the pay action is gated on BOTH the buyer's profile-level
   // packet AND — when buying for a SELECTED child — that child's athlete-scoped
@@ -465,7 +479,7 @@ export default function Book() {
           <div className="w-16 h-16 rounded-full bg-accent/15 flex items-center justify-center mx-auto mb-6">
             <Users className="w-8 h-8 text-accent" aria-hidden="true" />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight mb-4">ASK A PARENT OR GUARDIAN</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-4">Ask a parent or guardian</h1>
           <p className="text-muted-foreground text-sm leading-6 mb-6">
             Because you're under 18, sessions have to be booked by your parent or guardian from
             their own account. Ask them to sign in, link your athlete profile, and book for you.
@@ -594,7 +608,7 @@ export default function Book() {
             <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-8 h-8 text-accent" aria-hidden="true" />
             </div>
-            <h1 className="font-display text-3xl font-bold tracking-tight mb-4">SESSION BOOKED!</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-4">Session booked</h1>
             <p className="text-muted-foreground mb-2">
               Your session has been confirmed{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.
             </p>
@@ -640,7 +654,7 @@ export default function Book() {
         return (
           <div className="min-h-[80vh] py-12">
             <div className="max-w-3xl mx-auto px-4 sm:px-6">
-              <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SELECT YOUR COACH</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Select your coach</h2>
               <p className="text-muted-foreground text-sm mb-8">Choose the coach you want to train with.</p>
               {coaches.length === 0 ? (
                 <p className="text-muted-foreground text-sm">
@@ -661,7 +675,7 @@ export default function Book() {
       return (
         <div className="min-h-[80vh] py-12">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SCHEDULE YOUR SESSION</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Schedule your session</h2>
             <p className="text-muted-foreground text-sm mb-2">
               Pick a date and time{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.
               {tzAbbr ? ` Times are shown in the coach's timezone (${tzAbbr}).` : ''}
@@ -771,7 +785,7 @@ export default function Book() {
           <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-green-400" aria-hidden="true" />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight mb-4">PAYMENT CONFIRMED!</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-4">Payment confirmed</h1>
           <div className="bg-card border border-border rounded-lg p-4 mb-8">
             <p className="font-display text-lg font-bold tracking-wider mb-1">
               {confirmedCredit?.package_name || selectedPackage?.name}
@@ -862,9 +876,7 @@ export default function Book() {
     pkg: selectedPackage,
     duration,
     sessionPrice,
-    packageTotal: packagePriceCents(selectedPackage) != null
-      ? packagePriceCents(selectedPackage) / 100
-      : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null),
+    packageTotal,
     usingCredit: useExistingCredit,
     creditRemaining: existingCredit ? remainingCredits(existingCredit) : null,
     creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
@@ -886,8 +898,8 @@ export default function Book() {
           return (
             <div className="mb-12">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Step {displayIndex + 1} of {visibleSteps.length}</span>
-                <span className="text-xs font-display tracking-widest uppercase text-accent">{STEPS[step]}</span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Step {displayIndex + 1} of {visibleSteps.length}</span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{STEPS[step]}</span>
               </div>
               <div className="h-1 bg-secondary rounded-full overflow-hidden">
                 <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((displayIndex + 1) / visibleSteps.length) * 100}%` }} />
@@ -899,11 +911,24 @@ export default function Book() {
         {/* Step 0: Coach */}
         {step === 0 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">SELECT YOUR COACH</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-8">Select your coach</h2>
             {coaches.length === 0 ? (
-              <p className="text-muted-foreground">
-                {publicDataLoaded ? 'No coaches are accepting bookings right now.' : 'Loading coaches...'}
-              </p>
+              publicDataLoaded ? (
+                <p className="text-muted-foreground">No coaches are accepting bookings right now.</p>
+              ) : (
+                <div role="status" aria-label="Loading coaches" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="p-6 rounded-lg border border-border bg-card flex items-center gap-4 animate-pulse">
+                      <div className="w-12 h-12 rounded-full bg-secondary shrink-0" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-4 w-2/3 rounded bg-secondary" />
+                        <div className="h-3 w-1/2 rounded bg-secondary" />
+                      </div>
+                    </div>
+                  ))}
+                  <span className="sr-only">Loading coaches...</span>
+                </div>
+              )
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {coaches.map((c) => (
@@ -917,12 +942,12 @@ export default function Book() {
         {/* Step 1: Package */}
         {step === 1 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SELECT A PACKAGE</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Select a package</h2>
             <p className="text-muted-foreground text-sm mb-8">Multi-session packages give you credits to schedule sessions whenever you're ready.</p>
 
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                <p className="text-primary font-display tracking-wider text-sm uppercase mb-1">You have existing sessions!</p>
+                <p className="text-sm font-bold text-primary mb-1">You have existing sessions</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   <strong>{remainingCredits(existingCredit)}</strong> session(s) remaining on <strong>{existingCredit.package_name}</strong>
                   {existingCredit.session_duration_minutes ? ` · ${existingCredit.session_duration_minutes / 60} hr each` : ''}.
@@ -988,7 +1013,7 @@ export default function Book() {
                       </span>
                     )}
                     <Package className={`w-5 h-5 mb-3 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                    <p className="font-display text-xl font-bold tracking-wider">{(pkg.name || '').toUpperCase()}</p>
+                    <p className="font-display text-xl font-bold tracking-wider">{pkg.name}</p>
                     <p className="text-2xl font-display font-bold text-accent mt-1">{totalLabel}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : '1 session'}
@@ -1015,7 +1040,7 @@ export default function Book() {
         {/* Step 2: Duration */}
         {step === 2 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">SESSION DURATION</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Session duration</h2>
             {isSelfContained(selectedPackage) ? (
               <>
                 <p className="text-muted-foreground text-sm mb-8">
@@ -1064,7 +1089,7 @@ export default function Book() {
         {/* Step 3: Preferences */}
         {step === 3 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-2">AVAILABILITY & NOTES</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Availability & notes</h2>
             <p className="text-muted-foreground text-sm mb-8">
               Choose a specific scheduling path or share a flexible window the coach can work with.
             </p>
@@ -1084,7 +1109,7 @@ export default function Book() {
                       : 'border-border bg-card text-muted-foreground hover:border-accent/30'
                   }`}
                 >
-                  <p className="font-display text-lg font-bold tracking-wider uppercase">{title}</p>
+                  <p className="text-lg font-bold tracking-[-0.01em]">{title}</p>
                   <p className="mt-2 text-sm leading-6">{body}</p>
                 </button>
               ))}
@@ -1195,7 +1220,7 @@ export default function Book() {
 
             {user && !user.profile_setup_complete && (
               <div className="mt-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
-                <p className="text-accent font-display tracking-wider uppercase text-sm mb-1">Profile Setup Required</p>
+                <p className="text-sm font-bold text-accent mb-1">Profile setup required</p>
                 <p className="text-xs text-muted-foreground mb-3">Complete your profile before proceeding to checkout.</p>
                 <Button
                   onClick={() => setShowProfileGate(true)}
@@ -1223,7 +1248,7 @@ export default function Book() {
         {/* Step 4: Checkout */}
         {step === 4 && (
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight mb-8">CHECKOUT</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-8">Checkout</h2>
 
             {/* Order Summary */}
             <div className="bg-card border border-border rounded-lg p-6 mb-6">
@@ -1246,20 +1271,30 @@ export default function Book() {
                 ))}
               </div>
               <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
-                <span className="font-display text-lg font-bold tracking-wider">PER SESSION TOTAL</span>
-                <span className="font-display text-2xl font-bold text-accent">${sessionPrice}</span>
+                <span className="text-sm font-semibold">Total charged today</span>
+                <span className="proof-number text-3xl sm:text-4xl text-foreground">
+                  {useExistingCredit ? '$0' : (packageTotal != null ? `$${formatMoney(packageTotal)}` : '—')}
+                </span>
               </div>
-              {duration?.discount > 0 && (
-                <p className="text-xs text-green-400 mt-2">{Math.round(duration.discount * 100)}% multi-hour discount applied</p>
-              )}
-              {selectedPackage?.sessions > 1 && sessionPrice && (
+              {useExistingCredit ? (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Package total: ${sessionPrice * selectedPackage.sessions} for {selectedPackage.sessions} sessions
+                  Covered by your existing credits{existingCredit ? ` — ${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'} remaining on ${existingCredit.package_name || 'your package'}` : ''}.
                 </p>
+              ) : (
+                <>
+                  {selectedPackage?.sessions > 1 && sessionPrice != null && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ${sessionPrice} per session × {selectedPackage.sessions} sessions
+                    </p>
+                  )}
+                  {duration?.discount > 0 && (
+                    <p className="text-xs text-green-400 mt-2">{Math.round(duration.discount * 100)}% multi-hour discount applied</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Final pricing is computed securely at checkout from the platform package catalog.
+                  </p>
+                </>
               )}
-              <p className="text-xs text-muted-foreground mt-2">
-                Final pricing is computed securely at checkout from the platform package catalog.
-              </p>
             </div>
 
             {user && (
@@ -1283,7 +1318,7 @@ export default function Book() {
               <div className="bg-card border border-border rounded-lg p-6 mb-6">
                 <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Pay <strong className="text-foreground">${sessionPrice * (selectedPackage?.sessions || 1)}</strong> securely through Stripe Checkout.
+                  Pay <strong className="proof-number text-foreground">{packageTotal != null ? `$${formatMoney(packageTotal)}` : ''}</strong> securely through Stripe Checkout.
                 </p>
                 {!user ? (
                   <div className="text-center py-4">
@@ -1328,6 +1363,12 @@ export default function Book() {
                     </div>
                   </div>
                 )}
+                <div className="mt-4 border-t border-border pt-4 space-y-2">
+                  <p className="text-xs text-muted-foreground leading-5">{CANCEL_POLICY_COPY}</p>
+                  <p className="text-xs text-muted-foreground leading-5">
+                    Payments are processed by Stripe — your card details never touch LevelCoach servers.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -1413,7 +1454,7 @@ function CoachPickButton({ coach, selected, onSelect }) {
       <div className="min-w-0">
         <p className="font-display text-lg font-bold tracking-wider flex items-center gap-2">
           <span className="truncate">{model.displayName}</span>
-          {model.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Verified" />}
+          {model.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Email verified" />}
         </p>
         <p className="text-xs text-accent font-display tracking-wider uppercase truncate">{model.primarySport}</p>
         <p className="text-xs text-muted-foreground truncate">{model.locationLabel}</p>
@@ -1499,7 +1540,7 @@ function LoggedOutBookIntro({
                     {model.verified && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
                         <BadgeCheck className="h-3 w-3" />
-                        Verified
+                        Email verified
                       </span>
                     )}
                   </div>
@@ -1612,6 +1653,11 @@ function LoggedOutBookIntro({
             <p className="mt-1 text-xs leading-5 text-slate-600">
               This keeps athlete details, payment, reminders, and coach messages inside LevelCoach.
             </p>
+            {selectedDate && selectedTime && (
+              <p className="mt-2 text-xs font-semibold leading-5 text-blue-700">
+                Your selected time is saved — it will be here after you sign in.
+              </p>
+            )}
           </div>
 
           <Button

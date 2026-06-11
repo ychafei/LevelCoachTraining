@@ -187,12 +187,25 @@ export function publicCoachDisplay(coach, options = {}) {
     'academy_name',
   ]);
   const primarySport = inferSport(normalized, specializations);
-  // Server-set price hint (integer cents). No client-side fee math.
+  // Server-set price hint (integer cents). No client-side fee math. The hint
+  // is the MINIMUM per-session price across the coach's active packages
+  // (getPublicCoaches), so the label always carries a "From" qualifier.
   const priceHintCents = Number(normalized?.price_hint_cents);
-  const minPackagePrice = Array.isArray(options.packages) && options.packages.length
-    ? Math.min(...options.packages.map((pkg) => Number(pkg.price) / (Number(pkg.sessions) || 1)).filter(Number.isFinite))
+  // Fallback only over THIS coach's packages (callers often pass the
+  // platform-wide visible list), else platform-default templates (no
+  // coach_id) — mirroring what Book.jsx actually offers. Never another
+  // coach's pricing.
+  const ownPackages = Array.isArray(options.packages)
+    ? options.packages.filter((pkg) => pkg.coach_id === normalized.id)
+    : [];
+  const defaultPackages = Array.isArray(options.packages)
+    ? options.packages.filter((pkg) => !pkg.coach_id)
+    : [];
+  const packagePool = ownPackages.length ? ownPackages : defaultPackages;
+  const minPackagePrice = packagePool.length
+    ? Math.min(...packagePool.map((pkg) => Number(pkg.price) / (Number(pkg.sessions) || 1)).filter(Number.isFinite))
     : null;
-  const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? money(priceHintCents / 100) : '')
+  const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? `From ${money(priceHintCents / 100)}` : '')
     || (Number.isFinite(minPackagePrice) ? `From $${Math.round(minPackagePrice)}` : '');
   // Rating aggregates are server-maintained (reviews function). Never derived client-side.
   const rating = Number(normalized?.rating_avg);
@@ -228,9 +241,11 @@ export function publicCoachDisplay(coach, options = {}) {
     organization,
     headline: compact(normalized?.quote) || `Personal coaching for athletes who want structured, focused training.`,
     bio: compact(normalized?.bio) || '',
-    // Server-set signals only: coachSelf confirmEmailCode sets email_verified_at,
-    // coachSelf publish sets published. Nothing is fabricated client-side.
-    verified: !!(normalized?.email_verified_at || normalized?.published === true),
+    // Server-set signal only: coachSelf confirmEmailCode sets email_verified_at.
+    // `published` is NOT a verification signal — every visible coach is published,
+    // so treating it as one would make the badge meaningless. Label this as
+    // "Email verified", never bare "Verified".
+    verified: !!normalized?.email_verified_at,
     contactVerified: !!normalized?.email_verified_at,
     nextAvailable: nextAvailabilityLabel(normalized),
     availability: availabilitySummary(normalized),

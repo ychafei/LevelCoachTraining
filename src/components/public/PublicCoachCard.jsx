@@ -84,7 +84,7 @@ export default function PublicCoachCard({
               {model.verified && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
                   <BadgeCheck className="h-3 w-3" />
-                  Verified
+                  Email verified
                 </span>
               )}
               {coach?.is_demo && (
@@ -168,7 +168,7 @@ export default function PublicCoachCard({
               {model.verified ? (
                 <p className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
                   <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                  Verified profile
+                  Email verified
                 </p>
               ) : (
                 <p className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
@@ -181,6 +181,16 @@ export default function PublicCoachCard({
                 <CalendarDays className="h-3.5 w-3.5" />
                 {model.nextAvailable || 'Request times'}
               </p>
+            </div>
+            <div className="text-right lg:mt-3 lg:text-left">
+              {model.rateLabel ? (
+                <p>
+                  <span className="proof-number text-2xl text-slate-950">{model.rateLabel}</span>
+                  <span className="ml-1 text-xs font-semibold text-slate-500">/ session</span>
+                </p>
+              ) : (
+                <p className="text-xs font-semibold text-slate-500">Rates shown at booking</p>
+              )}
             </div>
           </div>
 
