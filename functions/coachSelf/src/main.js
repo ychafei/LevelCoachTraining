@@ -126,6 +126,30 @@ function validTimezone(value) {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { return undefined; }
 }
 
+// Update the coach document, tolerating a live `coaches` collection that is
+// missing newer attributes (the collection hit Appwrite's size limit before
+// the marketplace fields could be added). On an "Unknown attribute" error we
+// drop that key and retry, so the portal saves what the schema supports
+// instead of hard-failing. Returns the updated doc (possibly with some fields
+// skipped) or null when nothing could be written.
+async function updateCoach(databases, coachId, updates) {
+  const payload = { ...updates };
+  for (let i = 0; i < 20; i += 1) {
+    if (Object.keys(payload).length === 0) return null;
+    try {
+      return await databases.updateDocument(DB_ID, 'coaches', coachId, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
 // Whitelisted self-service profile fields. Fee/verification/stripe/active/
 // published/rating/user_id fields are intentionally absent.
 const PROFILE_FIELDS = {
@@ -165,7 +189,7 @@ async function updateProfile(databases, coach, payload) {
   if (Object.keys(updates).length === 0) {
     return { status: 400, body: { error: 'No updatable fields provided.' } };
   }
-  const updated = await databases.updateDocument(DB_ID, 'coaches', coach.$id, updates);
+  const updated = await updateCoach(databases, coach.$id, updates);
   return { status: 200, body: { coach: updated } };
 }
 
@@ -179,7 +203,7 @@ async function setAvailability(databases, coach, payload) {
   }
   const serialized = JSON.stringify(availability);
   if (serialized.length > 20000) return { status: 400, body: { error: 'availability is too large.' } };
-  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { availability: serialized });
+  await updateCoach(databases, coach.$id, { availability: serialized });
   return { status: 200, body: { ok: true } };
 }
 
@@ -313,7 +337,7 @@ async function setBookingRules(databases, coach, payload) {
     return { status: 400, body: { error: 'min_notice_hours (0-168), buffer_minutes (0-120), and max_advance_days (1-365) are required integers.' } };
   }
   const rules = { min_notice_hours: minNotice, buffer_minutes: buffer, max_advance_days: maxAdvance };
-  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { booking_rules: JSON.stringify(rules) });
+  await updateCoach(databases, coach.$id, { booking_rules: JSON.stringify(rules) });
   return { status: 200, body: { ok: true, booking_rules: rules } };
 }
 
@@ -494,7 +518,7 @@ async function confirmEmailCode(databases, coach, payload) {
   await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, { status: 'verified' });
   const updates = { email_verified_at: new Date().toISOString() };
   if (request.email && request.email !== coach.email) updates.email = request.email;
-  await databases.updateDocument(DB_ID, 'coaches', coach.$id, updates);
+  await updateCoach(databases, coach.$id, updates);
   return { status: 200, body: { ok: true, email_verified_at: updates.email_verified_at } };
 }
 
@@ -584,7 +608,7 @@ async function publish(databases, profile, coach) {
   if (missing.length > 0) {
     return { status: 400, body: { error: 'Publish requirements not met.', missing } };
   }
-  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { published: true, is_active: true });
+  await updateCoach(databases, coach.$id, { published: true, is_active: true });
   await writeAudit(databases, {
     actor_email: profile.email || '',
     action: 'coach.publish',
@@ -597,7 +621,7 @@ async function publish(databases, profile, coach) {
 }
 
 async function unpublish(databases, profile, coach) {
-  await databases.updateDocument(DB_ID, 'coaches', coach.$id, { published: false });
+  await updateCoach(databases, coach.$id, { published: false, is_active: false });
   await writeAudit(databases, {
     actor_email: profile.email || '',
     action: 'coach.unpublish',
