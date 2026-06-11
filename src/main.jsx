@@ -10,7 +10,14 @@ const rootEl = document.getElementById('root')
 // discarding and repainting it — the first paint IS the LCP. Plain SPA
 // loads (empty #root) fall back to a normal client render.
 if (rootEl.firstElementChild) {
-  ReactDOM.hydrateRoot(rootEl, <App />)
+  ReactDOM.hydrateRoot(rootEl, <App />, {
+    // Hydration mismatches recover by client-rendering; surface them as a
+    // single warning with the component stack so regressions stay visible
+    // without spraying uncaught errors into the console.
+    onRecoverableError(error, errorInfo) {
+      console.warn('[hydration]', error?.message, errorInfo?.componentStack?.split('\n').slice(0, 5).join(' '))
+    },
+  })
 } else {
   ReactDOM.createRoot(rootEl).render(<App />)
 }

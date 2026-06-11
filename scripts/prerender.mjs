@@ -107,6 +107,11 @@ try {
   await waitForServer();
   const browser = await chromium.launch({ executablePath, headless: true });
   const page = await browser.newPage();
+  // Mark prerender sessions: client-only embellishments (the 3D hero orb)
+  // must not mount into snapshots, or hydration mismatches against the
+  // poster-only initial client render and React logs recoverable errors.
+  // eslint-disable-next-line no-undef -- runs in the BROWSER, not node
+  await page.addInitScript(() => { window.__LC_PRERENDER = true; });
 
   let written = 0;
   for (const route of ROUTES) {

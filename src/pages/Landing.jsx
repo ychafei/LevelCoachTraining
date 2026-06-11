@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -232,76 +232,87 @@ function KineticUnderline() {
   );
 }
 
-// Signature moment: the sport icon system arranged as an interactive
-// constellation over an abstract training-field diagram. Deterministic
-// positions (prerender-stable), idle drift, amber inversion on hover. Each
-// node deep-links to its sport landing page.
-const CONSTELLATION = [
-  ['soccer', 44, 4, true, 8],
-  ['football', 10, 12, false, 9],
-  ['basketball', 76, 13, true, 10],
-  ['golf', 27, 30, false, 11],
-  ['lacrosse', 60, 32, false, 9],
-  ['baseball', 5, 44, false, 10],
-  ['tennis', 87, 42, true, 8],
-  ['track_field', 22, 62, true, 11],
-  ['volleyball', 68, 62, false, 9],
-  ['strength_conditioning', 8, 82, false, 8],
-  ['swimming', 46, 84, true, 10],
-  ['hockey', 86, 80, false, 11],
-];
+// Signature 3D moment (React Three Fiber, lazy): an abstract globe of
+// points with amber active nodes and arcing connections — the marketplace as
+// a living network. It mounts AFTER first paint, only on capable pointer
+// devices, over a static poster: never part of LCP, removable with zero
+// layout shift, and skipped entirely for reduced-motion / save-data / weak
+// hardware.
+const HeroOrb = React.lazy(() => import('@/features/marketing/HeroOrb'));
 
-function IconConstellation() {
-  const reduce = useReducedMotion();
+// Static poster: concentric dotted rings echoing the orb. This is what
+// reduced-motion users, weak devices, crawlers, and the pre-mount frame see.
+function OrbPoster() {
   return (
-    <div className="relative mx-auto aspect-[5/6] w-full max-w-[460px]" aria-label="Browse sports">
-      {/* Abstract training-field line work */}
-      <svg viewBox="0 0 400 480" className="absolute inset-0 h-full w-full text-white/[0.13]" fill="none" stroke="currentColor" aria-hidden="true">
-        <rect x="24" y="8" width="352" height="464" rx="18" strokeWidth="1.5" />
-        <line x1="24" y1="240" x2="376" y2="240" strokeWidth="1.5" />
-        <circle cx="200" cy="240" r="58" strokeWidth="1.5" />
-        <circle cx="200" cy="240" r="3" fill="currentColor" stroke="none" />
-        <rect x="120" y="8" width="160" height="62" strokeWidth="1.5" />
-        <rect x="120" y="410" width="160" height="62" strokeWidth="1.5" />
-        <path d="M156 70 A 52 52 0 0 0 244 70" strokeWidth="1.5" />
-        <path d="M156 410 A 52 52 0 0 1 244 410" strokeWidth="1.5" />
-      </svg>
+    <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full" aria-hidden="true">
+      <defs>
+        <radialGradient id="orb-glow" cx="50%" cy="46%" r="55%">
+          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.28" />
+          <stop offset="55%" stopColor="#13357a" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="#0b2350" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx="200" cy="196" r="170" fill="url(#orb-glow)" />
+      {[150, 118, 84].map((r, ring) => (
+        <circle
+          key={r}
+          cx="200"
+          cy="196"
+          r={r}
+          fill="none"
+          stroke="#9db8e8"
+          strokeOpacity={0.32 - ring * 0.07}
+          strokeWidth="1.6"
+          strokeDasharray="1.5 9"
+          strokeLinecap="round"
+        />
+      ))}
+      <ellipse cx="200" cy="196" rx="150" ry="52" fill="none" stroke="#3b82f6" strokeOpacity="0.3" strokeWidth="1.4" strokeDasharray="1.5 8" />
+      {[[200, 46], [328, 144], [96, 260], [252, 320], [120, 110]].map(([cx, cy]) => (
+        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="5" fill="#f5a623" />
+      ))}
+    </svg>
+  );
+}
 
-      {CONSTELLATION.map(([key, left, top, big, drift], index) => {
-        const sport = SPORTS_CATALOG.find((item) => item.sport_key === key);
-        if (!sport) return null;
-        const Icon = sportIcon(sport.icon);
-        // The soccer node is the amber focal point; everything else inverts
-        // to amber on hover. Real ball/equipment glyphs do the talking.
-        const focal = key === 'soccer';
-        const node = (
-          <Link
-            to={`/sports/${key}`}
-            aria-label={`${sport.display_name} coaching`}
-            className={`group grid place-items-center rounded-2xl border shadow-lg shadow-blue-950/40 transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-proof ${
-              focal
-                ? 'border-transparent bg-proof text-slate-950'
-                : 'border-white/15 bg-white/[0.09] text-white hover:border-transparent hover:bg-proof hover:text-slate-950'
-            } ${big ? 'h-[4.25rem] w-[4.25rem]' : 'h-[3.25rem] w-[3.25rem]'}`}
-          >
-            <Icon
-              className={`transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6 ${big ? 'h-9 w-9' : 'h-6 w-6'}`}
-              aria-hidden="true"
-            />
-          </Link>
-        );
-        return (
-          <motion.div
-            key={key}
-            className="absolute"
-            style={{ left: `${left}%`, top: `${top}%` }}
-            animate={reduce ? undefined : { y: [0, index % 2 ? -7 : -5, 0] }}
-            transition={reduce ? undefined : { duration: drift, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            {node}
-          </motion.div>
-        );
-      })}
+function HeroVisual() {
+  const reduce = useReducedMotion();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    // Never mount into prerender snapshots — the static poster is the
+    // crawler/first-paint representation, and hydration must match it.
+    if (window.__LC_PRERENDER) return undefined;
+    // The orb column only displays at lg+; mounting it below that would make
+    // phones download and run three.js for an invisible canvas. Hidden ≠ free.
+    if (!window.matchMedia('(min-width: 1024px)').matches) return undefined;
+    if (typeof navigator !== 'undefined') {
+      if (navigator.connection?.saveData) return undefined;
+      if (Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory < 4) return undefined;
+    }
+    // WebGL must exist or R3F throws — probe before committing to the mount.
+    const probe = document.createElement('canvas');
+    if (!probe.getContext('webgl2') && !probe.getContext('webgl')) return undefined;
+    const start = () => setReady(true);
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(start, { timeout: 2500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(start, 1200);
+    return () => clearTimeout(id);
+  }, [reduce]);
+
+  return (
+    <div className="relative mx-auto aspect-square w-full max-w-[520px]">
+      <OrbPoster />
+      {ready && (
+        <div className="absolute inset-0 animate-[rise-fade_0.8s_ease-out]">
+          <React.Suspense fallback={null}>
+            <HeroOrb />
+          </React.Suspense>
+        </div>
+      )}
     </div>
   );
 }
@@ -429,7 +440,7 @@ export default function Landing() {
             </Reveal>
 
             <Reveal as="div" y={24} delay={0.08} duration={0.5} className="hidden lg:block">
-              <IconConstellation />
+              <HeroVisual />
             </Reveal>
           </div>
         </div>

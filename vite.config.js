@@ -19,6 +19,7 @@ export default defineConfig({
           // recharts onto every page).
           if (id.includes('clsx') || id.includes('tailwind-merge') || id.includes('class-variance-authority')) return 'react';
           if (id.includes('framer-motion')) return 'motion';
+          if (id.includes('node_modules/three') || id.includes('@react-three')) return 'three';
           if (id.includes('node_modules/appwrite')) return 'appwrite';
           if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor') || id.includes('react-smooth')) return 'charts';
           if (id.includes('@hello-pangea')) return 'dnd';
