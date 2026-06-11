@@ -325,6 +325,27 @@ export default function AdminCoaches() {
     }
   };
 
+  // Coach rows no longer carry PII (email/phone live in coach_private). Open the
+  // dialog immediately, then merge the private contact fields in once the
+  // admin-gated fetch resolves. If it fails, leave those fields blank.
+  const openEdit = async (coach) => {
+    setEditing({ ...coach });
+    setOpen(true);
+    try {
+      const contact = await coachRepo.adminGetCoachContact(coach.id);
+      setEditing(prev => (prev && prev.id === coach.id
+        ? {
+            ...prev,
+            email: contact?.email || '',
+            phone: contact?.phone || '',
+            email_verified_at: contact?.email_verified_at || null,
+          }
+        : prev));
+    } catch (err) {
+      console.warn('Coach contact load failed', err?.message || err);
+    }
+  };
+
   if (!isAdmin) return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
 
   return (
@@ -508,7 +529,7 @@ export default function AdminCoaches() {
                     </Button>
                   );
                 })()}
-                <Button size="sm" variant="ghost" onClick={() => { setEditing({...coach}); setOpen(true); }}>
+                <Button size="sm" variant="ghost" onClick={() => openEdit(coach)}>
                   <Pencil className="w-4 h-4" />
                 </Button>
                 <Button

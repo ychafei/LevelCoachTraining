@@ -62,6 +62,31 @@ async function coachForAccount(databases, accountId) {
   return rows.documents[0] || null;
 }
 
+// --- coach_private (server-only PII: email / email_verified_at / phone) --------
+
+// Fetch the private PII row for a coach (keyed by coach_id == coach.$id), or
+// null when none exists yet.
+async function getCoachPrivate(databases, coachId) {
+  const rows = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coachId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+// Upsert the private PII row: update the existing row, or create one. Only the
+// provided fields are written.
+async function upsertCoachPrivate(databases, coachId, fields) {
+  const existing = await getCoachPrivate(databases, coachId);
+  if (existing) {
+    return databases.updateDocument(DB_ID, 'coach_private', existing.$id, { ...fields });
+  }
+  return databases.createDocument(DB_ID, 'coach_private', ID.unique(), {
+    coach_id: coachId,
+    ...fields,
+  });
+}
+
 async function writeAudit(databases, entry) {
   const data = { ...entry };
   if (!['admin', 'super_admin'].includes(data.actor_role)) delete data.actor_role;
@@ -178,6 +203,26 @@ const PROFILE_FIELDS = {
 
 // --- Action handlers ----------------------------------------------------------
 
+// Owner-only: return the caller's own coach, with email / email_verified_at /
+// phone resolved private-first (coach_private), falling back to any legacy
+// value still on the coach doc during the transition. Never returns another
+// coach's private data — `coach` is already resolved to the caller.
+async function getSelf(databases, coach) {
+  const priv = await getCoachPrivate(databases, coach.$id);
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      coach: {
+        ...coach,
+        email: priv?.email ?? coach.email ?? '',
+        email_verified_at: priv?.email_verified_at ?? coach.email_verified_at ?? null,
+        phone: priv?.phone ?? coach.phone ?? '',
+      },
+    },
+  };
+}
+
 async function updateProfile(databases, coach, payload) {
   const updates = {};
   for (const [key, validate] of Object.entries(PROFILE_FIELDS)) {
@@ -189,7 +234,17 @@ async function updateProfile(databases, coach, payload) {
   if (Object.keys(updates).length === 0) {
     return { status: 400, body: { error: 'No updatable fields provided.' } };
   }
-  const updated = await updateCoach(databases, coach.$id, updates);
+  // phone is PII: it lives in coach_private, not on the public-ish coach doc.
+  let phonePatched;
+  if ('phone' in updates) {
+    phonePatched = updates.phone;
+    delete updates.phone;
+    await upsertCoachPrivate(databases, coach.$id, { phone: phonePatched });
+  }
+  const updated = Object.keys(updates).length
+    ? await updateCoach(databases, coach.$id, updates)
+    : coach;
+  if (phonePatched !== undefined) updated.phone = phonePatched;
   return { status: 200, body: { coach: updated } };
 }
 
@@ -441,7 +496,9 @@ async function hasActivePackage(databases, coach) {
 }
 
 async function requestEmailCode(databases, coach, payload, error) {
-  const target = String(payload.email || coach.email || '').trim().toLowerCase();
+  const priv = await getCoachPrivate(databases, coach.$id);
+  const currentEmail = priv?.email ?? coach.email ?? '';
+  const target = String(payload.email || currentEmail || '').trim().toLowerCase();
   if (!EMAIL_RE.test(target) || target.length > 254) {
     return { status: 400, body: { error: 'A valid email address is required.' } };
   }
@@ -516,10 +573,14 @@ async function confirmEmailCode(databases, coach, payload) {
   }
 
   await databases.updateDocument(DB_ID, 'coach_link_requests', request.$id, { status: 'verified' });
-  const updates = { email_verified_at: new Date().toISOString() };
-  if (request.email && request.email !== coach.email) updates.email = request.email;
-  await updateCoach(databases, coach.$id, updates);
-  return { status: 200, body: { ok: true, email_verified_at: updates.email_verified_at } };
+  // PII (email / email_verified_at) lives in coach_private now — never the
+  // coaches doc. Always persist the verified email so the private row is the
+  // source of truth even if the coach doc still holds a legacy value.
+  const verifiedAt = new Date().toISOString();
+  const privateFields = { email_verified_at: verifiedAt };
+  if (request.email) privateFields.email = request.email;
+  await upsertCoachPrivate(databases, coach.$id, privateFields);
+  return { status: 200, body: { ok: true, email_verified_at: verifiedAt } };
 }
 
 // --- Publish gate (ARCHITECTURE.md section 8) ----------------------------------
@@ -605,9 +666,13 @@ async function hasSport(databases, coach) {
 
 async function publish(databases, profile, coach) {
   const missing = [];
+  // email_verified_at lives in coach_private now; fall back to the coach doc
+  // for any coach not yet migrated.
+  const priv = await getCoachPrivate(databases, coach.$id);
+  const emailVerifiedAt = priv?.email_verified_at ?? coach.email_verified_at ?? null;
   if (!(await coachLegalPacketComplete(databases, profile, coach))) missing.push('legal_packet');
   if (!(await connectReady(databases, coach))) missing.push('stripe_connect');
-  if (!coach.email_verified_at) missing.push('email_verification');
+  if (!emailVerifiedAt) missing.push('email_verification');
   if (String(coach.bio || '').trim().length < 80) missing.push('bio');
   if (!String(coach.photo_url || '').trim()) missing.push('photo');
   if (!(await hasSport(databases, coach))) missing.push('sport');
@@ -664,6 +729,9 @@ export default async ({ req, res, error }) => {
     const payload = body(req);
     let result;
     switch (payload.action) {
+      case 'getSelf':
+        result = await getSelf(databases, coach);
+        break;
       case 'updateProfile':
         result = await updateProfile(databases, coach, payload);
         break;

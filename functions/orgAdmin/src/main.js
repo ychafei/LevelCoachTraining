@@ -319,9 +319,14 @@ async function inviteCoach(databases, profile, payload, error) {
       'Organization invitation',
       `${org?.name || 'An organization'} invited you to join as a coach.`);
   }
-  if (coach.email) {
+  // Coach email is PII held in the server-only coach_private collection.
+  const coachPriv = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coach.$id), Query.limit(1),
+  ]).then((r) => r.documents[0]).catch(() => null);
+  const coachInviteEmail = coachPriv?.email || coach.email;
+  if (coachInviteEmail) {
     await sendEmail({
-      to: coach.email,
+      to: coachInviteEmail,
       subject: `LevelCoach Training - ${org?.name || 'An organization'} invited you`,
       html: `
         <p>${org?.name || 'An organization'} invited you to join their coach roster on LevelCoach Training.</p>

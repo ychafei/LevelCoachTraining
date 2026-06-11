@@ -178,6 +178,22 @@ async function createCoachResilient(databases, data) {
   throw new Error('Could not create coach record.');
 }
 
+// Upsert the server-only coach_private PII row (email / email_verified_at /
+// phone) keyed by coach_id == coach.$id. Update the existing row, or create one.
+async function upsertCoachPrivate(databases, coachId, fields) {
+  const existing = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coachId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  if (existing.documents[0]) {
+    return databases.updateDocument(DB_ID, 'coach_private', existing.documents[0].$id, { ...fields });
+  }
+  return databases.createDocument(DB_ID, 'coach_private', ID.unique(), {
+    coach_id: coachId,
+    ...fields,
+  });
+}
+
 async function linkableProfile(databases, users, email) {
   const rows = await databases.listDocuments(DB_ID, 'profiles', [
     Query.equal('email', email),
@@ -233,16 +249,25 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
   }
 
   // Approve: create the coach record (unpublished, inactive until onboarding).
+  // Email/phone are PII and live in coach_private now — not on the coach doc.
   const profile = await linkableProfile(databases, users, application.email);
   const coach = await createCoachResilient(databases, {
     first_name: application.first_name,
     last_name: application.last_name,
-    email: application.email,
-    phone: application.phone || '',
     ...(application.service_county ? { service_counties: [String(application.service_county).slice(0, 100)] } : {}),
     is_active: false,
     published: false,
     ...(profile ? { user_id: profile.account_id } : {}),
+  });
+
+  // Stash the coach's PII in the server-only coach_private collection. A fresh
+  // approval has no verified email yet (email_verified_at: null).
+  await upsertCoachPrivate(databases, coach.$id, {
+    email: application.email,
+    phone: application.phone || '',
+    email_verified_at: null,
+  }).catch((err) => {
+    error?.(`approve: failed to write coach_private: ${err?.message || err}`);
   });
 
   if (profile) {

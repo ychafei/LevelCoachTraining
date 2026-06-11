@@ -620,8 +620,13 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       <p>You can manage sessions from your LevelCoach Training dashboard.</p>
     `,
   }, error);
-  await sendEmail({
-    to: coach.email,
+  // Coach email is PII held in the server-only coach_private collection.
+  const coachPriv = await db.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coach.$id), Query.limit(1),
+  ]).then((r) => r.documents[0]).catch(() => null);
+  const coachNotifyEmail = coachPriv?.email || coach.email;
+  if (coachNotifyEmail) await sendEmail({
+    to: coachNotifyEmail,
     subject,
     html: `
       <p>Hi ${escapeHtml(coach.first_name || 'Coach')},</p>

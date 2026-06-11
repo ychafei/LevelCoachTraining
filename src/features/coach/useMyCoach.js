@@ -23,13 +23,20 @@ export function useMyCoach() {
     setLoading(true);
     setError(null);
     try {
-      let row = null;
-      if (accountId) {
-        const rows = await coachRepo.filter({ user_id: accountId }).catch(() => []);
-        row = rows[0] || null;
-      }
-      if (!row && coachId) {
-        row = await coachRepo.get(coachId).catch(() => null);
+      // Owner-only read first — returns the coach merged with their private
+      // contact fields (email / email_verified_at / phone) that direct reads
+      // no longer expose.
+      let row = await coachRepo.getSelf().catch(() => null);
+      // Fall back to the direct-read path if getSelf failed or found nothing,
+      // so the portal keeps working without the merged contact fields.
+      if (!row) {
+        if (accountId) {
+          const rows = await coachRepo.filter({ user_id: accountId }).catch(() => []);
+          row = rows[0] || null;
+        }
+        if (!row && coachId) {
+          row = await coachRepo.get(coachId).catch(() => null);
+        }
       }
       setCoach(row);
       return row;

@@ -121,12 +121,16 @@ function Topbar({ mobileOpen, setMobileOpen }) {
     let cancelled = false;
     (async () => {
       try {
-        let row = null;
-        if (accountId) {
-          const rows = await coachRepo.filter({ user_id: accountId }).catch(() => []);
-          row = rows[0] || null;
+        // Owner-only read first (coach merged with private contact fields);
+        // fall back to the direct read so the topbar still resolves a photo.
+        let row = await coachRepo.getSelf().catch(() => null);
+        if (!row) {
+          if (accountId) {
+            const rows = await coachRepo.filter({ user_id: accountId }).catch(() => []);
+            row = rows[0] || null;
+          }
+          if (!row && coachId) row = await coachRepo.get(coachId).catch(() => null);
         }
-        if (!row && coachId) row = await coachRepo.get(coachId).catch(() => null);
         if (!cancelled) setCoachProfile(row);
       } catch (err) {
         console.warn('Coach topbar profile load failed', err?.message || err);

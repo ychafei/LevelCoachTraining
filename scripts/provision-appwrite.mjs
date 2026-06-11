@@ -90,6 +90,7 @@ const PUBLIC_READ_ADMIN_WRITE = [
   Permission.update(ADMIN),
   Permission.delete(ADMIN),
 ];
+const SERVER_ONLY             = []; // no client perms; writes via functions (API key)
 
 // Bucket presets. Private buckets carry NO bucket-level user permissions —
 // files are created server-side (or with explicit per-file permissions).
@@ -337,9 +338,8 @@ async function provisionCoaches() {
   await ensureCollection('coaches', 'Coaches', USERS_READ_ONLY, true);
   await attrString('coaches', 'first_name', 100, true);
   await attrString('coaches', 'last_name',  100, true);
-  await attrEmail('coaches',  'email');
-  await attrDatetime('coaches', 'email_verified_at');
-  await attrString('coaches', 'phone', 30);
+  // PII (email / email_verified_at / phone) lives in the server-only
+  // coach_private collection, NOT here — coaches is read(users). SEC-01.
   // Deprecated enum generalized: NEW deployments get an optional free-form
   // string; existing deployments keep the legacy enum attribute untouched.
   await attrString('coaches', 'county', 80);
@@ -384,6 +384,17 @@ async function provisionCoaches() {
   await ensureIndex('coaches', 'idx_display_order', 'key', ['display_order']);
   await ensureIndex('coaches', 'idx_user_id',       'key', ['user_id']);
   await ensureIndex('coaches', 'idx_published',     'key', ['published']);
+
+  // Coach PII, server-only (SEC-01). Keyed by coach_id = coaches.$id; read/
+  // written only by functions (coachSelf.getSelf, applications, adminOps,
+  // booking/orgAdmin notifications) via the API key.
+  await ensureCollection('coach_private', 'Coach Private', SERVER_ONLY, false);
+  await attrString('coach_private', 'coach_id', 64, true);
+  await attrEmail('coach_private', 'email');
+  await attrDatetime('coach_private', 'email_verified_at');
+  await attrString('coach_private', 'phone', 30);
+  await waitAttributesReady('coach_private');
+  await ensureIndex('coach_private', 'idx_cprivate_coach', 'key', ['coach_id']);
 }
 
 async function provisionSessions() {

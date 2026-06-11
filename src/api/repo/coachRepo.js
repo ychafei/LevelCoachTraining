@@ -29,6 +29,14 @@ export const coachRepo = {
 
   // --- Coach self-service (label `coach`) -----------------------------------
 
+  // Owner-only read of the signed-in coach merged with their private contact
+  // fields (email / email_verified_at / phone) from `coach_private`. Direct
+  // reads of `coaches` no longer expose PII, so the portal loads through here.
+  getSelf: async () => {
+    const r = await callFn('coachSelf', { action: 'getSelf' });
+    return r?.coach ? parseAvail(mapDoc(r.coach)) : (r?.coach || null);
+  },
+
   // Whitelisted profile fields (bio, quote, training area, photo, …).
   updateSelf: async (data) => {
     const res = await callFn('coachSelf', { action: 'updateProfile', ...data });
@@ -60,6 +68,11 @@ export const coachRepo = {
 
   adminLinkAccount: (coach_id, profile_id) =>
     callFn('adminOps', { action: 'linkCoachAccount', coach_id, profile_id }),
+
+  // Admin-gated read of a coach's private contact fields for the edit dialog
+  // (email / phone / email_verified_at live in coach_private, not on the row).
+  adminGetCoachContact: (coachId) =>
+    callFn('adminOps', { action: 'getCoachContact', coach_id: coachId }),
 
   // Coaches are server-only writable, so admin CRUD routes through adminOps
   // (createCoach links a profile, deleteCoach unlinks the profile after the

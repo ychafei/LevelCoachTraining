@@ -138,6 +138,46 @@ async function profileForCoach(databases, coachId) {
   return rows.documents[0] || null;
 }
 
+// --- coach_private (server-only PII: email / email_verified_at / phone) --------
+
+// Fetch the private PII row for a coach (keyed by coach_id == coach.$id), or
+// null when none exists yet.
+async function getCoachPrivate(databases, coachId) {
+  const rows = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coachId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+// Upsert the private PII row: update the existing row, or create one. Only the
+// provided fields are written.
+async function upsertCoachPrivate(databases, coachId, fields) {
+  const existing = await getCoachPrivate(databases, coachId);
+  if (existing) {
+    return databases.updateDocument(DB_ID, 'coach_private', existing.$id, { ...fields });
+  }
+  return databases.createDocument(DB_ID, 'coach_private', ID.unique(), {
+    coach_id: coachId,
+    ...fields,
+  });
+}
+
+// Pull the email / phone / email_verified_at keys out of an updates object,
+// returning the private subset (only keys that were present) and leaving the
+// rest. Mutates `rest` by deleting the private keys.
+function splitPrivateFields(source) {
+  const priv = {};
+  const rest = { ...source };
+  for (const key of ['email', 'phone', 'email_verified_at']) {
+    if (Object.prototype.hasOwnProperty.call(rest, key)) {
+      priv[key] = rest[key];
+      delete rest[key];
+    }
+  }
+  return { priv, rest };
+}
+
 // --- Action handlers ----------------------------------------------------------
 
 async function inviteUser(ctx, payload) {
@@ -425,12 +465,22 @@ async function createCoach(ctx, payload) {
     return { status: 400, body: { error: 'fields must be an object (coach document body).' } };
   }
 
+  // PII (email / phone / email_verified_at) lives in coach_private now — strip
+  // it from the coach document body and write it to the private row instead.
+  const { priv, rest } = splitPrivateFields(fields);
+
   let coach;
   try {
-    coach = await createCoachResilient(databases, { ...fields });
+    coach = await createCoachResilient(databases, { ...rest });
   } catch (err) {
     ctx.error?.(err?.message || String(err));
     return { status: 500, body: { error: 'Could not create the coach record.' } };
+  }
+
+  if (Object.keys(priv).length > 0) {
+    await upsertCoachPrivate(databases, coach.$id, priv).catch((err) => {
+      ctx.error?.(`createCoach: failed to write coach_private: ${err?.message || err}`);
+    });
   }
 
   // Optionally link the new coach to an existing profile.
@@ -468,12 +518,23 @@ async function updateCoach(ctx, payload) {
   const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
   if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
 
-  let updated;
-  try {
-    updated = await updateCoachResilient(databases, coachId, { ...updates });
-  } catch (err) {
-    ctx.error?.(err?.message || String(err));
-    return { status: 500, body: { error: 'Could not update the coach record.' } };
+  // Route PII (email / phone / email_verified_at) to coach_private and strip it
+  // from the coaches update.
+  const { priv, rest } = splitPrivateFields(updates);
+  if (Object.keys(priv).length > 0) {
+    await upsertCoachPrivate(databases, coachId, priv).catch((err) => {
+      ctx.error?.(`updateCoach: failed to write coach_private: ${err?.message || err}`);
+    });
+  }
+
+  let updated = coach;
+  if (Object.keys(rest).length > 0) {
+    try {
+      updated = await updateCoachResilient(databases, coachId, { ...rest }) || coach;
+    } catch (err) {
+      ctx.error?.(err?.message || String(err));
+      return { status: 500, body: { error: 'Could not update the coach record.' } };
+    }
   }
 
   await writeAudit(databases, {
@@ -484,7 +545,31 @@ async function updateCoach(ctx, payload) {
     entity_id: coachId,
     after: JSON.stringify({ keys: Object.keys(updates) }),
   });
-  return { status: 200, body: { ok: true, coach: updated || coach } };
+  return { status: 200, body: { ok: true, coach: updated } };
+}
+
+// Admin/superadmin-gated (entrypoint enforces it like every other adminOps
+// action). Returns the coach's contact PII for the admin edit screen, read
+// private-first from coach_private with a fallback to any legacy value still on
+// the coach doc.
+async function getCoachContact(ctx, payload) {
+  const { databases } = ctx;
+  const coachId = String(payload.coach_id || '');
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  const priv = await getCoachPrivate(databases, coachId);
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      email: priv?.email ?? coach.email ?? '',
+      phone: priv?.phone ?? coach.phone ?? '',
+      email_verified_at: priv?.email_verified_at ?? coach.email_verified_at ?? null,
+    },
+  };
 }
 
 async function deleteCoach(ctx, payload) {
@@ -739,6 +824,9 @@ export default async ({ req, res, error }) => {
         break;
       case 'updateCoach':
         result = await updateCoach(ctx, payload);
+        break;
+      case 'getCoachContact':
+        result = await getCoachContact(ctx, payload);
         break;
       case 'deleteCoach':
         result = await deleteCoach(ctx, payload);
