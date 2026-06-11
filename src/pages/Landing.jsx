@@ -221,7 +221,7 @@ function SportsGrid() {
     <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="sports-heading">
       <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">15 sports &amp; training types</p>
+          <p className="section-num" data-num="01">15 sports &amp; training types</p>
           <h2 id="sports-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             Explore by sport
           </h2>
@@ -262,7 +262,7 @@ export default function Landing() {
   return (
     <div className="overflow-x-hidden bg-white text-slate-950">
       {/* Hero — dark editorial split with imagery + working search */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_15%_0%,#102a5c_0%,#081226_55%,#05080f_100%)] text-white">
+      <section className="texture-grain relative overflow-hidden bg-[radial-gradient(120%_120%_at_15%_0%,#102a5c_0%,#081226_55%,#05080f_100%)] text-white">
         <HeroPattern className="text-white/[0.07]" />
         <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
           <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
@@ -326,11 +326,11 @@ export default function Landing() {
       <SportsGrid />
 
       {/* Trust — real platform mechanics only, on a rich dark band */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_85%_0%,#102a5c_0%,#081226_60%,#05080f_100%)] text-white" aria-labelledby="trust-heading">
+      <section className="texture-grain relative overflow-hidden bg-[radial-gradient(120%_120%_at_85%_0%,#102a5c_0%,#081226_60%,#05080f_100%)] text-white" aria-labelledby="trust-heading">
         <HeroPattern className="text-white/[0.06]" />
         <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 lg:px-8">
           <Reveal className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">Trust &amp; safety</p>
+            <p className="section-num text-slate-300 [&::after]:bg-white/20" data-num="02">Trust &amp; safety</p>
             <h2 id="trust-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-white sm:text-4xl">
               Safeguards built into every booking
             </h2>
@@ -361,7 +361,7 @@ export default function Landing() {
         <div className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
           <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">How it works</p>
+              <p className="section-num" data-num="03">How it works</p>
               <h2 id="how-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
                 Three steps to better training
               </h2>
@@ -393,7 +393,7 @@ export default function Landing() {
       {/* Audience cards */}
       <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="audience-heading">
         <Reveal>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Built for everyone in training</p>
+          <p className="section-num" data-num="04">Built for everyone in training</p>
           <h2 id="audience-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             One platform, four roles
           </h2>

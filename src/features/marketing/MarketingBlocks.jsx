@@ -22,7 +22,7 @@ export function MarketingHero({
   children,
 }) {
   return (
-    <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_12%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
+    <section className="texture-grain relative overflow-hidden bg-[radial-gradient(120%_120%_at_12%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
       <HeroPattern className="text-white/[0.07]" />
       <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className={image ? 'grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10' : 'max-w-3xl'}>
@@ -115,7 +115,7 @@ export function BenefitGrid({ eyebrow, title, description, items, columns = 3 })
   return (
     <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
       <Reveal className="max-w-3xl">
-        {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">{eyebrow}</p>}
+        {eyebrow && <p className="section-num" data-num="01">{eyebrow}</p>}
         {title && <h2 className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">{title}</h2>}
         {description && <p className="mt-3 text-base leading-7 text-slate-600">{description}</p>}
       </Reveal>
@@ -143,7 +143,7 @@ export function StepStrip({ title, steps }) {
     <section className="mx-auto max-w-[1240px] px-4 pb-12 sm:px-6 lg:px-8">
       <Reveal>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          {title && <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">{title}</p>}
+          {title && <p className="section-num" data-num="02">{title}</p>}
           <div className="mt-5 grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
             {steps.map((step, index) => (
               <div key={step.title} className="py-5 first:pt-0 last:pb-0 md:px-6 md:py-0 md:first:pl-0 md:last:pr-0">
@@ -187,9 +187,9 @@ export function FaqSection({ title = 'Frequently asked questions', items }) {
                 {item.q}
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
               </button>
-              {expanded && (
-                <p className="px-5 pb-5 text-sm leading-7 text-slate-600">{item.a}</p>
-              )}
+              {/* Always in the DOM (hidden, not unmounted): the objection-
+                  handling copy stays crawlable and findable on the page. */}
+              <p hidden={!expanded} className="px-5 pb-5 text-sm leading-7 text-slate-600">{item.a}</p>
             </div>
           );
         })}
@@ -202,7 +202,7 @@ export function CtaBand({ title, description, primaryCta, secondaryCta }) {
   return (
     <section className="mx-auto max-w-[1240px] px-4 pb-16 sm:px-6 lg:px-8">
       <Reveal>
-        <div className="relative overflow-hidden rounded-3xl bg-[radial-gradient(120%_140%_at_0%_0%,#13357a_0%,#0a1c3f_55%,#061a3a_100%)] px-6 py-12 text-center shadow-2xl shadow-blue-900/30 sm:px-10 sm:py-14">
+        <div className="texture-grain relative overflow-hidden rounded-3xl bg-[radial-gradient(120%_140%_at_0%_0%,#13357a_0%,#0a1c3f_55%,#061a3a_100%)] px-6 py-12 text-center shadow-2xl shadow-blue-900/30 sm:px-10 sm:py-14">
           <HeroPattern className="text-white/[0.06]" />
           <div className="relative">
             <h2 className="font-display text-3xl font-bold tracking-normal text-white sm:text-4xl">{title}</h2>

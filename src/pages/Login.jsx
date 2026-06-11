@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ChevronDown,
   Eye,
   EyeOff,
   Lock,
@@ -148,7 +147,7 @@ export default function Login() {
           <div className="mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_26px_70px_rgba(15,23,42,0.10)]">
             <div className="px-6 py-10 sm:px-10 lg:px-14">
               <div className="mx-auto w-full max-w-[460px]">
-                <h1 className="font-sans text-4xl font-extrabold tracking-normal text-slate-950 normal-case sm:text-5xl">
+                <h1 className="text-4xl font-extrabold tracking-[-0.02em] text-slate-950 sm:text-5xl">
                   Welcome back
                 </h1>
                 <p className="mt-4 text-base leading-7 text-slate-600">
@@ -233,7 +232,7 @@ export default function Login() {
                     disabled={submitting}
                     className="flex h-[52px] w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Signing in...' : 'Sign In'}
+                    {submitting ? 'Signing in...' : 'Sign in'}
                   </button>
                 </form>
 
@@ -327,10 +326,6 @@ function LoginFooter() {
           <Link to="/resources" className="text-slate-500 transition-colors hover:text-blue-700">
             Support
           </Link>
-          <span className="inline-flex items-center gap-2 text-slate-500">
-            English
-            <ChevronDown className="h-4 w-4" />
-          </span>
         </div>
       </div>
     </footer>

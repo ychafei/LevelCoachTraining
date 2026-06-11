@@ -111,7 +111,7 @@ export default function CreateAccount() {
                   Create Free Account
                 </div>
 
-                <h1 className="mt-5 font-sans text-4xl font-extrabold leading-tight tracking-normal text-slate-950 normal-case sm:text-5xl">
+                <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-[-0.02em] text-slate-950 sm:text-5xl">
                   What kind of account do you want to create?
                 </h1>
                 <p className="mt-4 text-base leading-7 text-slate-600">

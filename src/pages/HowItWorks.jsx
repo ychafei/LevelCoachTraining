@@ -187,7 +187,7 @@ export default function HowItWorks() {
   return (
     <div className="bg-white text-slate-950">
       {/* Dark editorial hero with an action image band */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
+      <section className="texture-grain relative overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,#102a5c_0%,#081226_58%,#05080f_100%)] text-white">
         <HeroPattern className="text-white/[0.07]" />
         <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
           <Reveal className="mx-auto max-w-3xl text-center">

@@ -1032,10 +1032,6 @@ function AuthFooter() {
           <Link to="/resources" className="text-slate-500 transition-colors hover:text-blue-700">
             Support
           </Link>
-          <span className="inline-flex items-center gap-2 text-slate-500">
-            English
-            <ChevronDown className="h-4 w-4" />
-          </span>
         </div>
       </div>
     </footer>

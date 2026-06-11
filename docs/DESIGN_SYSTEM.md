@@ -38,16 +38,40 @@ Each page has ONE psychological job. Design every section to serve it.
   savings. Never for decoration; scarcity of the color is what makes it read as signal.
 - Radius 0.75rem; shadows soft and few (`shadow-sm` default, one hero-level shadow max per page).
 
-## 4. Type scale
+## 4. Type — the identity layer
 
-Inter only. Hierarchy comes from weight + size + ink, not font changes.
+Two faces, loaded once in `src/index.css` and routed through CSS variables so
+every page inherits them:
+
+- **Display (`--font-display`): Bricolage Grotesque** — headlines, all
+  h1–h6 (base rule), and proof numbers. Characterful, editorial, human.
+  Never force `font-sans` onto a heading.
+- **Body/UI (`--font-sans`): Instrument Sans** — everything else. Warm,
+  precise, reads like print at small sizes.
+
+Scale (hierarchy from weight + size + ink, not font changes):
 
 - Hero H1: `text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-[-0.02em]`
 - Section H2: `text-3xl sm:text-4xl font-bold tracking-[-0.01em]`
 - Card H3: `text-lg font-semibold`
 - Eyebrow: `text-xs font-bold uppercase tracking-[0.18em] text-primary` (or muted)
 - Body: `text-base leading-7 text-muted-foreground` (15–16px floor; never below 13px)
-- Proof numbers: `proof-number` utility (tabular-nums, tight tracking, extrabold)
+- Proof numbers: `proof-number` utility (display face, tabular-nums, extrabold)
+
+## 4b. Craft details (the "designed, not generated" layer)
+
+- **Folio markers:** marketing sections carry `.section-num` (amber numeral +
+  label + hairline rule, `data-num="01"…`). Numbered in page order.
+- **Atmosphere:** dark hero/trust/CTA bands get `.texture-grain` (SVG noise at
+  5% — paper, not gradient soup). Never on light content surfaces.
+- **Selection ink:** amber `::selection` app-wide.
+- **Tactility:** every button presses (`active:translate-y-px`, in the shadcn
+  base); prose links use `text-underline-offset: 3px`.
+- **Motion:** one orchestrated entrance per page maximum — `Reveal`/`Stagger`
+  (marketing) or `.reveal-stagger` (CSS-only), always behind
+  `prefers-reduced-motion`. No scattered micro-animation.
+- **No dead controls, ever:** a visible affordance (chevron, toggle, switch)
+  must do something or not exist.
 
 ## 5. Layout rhythm
 
