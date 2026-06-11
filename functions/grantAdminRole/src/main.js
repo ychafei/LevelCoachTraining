@@ -19,16 +19,44 @@ function callerAccountId(req) {
   return req.headers?.['x-appwrite-user-id'] || req.headers?.['X-Appwrite-User-Id'] || req.headers?.['X-Appwrite-User-ID'];
 }
 
-async function syncAccountLabels(users, accountId, role) {
+const MANAGED_LABELS = new Set(['admin', 'super_admin', 'superadmin', 'coach']);
+const GRANTABLE = new Set(['coach', 'admin', 'super_admin']);
+
+// A set of granted roles (subset of coach/admin/super_admin) -> account labels.
+function rolesToLabels(roleSet) {
+  const labels = new Set();
+  if (roleSet.has('coach')) labels.add('coach');
+  if (roleSet.has('admin')) labels.add('admin');
+  if (roleSet.has('super_admin')) { labels.add('admin'); labels.add('superadmin'); }
+  return labels;
+}
+
+// The single profile.role kept for display / existing single-role logic.
+function highestRole(roleSet) {
+  if (roleSet.has('super_admin')) return 'super_admin';
+  if (roleSet.has('admin')) return 'admin';
+  if (roleSet.has('coach')) return 'coach';
+  return 'user';
+}
+
+// Derive the current granted roles from an account's labels.
+function labelsToRoles(labels = []) {
+  const roles = [];
+  if (labels.includes('coach')) roles.push('coach');
+  if (labels.includes('superadmin')) roles.push('super_admin');
+  else if (labels.includes('admin')) roles.push('admin');
+  return roles;
+}
+
+// Stack the granted role labels onto the account, preserving any non-managed
+// labels and replacing the managed ones with exactly the requested set.
+async function applyAccountLabels(users, accountId, roleSet) {
   if (!accountId) return;
   const account = await users.get(accountId).catch(() => null);
   if (!account) return;
-  const managed = new Set(['admin', 'super_admin', 'superadmin', 'coach']);
-  const labels = new Set((account.labels || []).filter((label) => !managed.has(label)));
-  if (role === 'coach') labels.add('coach');
-  if (role === 'admin') labels.add('admin');
-  if (role === 'super_admin') labels.add('admin').add('superadmin');
-  await users.updateLabels(accountId, [...labels]);
+  const next = new Set((account.labels || []).filter((label) => !MANAGED_LABELS.has(label)));
+  for (const label of rolesToLabels(roleSet)) next.add(label);
+  await users.updateLabels(accountId, [...next]);
 }
 
 async function profileForAccount(databases, accountId) {
@@ -56,6 +84,16 @@ async function revokeOpenAssignments(databases, assignments, now) {
   ));
 }
 
+// Normalize incoming roles: accept either `roles: [...]` (stacked) or the legacy
+// single `role`. Returns a Set of grantable roles ('user'/empty => demote).
+function parseRoles(payload) {
+  let input;
+  if (Array.isArray(payload.roles)) input = payload.roles;
+  else if (payload.role !== undefined) input = [payload.role];
+  else input = [];
+  return new Set(input.filter((r) => GRANTABLE.has(r)));
+}
+
 export default async ({ req, res, error }) => {
   try {
     const accountId = callerAccountId(req);
@@ -67,38 +105,60 @@ export default async ({ req, res, error }) => {
     const callerLabels = callerAccount?.labels || [];
     const actor = await profileForAccount(databases, accountId);
     if (!callerLabels.includes('superadmin') || actor?.master_admin_locked !== true) {
-      return res.json({ error: 'Only the locked master admin can grant platform admin roles.' }, 403);
+      return res.json({ error: 'Only the locked master admin can grant platform roles.' }, 403);
     }
 
     const payload = body(req);
     const targetProfileId = payload.profile_id;
-    const allowedRoles = new Set(['user', 'coach', 'admin', 'super_admin']);
-    const role = allowedRoles.has(payload.role) ? payload.role : 'admin';
     if (!targetProfileId) return res.json({ error: 'profile_id is required.' }, 400);
-    if (role === 'super_admin' && payload.allow_super_admin !== true) {
+
+    const target = await databases.getDocument(DB_ID, 'profiles', targetProfileId);
+    const isSelf = target.account_id === accountId;
+
+    // Read-only: report the target's current stacked roles (for the UI editor).
+    if (payload.action === 'getRoles') {
+      const targetAccount = await users.get(target.account_id).catch(() => null);
+      return res.json({
+        profile_id: target.$id,
+        roles: labelsToRoles(targetAccount?.labels || []),
+        role: target.role || 'user',
+        master_admin_locked: !!target.master_admin_locked,
+      });
+    }
+
+    // The locked master admin can only be altered by themselves, and can never
+    // strip their own super_admin (prevents self-lockout).
+    if (target.master_admin_locked && !isSelf) {
+      return res.json({ error: 'Cannot alter the locked master admin.' }, 403);
+    }
+
+    const roleSet = parseRoles(payload);
+    if (target.master_admin_locked && isSelf) roleSet.add('super_admin');
+
+    // Minting a super admin for someone else stays a deliberate, explicit act.
+    if (roleSet.has('super_admin') && !isSelf && payload.allow_super_admin !== true) {
       return res.json({ error: 'Granting another super admin requires allow_super_admin=true.' }, 400);
     }
 
-    const target = await databases.getDocument(DB_ID, 'profiles', targetProfileId);
-    if (target.master_admin_locked) return res.json({ error: 'Cannot alter the locked master admin.' }, 403);
-
     const now = new Date().toISOString();
-    const isPlatformAdminRole = role === 'admin' || role === 'super_admin';
+    const nextRole = highestRole(roleSet);
+    const isPlatformAdminRole = roleSet.has('admin') || roleSet.has('super_admin');
     const existingAssignments = await openPlatformAssignments(databases, targetProfileId);
     await revokeOpenAssignments(databases, existingAssignments, now);
 
-    const updated = await databases.updateDocument(DB_ID, 'profiles', targetProfileId, { role });
-    await syncAccountLabels(users, target.account_id, role);
+    const updated = await databases.updateDocument(DB_ID, 'profiles', targetProfileId, { role: nextRole });
+    await applyAccountLabels(users, target.account_id, roleSet);
     const assignment = isPlatformAdminRole
       ? await databases.createDocument(DB_ID, 'admin_assignments', ID.unique(), {
         profile_id: targetProfileId,
         scope: 'platform',
-        role,
+        role: nextRole,
         granted_by_master_admin_id: actor.$id,
         granted_at: now,
       }).catch(() => null)
       : null;
 
+    const grantedRoles = [...roleSet];
     await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), {
       actor_email: actor.email,
       actor_role: 'super_admin',
@@ -106,23 +166,26 @@ export default async ({ req, res, error }) => {
       entity_type: 'Profile',
       entity_id: targetProfileId,
       before: JSON.stringify({ role: target.role || 'user' }),
-      after: JSON.stringify({ role }),
+      after: JSON.stringify({ role: nextRole, roles: grantedRoles }),
       metadata: JSON.stringify({
         assignment_id: assignment?.$id || '',
         revoked_assignment_ids: existingAssignments.map((item) => item.$id),
         target_email: target.email || '',
         actor_profile_id: actor.$id,
+        granted_roles: grantedRoles,
+        self: isSelf,
       }),
     }).catch(() => {});
 
     return res.json({
       profile_id: updated.$id,
       role: updated.role,
+      roles: grantedRoles,
       assignment_id: assignment?.$id || '',
       revoked_assignment_ids: existingAssignments.map((item) => item.$id),
     });
   } catch (err) {
     error?.(err?.message || String(err));
-    return res.json({ error: 'Could not grant admin role.' }, 500);
+    return res.json({ error: 'Could not update roles.' }, 500);
   }
 };

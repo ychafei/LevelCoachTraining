@@ -4,14 +4,88 @@ import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { adminAssignmentRepo, auditLogRepo, coachRepo, profileRepo } from '@/api/repo';
-import { AlertTriangle, FileText, History, Lock, MailCheck, Percent, Shield, ShieldCheck, Users } from 'lucide-react';
+import { AlertTriangle, FileText, History, Lock, MailCheck, Percent, Shield, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_PLATFORM_FEE_BPS = 1500; // mirrors server env PLATFORM_FEE_BPS default
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
+
+// Stacked role editor: toggle coach / admin / super_admin independently and
+// save the full set at once. Loads the target's current roles on mount. The
+// locked master admin always keeps super_admin (no self-lockout).
+function RoleEditor({ profile, onSaved }) {
+  const locked = !!profile.master_admin_locked;
+  const [roles, setRoles] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setRoles(null);
+    auth.getUserRoles(profile.id)
+      .then((r) => { if (!cancelled) setRoles(new Set(r?.roles || [])); })
+      .catch(() => { if (!cancelled) setRoles(new Set()); });
+    return () => { cancelled = true; };
+  }, [profile.id]);
+
+  const toggle = (role) => {
+    if (saving) return;
+    if (locked && role === 'super_admin') return; // master keeps super_admin
+    setRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role); else next.add(role);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!roles) return;
+    setSaving(true);
+    setError('');
+    try {
+      const list = [...roles];
+      await auth.setUserRoles({ profileId: profile.id, roles: list, allowSuperAdmin: list.includes('super_admin') });
+      toast.success(`Roles updated for ${profile.email || 'user'}`);
+      await onSaved?.();
+    } catch (err) {
+      setError(err?.message || 'Could not save roles.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (roles === null) return <span className="text-xs text-muted-foreground">Loading roles…</span>;
+
+  const chip = (role, label) => {
+    const on = roles.has(role);
+    const disabled = saving || (locked && role === 'super_admin');
+    return (
+      <button
+        type="button"
+        onClick={() => toggle(role)}
+        disabled={disabled}
+        aria-pressed={on}
+        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:bg-accent/5'} ${disabled ? 'opacity-60' : ''}`}
+      >
+        {on ? '✓ ' : ''}{label}
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {chip('coach', 'Coach')}
+      {chip('admin', 'Admin')}
+      {chip('super_admin', 'Super Admin')}
+      <Button size="sm" onClick={save} disabled={saving} className="bg-accent text-accent-foreground hover:bg-accent/90">
+        {saving ? 'Saving…' : 'Save roles'}
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -157,9 +231,7 @@ export default function MasterAdminPortal() {
   const [assignments, setAssignments] = useState([]);
   const [auditRows, setAuditRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [savingProfileId, setSavingProfileId] = useState('');
   const [targetProfileId, setTargetProfileId] = useState('');
-  const [targetRole, setTargetRole] = useState('admin');
   const [search, setSearch] = useState('');
   const masterEmailVerified = user?.email_verified === true || user?.emailVerification === true;
   const masterAdminLocked = user?.master_admin_locked === true || bootstrapComplete;
@@ -268,35 +340,15 @@ export default function MasterAdminPortal() {
 
   const assignmentFor = (profileId) => activeAssignments.find((assignment) => assignment.profile_id === profileId);
 
-  const updateDelegatedRole = async (profile, role) => {
-    if (!profile?.id || profile.master_admin_locked) return;
-    setSavingProfileId(profile.id);
-    setMessage('');
-    try {
-      await auth.grantAdminRole({
-        profileId: profile.id,
-        role,
-        allowSuperAdmin: role === 'super_admin',
-      });
-      setMessage(`${displayName(profile)} is now ${role === 'user' ? 'no longer a platform admin' : role}.`);
-      await loadAdminData();
-    } catch (err) {
-      setMessage(err?.message || 'Could not update delegated admin role.');
-    } finally {
-      setSavingProfileId('');
-    }
-  };
+  const selectedTarget = useMemo(
+    () => profiles.find((item) => item.id === targetProfileId) || null,
+    [profiles, targetProfileId],
+  );
 
-  const grantSelected = async () => {
-    const profile = profiles.find((item) => item.id === targetProfileId);
-    if (!profile) {
-      setMessage('Choose a user before granting access.');
-      return;
-    }
-    await updateDelegatedRole(profile, targetRole);
+  const onRolesSaved = async () => {
     setTargetProfileId('');
     setSearch('');
-    setTargetRole('admin');
+    await loadAdminData();
   };
 
   return (
@@ -382,7 +434,7 @@ export default function MasterAdminPortal() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_190px_auto]">
+          <div className="mt-5">
             <div>
               <Input
                 value={search}
@@ -414,19 +466,18 @@ export default function MasterAdminPortal() {
                 </div>
               )}
             </div>
-            <Select value={targetRole} onValueChange={setTargetRole}>
-              <SelectTrigger className="bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={grantSelected} disabled={!targetProfileId || !!savingProfileId} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              Grant Access
-            </Button>
           </div>
+          {selectedTarget && (
+            <div className="mt-4 rounded-lg border border-border bg-background p-4">
+              <p className="text-sm font-semibold text-foreground">
+                Roles for {displayName(selectedTarget)} <span className="text-muted-foreground">· {selectedTarget.email || 'no email'}</span>
+              </p>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                Toggle any combination, then Save. “Coach” adds the coach label only — a coach record is still created via Admin → Applications/Coaches.
+              </p>
+              <RoleEditor profile={selectedTarget} onSaved={onRolesSaved} />
+            </div>
+          )}
 
           <div className="mt-6 divide-y divide-border rounded-lg border border-border">
             {loading ? (
@@ -453,36 +504,7 @@ export default function MasterAdminPortal() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{profile.email || 'No email'} · current role: {profile.role || 'user'}</p>
                   </div>
-                  {locked ? (
-                    <ShieldCheck className="h-5 w-5 text-accent" />
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant={profile.role === 'admin' ? 'default' : 'outline'}
-                        onClick={() => updateDelegatedRole(profile, 'admin')}
-                        disabled={savingProfileId === profile.id}
-                      >
-                        Admin
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={profile.role === 'super_admin' ? 'default' : 'outline'}
-                        onClick={() => updateDelegatedRole(profile, 'super_admin')}
-                        disabled={savingProfileId === profile.id}
-                      >
-                        Super Admin
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateDelegatedRole(profile, 'user')}
-                        disabled={savingProfileId === profile.id}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  )}
+                  <RoleEditor profile={profile} onSaved={loadAdminData} />
                 </div>
               );
             }) : (

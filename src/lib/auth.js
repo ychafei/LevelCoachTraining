@@ -200,4 +200,20 @@ export const auth = {
       allow_super_admin: allowSuperAdmin,
     });
   },
+
+  // Stackable roles: set the FULL set of granted roles (subset of
+  // ['coach','admin','super_admin']) for an account at once. Empty array
+  // demotes to a plain user. Master-admin only (enforced server-side).
+  setUserRoles: async ({ profileId, roles, allowSuperAdmin = false }) => {
+    return callFn('grantAdminRole', {
+      profile_id: profileId,
+      roles,
+      allow_super_admin: allowSuperAdmin,
+    });
+  },
+
+  // Read the current stacked roles for an account (for the role editor UI).
+  getUserRoles: async (profileId) => {
+    return callFn('grantAdminRole', { action: 'getRoles', profile_id: profileId });
+  },
 };
