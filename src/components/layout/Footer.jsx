@@ -8,9 +8,10 @@ const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
 
 const COLUMNS = [
   {
-    heading: 'MARKETPLACE',
+    heading: 'PLATFORM',
     links: [
       { label: 'Find a Coach', to: '/coaches' },
+      { label: 'Sports', to: '/sports' },
       { label: 'Organizations', to: '/organizations' },
       { label: 'How It Works', to: '/how-it-works' },
       { label: 'Resources', to: '/resources' },
@@ -37,13 +38,28 @@ const COLUMNS = [
     ],
   },
   {
-    heading: 'LEGAL',
+    heading: 'TRUST & SUPPORT',
     links: [
+      { label: 'Safety', to: '/safety' },
+      { label: 'FAQ', to: '/faq' },
+      { label: 'Support', to: '/support' },
       { label: 'Terms of Service', to: '/terms' },
       { label: 'Privacy Policy', to: '/privacy' },
       { label: 'Unsubscribe', to: '/unsubscribe' },
     ],
   },
+];
+
+// Internal-linking strip for the sport landing pages (the SEO surface).
+const POPULAR_SPORTS = [
+  { label: 'Soccer', to: '/sports/soccer' },
+  { label: 'Basketball', to: '/sports/basketball' },
+  { label: 'Football', to: '/sports/football' },
+  { label: 'Baseball', to: '/sports/baseball' },
+  { label: 'Volleyball', to: '/sports/volleyball' },
+  { label: 'Tennis', to: '/sports/tennis' },
+  { label: 'Speed & Agility', to: '/sports/speed_agility' },
+  { label: 'Strength', to: '/sports/strength_conditioning' },
 ];
 
 export default function Footer() {
@@ -122,7 +138,19 @@ export default function Footer() {
             </nav>
           ))}
         </div>
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-6 sm:flex-row">
+        {/* Popular-sport strip: internal links into the sport landing pages. */}
+        <nav aria-label="Popular sports" className="mt-10 border-t border-slate-200 pt-5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Popular sports</span>
+            {POPULAR_SPORTS.map((sport) => (
+              <Link key={sport.to} to={sport.to} className="text-xs font-semibold text-slate-600 transition-colors hover:text-blue-700">
+                {sport.label}
+              </Link>
+            ))}
+            <Link to="/sports" className="text-xs font-bold text-blue-700 hover:underline">All sports</Link>
+          </div>
+        </nav>
+        <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-6 sm:flex-row">
           <p className="text-center text-xs text-slate-500 sm:text-left">
             © {new Date().getFullYear()} LevelCoach Training. All rights reserved.
           </p>

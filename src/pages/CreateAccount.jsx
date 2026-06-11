@@ -193,6 +193,10 @@ export function AthleteSignup() {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // Two-step presentation of the same single submit: a ~20-field wall is the
+  // highest-abandonment screen in the funnel. Step 1 = identity, step 2 =
+  // training profile. Nothing about the submit payload changes.
+  const [step, setStep] = useState(1);
 
   const explicitNext = params.get('next');
   const needsGuardian = requiresGuardian(form.dob);
@@ -222,26 +226,39 @@ export function AthleteSignup() {
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
 
-  const validate = () => {
+  // Step-1 (identity) checks, reused by the full submit validation.
+  const step1Errors = () => {
     const next = {};
-
     const firstNameError = validatePersonName(form.firstName, 'First name');
     const lastNameError = validatePersonName(form.lastName, 'Last name');
-    const phoneError = validatePhone(form.phone, 'Phone number');
     const dobError = validateDob(form.dob);
-
     if (firstNameError) next.firstName = firstNameError;
     if (lastNameError) next.lastName = lastNameError;
     if (!form.email.trim()) next.email = 'Email address is required.';
     else if (!EMAIL_RE.test(form.email.trim())) next.email = 'Enter a valid email address.';
-    if (phoneError) next.phone = phoneError;
     if (dobError) next.dob = dobError;
-    if (validateLocation(form.location.city)) next.city = 'Training city is required.';
-    if (!form.location.state) next.state = 'Select your state.';
     if (!form.password) next.password = 'Password is required.';
     else if (!passwordValid) next.password = 'Password does not meet the requirements below.';
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    return next;
+  };
+
+  const continueToStep2 = () => {
+    const next = step1Errors();
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const validate = () => {
+    const next = step1Errors();
+
+    const phoneError = validatePhone(form.phone, 'Phone number');
+    if (phoneError) next.phone = phoneError;
+    if (validateLocation(form.location.city)) next.city = 'Training city is required.';
+    if (!form.location.state) next.state = 'Select your state.';
     if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
 
     Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
@@ -251,6 +268,8 @@ export function AthleteSignup() {
     }
 
     setErrors(next);
+    // If an identity field somehow regressed, surface it on its own step.
+    if (Object.keys(step1Errors()).length > 0) setStep(1);
     return Object.keys(next).length === 0;
   };
 
@@ -334,23 +353,45 @@ export function AthleteSignup() {
                   Start your training journey with the right coach and the right tools.
                 </p>
 
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={submitting}
-                  className="mt-5 flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <GoogleIcon className="h-5 w-5" />
-                  Continue with Google
-                </button>
-
-                <div className="my-4 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="text-sm font-medium text-slate-500">or sign up with</span>
-                  <span className="h-px flex-1 bg-slate-200" />
+                {/* Two-step indicator — same single submit, half the wall. */}
+                <div className="mt-4 flex items-center gap-2" aria-label={`Step ${step} of 2`}>
+                  {['Account', 'Training profile'].map((label, index) => (
+                    <span
+                      key={label}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+                        step === index + 1
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-500'
+                      }`}
+                    >
+                      {index + 1}. {label}
+                    </span>
+                  ))}
                 </div>
 
-                <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                {step === 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleGoogle}
+                      disabled={submitting}
+                      className="mt-5 flex h-11 w-full items-center justify-center gap-4 rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <GoogleIcon className="h-5 w-5" />
+                      Continue with Google
+                    </button>
+
+                    <div className="my-4 flex items-center gap-4">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <span className="text-sm font-medium text-slate-500">or sign up with</span>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
+                  </>
+                )}
+
+                <form onSubmit={handleSubmit} noValidate className={step === 1 ? 'space-y-4' : 'mt-5 space-y-4'}>
+                  {step === 1 ? (
+                  <div className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
                       id="firstName"
@@ -389,97 +430,22 @@ export function AthleteSignup() {
                     error={errors.email}
                   />
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <AuthField
-                      id="phone"
-                      label="Phone number"
-                      type="tel"
-                      icon={Phone}
-                      autoComplete="tel"
-                      placeholder="(248) 555-0123"
-                      value={form.phone}
-                      onChange={(event) => updateForm('phone', event.target.value)}
-                      disabled={submitting}
-                      error={errors.phone}
-                    />
-                    <div>
-                      <AuthField
-                        id="dob"
-                        label="Date of birth"
-                        type="date"
-                        icon={CalendarCheck}
-                        autoComplete="bday"
-                        value={form.dob}
-                        onChange={(event) => updateForm('dob', event.target.value)}
-                        disabled={submitting}
-                        error={errors.dob}
-                      />
-                      <p className="mt-1.5 text-xs leading-5 text-slate-500">
-                        Under 18? Bookings and payments route through your parent or guardian — that's how we keep minors safe.
-                      </p>
-                    </div>
-                  </div>
-
-                  <AthleteSportFields
-                    value={sportDetails}
-                    onChange={(next) => {
-                      setSportDetails(next);
-                      setErrors((current) => ({ ...current, sportKey: undefined, position: undefined, level: undefined, availability: undefined }));
-                    }}
-                    errors={errors}
-                    disabled={submitting}
-                    idPrefix="athlete-signup"
-                  />
-
-                  <fieldset>
-                    <legend className="mb-2 block text-sm font-bold text-slate-950">Training location</legend>
-                    <USLocationFields
-                      idPrefix="athlete-signup-loc"
-                      fields={['state', 'city', 'zip']}
-                      required
-                      disabled={submitting}
-                      value={form.location}
-                      onChange={updateLocation}
-                      errors={{ city: errors.city, state: errors.state }}
-                      columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
-                    />
-                  </fieldset>
-
-                  <AuthField
-                    id="athlete-location-detail"
-                    label="Location details (optional)"
-                    icon={MapPin}
-                    placeholder="Neighborhood, facility, travel range…"
-                    value={form.locationDetail}
-                    onChange={(event) => updateForm('locationDetail', event.target.value)}
-                    disabled={submitting}
-                    error={errors.locationDetail}
-                  />
-
                   <div>
-                    <label htmlFor="athlete-training-goal" className="mb-1.5 block text-sm font-bold text-slate-950">
-                      Training goal <span className="text-xs font-semibold text-slate-500">(optional)</span>
-                    </label>
-                    <input
-                      id="athlete-training-goal"
-                      value={form.trainingGoal}
-                      onChange={(event) => updateForm('trainingGoal', event.target.value)}
+                    <AuthField
+                      id="dob"
+                      label="Date of birth"
+                      type="date"
+                      icon={CalendarCheck}
+                      autoComplete="bday"
+                      value={form.dob}
+                      onChange={(event) => updateForm('dob', event.target.value)}
                       disabled={submitting}
-                      placeholder="e.g., make varsity, improve first touch, get faster"
-                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                      error={errors.dob}
                     />
+                    <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                      Under 18? Bookings and payments route through your parent or guardian — that's how we keep young athletes safe.
+                    </p>
                   </div>
-
-                  <HealthAndEmergencyFields
-                    value={healthDetails}
-                    onChange={(next) => {
-                      setHealthDetails(next);
-                      setErrors((current) => ({ ...current, healthNotes: undefined, emergencyName: undefined, emergencyPhone: undefined, emergencyRelationship: undefined }));
-                    }}
-                    errors={errors}
-                    disabled={submitting}
-                    idPrefix="athlete-signup"
-                  />
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <AuthField
@@ -544,6 +510,109 @@ export function AthleteSignup() {
                     ))}
                   </div>
 
+                  {formError && (
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">
+                      {formError}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={continueToStep2}
+                    disabled={submitting}
+                    className="flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    Continue
+                  </button>
+                  <p className="text-center text-xs leading-5 text-slate-500">
+                    Next: your sport, training location, and emergency contact. Nothing is submitted yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    disabled={submitting}
+                    className="text-sm font-semibold text-blue-700 hover:underline"
+                  >
+                    ← Back to account details
+                  </button>
+
+                  <AuthField
+                    id="phone"
+                    label="Phone number"
+                    type="tel"
+                    icon={Phone}
+                    autoComplete="tel"
+                    placeholder="(248) 555-0123"
+                    value={form.phone}
+                    onChange={(event) => updateForm('phone', event.target.value)}
+                    disabled={submitting}
+                    error={errors.phone}
+                  />
+
+                  <AthleteSportFields
+                    value={sportDetails}
+                    onChange={(next) => {
+                      setSportDetails(next);
+                      setErrors((current) => ({ ...current, sportKey: undefined, position: undefined, level: undefined, availability: undefined }));
+                    }}
+                    errors={errors}
+                    disabled={submitting}
+                    idPrefix="athlete-signup"
+                  />
+
+                  <fieldset>
+                    <legend className="mb-2 block text-sm font-bold text-slate-950">Training location</legend>
+                    <USLocationFields
+                      idPrefix="athlete-signup-loc"
+                      fields={['state', 'city', 'zip']}
+                      required
+                      disabled={submitting}
+                      value={form.location}
+                      onChange={updateLocation}
+                      errors={{ city: errors.city, state: errors.state }}
+                      columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
+                    />
+                  </fieldset>
+
+                  <AuthField
+                    id="athlete-location-detail"
+                    label="Location details (optional)"
+                    icon={MapPin}
+                    placeholder="Neighborhood, facility, travel range…"
+                    value={form.locationDetail}
+                    onChange={(event) => updateForm('locationDetail', event.target.value)}
+                    disabled={submitting}
+                    error={errors.locationDetail}
+                  />
+
+                  <div>
+                    <label htmlFor="athlete-training-goal" className="mb-1.5 block text-sm font-bold text-slate-950">
+                      Training goal <span className="text-xs font-semibold text-slate-500">(optional)</span>
+                    </label>
+                    <input
+                      id="athlete-training-goal"
+                      value={form.trainingGoal}
+                      onChange={(event) => updateForm('trainingGoal', event.target.value)}
+                      disabled={submitting}
+                      placeholder="e.g., make varsity, improve first touch, get faster"
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                    />
+                  </div>
+
+                  <HealthAndEmergencyFields
+                    value={healthDetails}
+                    onChange={(next) => {
+                      setHealthDetails(next);
+                      setErrors((current) => ({ ...current, healthNotes: undefined, emergencyName: undefined, emergencyPhone: undefined, emergencyRelationship: undefined }));
+                    }}
+                    errors={errors}
+                    disabled={submitting}
+                    idPrefix="athlete-signup"
+                  />
+
                   {needsGuardian && (
                     <GuardianContactFields
                       value={guardian}
@@ -586,11 +655,13 @@ export function AthleteSignup() {
                     disabled={submitting}
                     className="flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {submitting ? 'Creating account...' : 'Create Account & Review Setup'}
+                    {submitting ? 'Creating account...' : 'Create account & review setup'}
                   </button>
                   <p className="text-center text-xs leading-5 text-slate-500">
                     We'll email you a verification link after signup. You can finish setup before verifying.
                   </p>
+                  </div>
+                  )}
                 </form>
 
                 <p className="mt-4 text-center text-sm text-slate-600">

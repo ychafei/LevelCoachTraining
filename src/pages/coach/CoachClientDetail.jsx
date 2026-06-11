@@ -275,7 +275,7 @@ export default function CoachClientDetail() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold tracking-[-0.01em]">Message {clientName}</DialogTitle>
             <DialogDescription>
-              This starts a conversation in your inbox. The client (and their guardian, for minors) can read and reply.
+              This starts a conversation in your inbox. The client (and their guardian, for athletes under 18) can read and reply.
             </DialogDescription>
           </DialogHeader>
           <div>

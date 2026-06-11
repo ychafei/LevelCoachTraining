@@ -43,6 +43,11 @@ const ForOrganizations = React.lazy(() => import('@/pages/ForOrganizations'));
 const OrganizationDirectory = React.lazy(() => import('@/pages/OrganizationDirectory'));
 const OrganizationDetail = React.lazy(() => import('@/pages/OrganizationDetail'));
 const Resources = React.lazy(() => import('@/pages/Resources'));
+const Faq = React.lazy(() => import('@/pages/Faq'));
+const Support = React.lazy(() => import('@/pages/Support'));
+const Safety = React.lazy(() => import('@/pages/Safety'));
+const SportsIndex = React.lazy(() => import('@/pages/SportsIndex'));
+const SportPage = React.lazy(() => import('@/pages/SportPage'));
 const About = React.lazy(() => import('@/pages/About'));
 const VerifyEmail = React.lazy(() => import('@/pages/VerifyEmail'));
 const Book = React.lazy(() => import('@/pages/Book'));
@@ -161,6 +166,11 @@ const AuthenticatedApp = () => {
           <Route path="/organizations" element={<OrganizationDirectory />} />
           <Route path="/organizations/:slug" element={<OrganizationDetail />} />
           <Route path="/resources" element={<Resources />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/support" element={<Support />} />
+          <Route path="/safety" element={<Safety />} />
+          <Route path="/sports" element={<SportsIndex />} />
+          <Route path="/sports/:sportKey" element={<SportPage />} />
           <Route path="/about" element={<About />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/book" element={<Book />} />

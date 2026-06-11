@@ -40,7 +40,7 @@ const JOURNEYS = [
       },
       {
         title: 'Sign once, book securely',
-        body: 'Sign the participation waiver and policies one time (guardians sign for minors), buy credits through Stripe Checkout, and book a slot from the coach\'s live availability.',
+        body: 'Sign the participation waiver and policies one time (parents sign for athletes under 18), buy credits through Stripe Checkout, and book a slot from the coach\'s live availability.',
         icon: FileSignature,
       },
       {
@@ -144,7 +144,9 @@ function JourneyCard({ journey }) {
       </ol>
 
       <div className="mt-auto pt-5">
-        <Button asChild variant="outline" className="w-full rounded-lg border-blue-200 font-bold text-blue-700 hover:bg-blue-50">
+        {/* Each journey card carries its audience's real next step — these are
+            the page's primary CTAs, not footnotes. */}
+        <Button asChild className="w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
           <Link to={journey.cta.to}>
             {journey.cta.label}
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -167,7 +169,7 @@ const GUARANTEES = [
     icon: CreditCard,
   },
   {
-    title: 'Minors are guardian-gated',
+    title: 'Under-18s are guardian-gated',
     body: 'Athletes under 18 can only be booked by a linked guardian who has signed consent, and guardians can read their child\'s messages.',
     icon: ShieldCheck,
   },

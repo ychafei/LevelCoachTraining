@@ -1,0 +1,115 @@
+// Post-build prerender: snapshots the marketing routes of the built SPA into
+// static HTML files under dist/, so crawlers receive real content instead of
+// an empty shell (the #1 SEO finding in the redesign plan).
+//
+// How it works: serves dist/ with `vite preview`, drives headless Chromium
+// over each route, and writes the rendered DOM to dist/<route>/index.html.
+// Vercel serves static files before applying the SPA rewrite, so prerendered
+// routes get the snapshot and everything else falls through to index.html.
+//
+// Usage:  npm run build:seo     (vite build + sitemap + this script)
+// Local:  uses installed Google Chrome or the Playwright chromium cache.
+// CI:     requires a Chromium binary — run `npx playwright install chromium`
+//         in the build step, or run build:seo locally and deploy the output.
+import { spawn, execSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = 4179;
+const BASE = `http://localhost:${PORT}`;
+
+// Marketing routes only — app/auth routes stay client-rendered on purpose.
+const STATIC_ROUTES = [
+  '/',
+  '/coaches',
+  '/sports',
+  '/organizations',
+  '/how-it-works',
+  '/for-athletes',
+  '/for-parents',
+  '/for-coaches',
+  '/for-organizations',
+  '/resources',
+  '/faq',
+  '/support',
+  '/safety',
+  '/about',
+  '/terms',
+  '/privacy',
+];
+
+const catalogSource = readFileSync(join(root, 'src/lib/sportsCatalog.js'), 'utf8');
+const sportKeys = [...catalogSource.matchAll(/sport_key:\s*'([a-z_]+)'/g)].map((m) => m[1]);
+const ROUTES = [...STATIC_ROUTES, ...sportKeys.map((key) => `/sports/${key}`)];
+
+function chromiumPath() {
+  const candidates = [
+    process.env.CHROMIUM_PATH,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  try {
+    // Fall back to Playwright's cached chromium (any platform).
+    const out = execSync(
+      'node -e "console.log(require(\'playwright-core\').chromium.executablePath())"',
+      { cwd: root, encoding: 'utf8' },
+    ).trim();
+    if (out && existsSync(out)) return out;
+  } catch { /* not available */ }
+  return null;
+}
+
+const executablePath = chromiumPath();
+if (!executablePath) {
+  console.error('prerender: no Chromium found. Install Chrome, set CHROMIUM_PATH, or `npx playwright install chromium`.');
+  process.exit(1);
+}
+
+const { chromium } = await import('playwright-core').catch(async () => {
+  console.error('prerender: playwright-core is not installed. Run `npm i -D playwright-core`.');
+  process.exit(1);
+});
+
+const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
+  cwd: root,
+  stdio: 'ignore',
+  detached: true,
+});
+
+async function waitForServer() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      const res = await fetch(BASE);
+      if (res.ok) return;
+    } catch { /* not up yet */ }
+    await new Promise((resolve) => { setTimeout(resolve, 1000); });
+  }
+  throw new Error('vite preview did not start');
+}
+
+try {
+  await waitForServer();
+  const browser = await chromium.launch({ executablePath, headless: true });
+  const page = await browser.newPage();
+
+  let written = 0;
+  for (const route of ROUTES) {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+    // Let lazy chunks/fonts settle; marketing pages have no auth-gated data.
+    await page.waitForTimeout(400);
+    const html = await page.content();
+    const outDir = route === '/' ? join(root, 'dist') : join(root, 'dist', route.slice(1));
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'index.html'), `<!DOCTYPE html>\n${html.replace(/^<!DOCTYPE html>/i, '')}`);
+    written += 1;
+    process.stdout.write(`prerendered ${route}\n`);
+  }
+  await browser.close();
+  console.log(`prerender complete: ${written}/${ROUTES.length} routes.`);
+} finally {
+  try { process.kill(-server.pid); } catch { try { server.kill(); } catch { /* gone */ } }
+}

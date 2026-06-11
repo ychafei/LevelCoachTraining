@@ -176,6 +176,11 @@ export default function CoachDetail() {
     count: reviews.filter((review) => Number(review.rating) === star).length,
   }));
   const org = coach.organization;
+  // Pricing table pool: the coach's own packages, else the platform-default
+  // templates (no coach_id) — exactly what the booking flow will offer.
+  const ownPackages = packages.filter((pkg) => pkg.coach_id === coachId);
+  const packagePool = (ownPackages.length ? ownPackages : packages.filter((pkg) => !pkg.coach_id))
+    .filter((pkg) => Number(pkg.price) > 0);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -347,6 +352,40 @@ export default function CoachDetail() {
               </p>
             )}
           </InfoSection>
+
+          {packagePool.length > 0 && (
+            <InfoSection title="Session packages & pricing" icon={CreditCard}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th scope="col" className="eyebrow pb-2 pr-4 text-slate-500">Package</th>
+                      <th scope="col" className="eyebrow pb-2 pr-4 text-slate-500">Sessions</th>
+                      <th scope="col" className="eyebrow pb-2 pr-4 text-right text-slate-500">Price</th>
+                      <th scope="col" className="eyebrow pb-2 text-right text-slate-500">Per session</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packagePool.map((pkg) => {
+                      const sessions = Number(pkg.sessions) || 1;
+                      const price = Number(pkg.price) || 0;
+                      return (
+                        <tr key={pkg.id} className="border-b border-slate-100 last:border-0">
+                          <td className="py-2.5 pr-4 font-semibold text-slate-950">{pkg.name}</td>
+                          <td className="py-2.5 pr-4 text-slate-600">{sessions === 1 ? '1 session' : `${sessions} sessions`}</td>
+                          <td className="proof-number py-2.5 pr-4 text-right text-slate-950">${price.toLocaleString('en-US')}</td>
+                          <td className="py-2.5 text-right text-slate-600">${Math.round(price / sessions).toLocaleString('en-US')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Exact totals are confirmed at checkout through Stripe. {CANCEL_POLICY_COPY}
+              </p>
+            </InfoSection>
+          )}
 
           <InfoSection title="Service area" icon={Target}>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -565,6 +604,28 @@ export default function CoachDetail() {
           </div>
         </aside>
       </section>
+
+      {/* Mobile sticky book bar: on phones the desktop booking aside is far
+          below the fold — the decision CTA must stay reachable while reading. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-[640px] items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-950">{model.displayName}</p>
+            {model.rateLabel ? (
+              <p className="text-xs font-semibold text-slate-600">
+                <span className="proof-number text-sm text-slate-950">{model.rateLabel}</span> / session
+              </p>
+            ) : (
+              <p className="text-xs font-semibold text-slate-500">Rates shown at booking</p>
+            )}
+          </div>
+          <Button asChild className="h-11 shrink-0 rounded-lg bg-blue-600 px-6 font-bold text-white hover:bg-blue-700">
+            <Link to={bookHref}>Book training</Link>
+          </Button>
+        </div>
+      </div>
+      {/* Spacer so the sticky bar never covers the page's last content. */}
+      <div className="h-20 lg:hidden" aria-hidden="true" />
     </div>
   );
 }

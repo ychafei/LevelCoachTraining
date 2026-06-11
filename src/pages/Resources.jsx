@@ -68,7 +68,7 @@ const resourcesByAudience = {
   parents: [
     {
       title: 'Safety for parents',
-      description: 'Guardian-controlled booking, signed waivers, and message visibility for minors.',
+      description: 'Guardian-controlled booking, signed waivers, and message visibility for athletes under 18.',
       icon: ShieldCheck,
       href: '/for-parents',
     },

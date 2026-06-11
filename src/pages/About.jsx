@@ -25,7 +25,7 @@ const MISSION_CARDS = [
   },
   {
     title: 'For parents',
-    body: 'Put guardians in control of training for minors — consent, bookings, payments, and message visibility included.',
+    body: 'Put parents in control of training for athletes under 18 — consent, bookings, payments, and message visibility included.',
     icon: UserCheck,
   },
   {
@@ -48,7 +48,7 @@ const PRINCIPLES = [
   },
   {
     title: 'Safety is enforced, not promised',
-    body: 'Guardian gates for minors, signed waivers before training, verified coach emails, and in-platform messaging are server-side rules of the system.',
+    body: 'Guardian controls for athletes under 18, signed waivers before training, verified coach emails, and in-platform messaging are server-side rules of the system.',
     icon: UserCheck,
   },
   {

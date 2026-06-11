@@ -20,7 +20,9 @@
     "preview": "vite preview",
     "phase7:verify": "node scripts/verify-phase7.mjs",
     "sports:seed": "node scripts/seed-sports.mjs",
-    "verify:all": "npm run phase0:verify && npm run phase1:verify && npm run phase2:verify && npm run phase3:verify && npm run phase4:verify && npm run phase5:verify && npm run phase6:verify && npm run phase7:verify"
+    "verify:all": "npm run phase0:verify && npm run phase1:verify && npm run phase2:verify && npm run phase3:verify && npm run phase4:verify && npm run phase5:verify && npm run phase6:verify && npm run phase7:verify",
+    "sitemap": "node scripts/generate-sitemap.mjs",
+    "build:seo": "vite build && node scripts/generate-sitemap.mjs && node scripts/prerender.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
@@ -95,6 +97,7 @@
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "axe-core": "^4.12.1",
     "baseline-browser-mapping": "^2.8.32",
     "eslint": "^9.19.0",
     "eslint-plugin-react": "^7.37.4",
@@ -103,6 +106,7 @@
     "eslint-plugin-unused-imports": "^4.3.0",
     "globals": "^15.14.0",
     "node-appwrite": "^24.0.0",
+    "playwright-core": "^1.60.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",

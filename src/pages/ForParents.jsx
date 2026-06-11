@@ -22,13 +22,13 @@ import { MARKETING_IMAGES } from '@/features/marketing/heroImagery';
 
 const BENEFITS = [
   {
-    title: 'You control bookings for minors',
+    title: 'You control every booking',
     body: 'Athletes under 18 can only be booked by — or with the approval of — a linked guardian. That rule is enforced on our servers, not just in the app.',
     icon: ShieldCheck,
   },
   {
     title: 'Consent and waivers, signed by you',
-    body: 'Minors cannot sign their own waivers. The participation waiver, medical authorization, and consent forms are signed by the guardian and stored against each child.',
+    body: 'Athletes under 18 cannot sign their own waivers. The participation waiver, medical authorization, and consent forms are signed by you and stored against each child.',
     icon: FileSignature,
   },
   {
@@ -74,11 +74,11 @@ const STEPS = [
 const FAQ = [
   {
     q: 'Can my child book a session without me?',
-    a: 'Not if they are under 18. Bookings for minors must be made or approved by a linked guardian whose legal packet is signed. This check happens server-side on every booking.',
+    a: 'Not if they are under 18. Their bookings must be made or approved by a linked parent or guardian whose legal packet is signed. This check happens server-side on every booking.',
   },
   {
     q: "Can I read my child's messages with a coach?",
-    a: 'Yes. When a minor participates in a conversation, their linked guardian is granted read access to that conversation automatically.',
+    a: 'Yes. When an athlete under 18 participates in a conversation, their linked guardian is granted read access to that conversation automatically.',
   },
   {
     q: 'How are coaches vetted?',
@@ -97,7 +97,7 @@ const FAQ = [
 export default function ForParents() {
   usePageMeta({
     title: 'For Parents',
-    description: 'Guardian-controlled booking, signed waivers, message visibility, and Stripe-protected payments — private training for minors with the safeguards built in.',
+    description: 'Guardian-controlled booking, signed waivers, message visibility, and Stripe-protected payments — private training for young athletes with the safeguards built in.',
   });
 
   return (
@@ -107,7 +107,7 @@ export default function ForParents() {
         eyebrowIcon={ShieldCheck}
         title="Private training for your athlete,"
         highlight="with you in control"
-        description="LevelCoach is built so minors never train without guardian consent: you sign the waivers, you book or approve every session, and you can see their messages."
+        description="LevelCoach is built so athletes under 18 never train without your consent: you sign the waivers, you book or approve every session, and you can see their messages."
         primaryCta={{ to: '/create-account/parent', label: 'Create Parent Account' }}
         secondaryCta={{ to: '/coaches', label: 'Browse Coaches First' }}
         image={{
@@ -115,7 +115,7 @@ export default function ForParents() {
           badge: {
             icon: ShieldCheck,
             title: 'Guardian-gated bookings',
-            subtitle: 'Enforced server-side for every minor',
+            subtitle: 'Enforced server-side for every under-18 athlete',
           },
         }}
         highlights={[

@@ -94,7 +94,7 @@ const FAQ = [
     a: 'Yes. Organizations on LevelCoach invite coaches to their roster and configure how each session is paid out. Your profile shows the affiliation, and your earnings still land in your own Stripe account.',
   },
   {
-    q: 'What about coaching minors?',
+    q: 'What about coaching athletes under 18?',
     a: 'Bookings for athletes under 18 must come from a linked guardian who has signed consent, and guardians can read their child\'s messages with you. These rules are enforced automatically.',
   },
 ];

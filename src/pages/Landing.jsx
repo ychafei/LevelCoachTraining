@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -52,7 +52,7 @@ const AUDIENCES = [
   },
   {
     title: 'Parents',
-    body: 'Guardian accounts, signed waivers, and booking controls built for training minors safely.',
+    body: 'Guardian accounts, signed waivers, and booking controls built for training young athletes safely.',
     to: '/for-parents',
     icon: UserCheck,
     accent: 'from-emerald-500/12 to-emerald-600/0',
@@ -90,8 +90,8 @@ const TRUST_ITEMS = [
     icon: FileSignature,
   },
   {
-    title: 'Guardian controls for minors',
-    body: 'Minors train only with a linked guardian account: guardians sign consent, approve bookings, and can read their child’s messages.',
+    title: 'Guardian controls for under-18s',
+    body: 'Athletes under 18 train only with a linked guardian account: guardians sign consent, approve bookings, and can read their child’s messages.',
     icon: ShieldCheck,
   },
 ];
@@ -226,18 +226,26 @@ function SportsGrid() {
             Explore by sport
           </h2>
         </div>
-        <Link to="/coaches" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
-          Browse all coaches
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+          <Link to="/sports" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
+            All sports
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <Link to="/coaches" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
+            Browse all coaches
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
       </Reveal>
       <Stagger className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {SPORTS_CATALOG.map((sport) => {
           const Icon = sportIcon(sport.icon);
           return (
             <Stagger.Item key={sport.sport_key} y={12}>
+              {/* Cards link to the sport LANDING pages (the SEO surface), not a
+                  pre-filtered search — the search lives one click deeper. */}
               <Link
-                to={`/coaches?sport=${encodeURIComponent(sport.sport_key)}`}
+                to={`/sports/${sport.sport_key}`}
                 className="group flex min-h-16 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
@@ -254,9 +262,20 @@ function SportsGrid() {
 }
 
 export default function Landing() {
+  const jsonLd = useMemo(() => ({
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'LevelCoach Training',
+    url: 'https://www.levelcoachtraining.com/',
+    logo: 'https://www.levelcoachtraining.com/levelcoach-mark.png',
+    email: 'contact@levelcoachtraining.com',
+    description: 'Multi-sport coaching marketplace: athletes and families find and book vetted coaches; coaches and training organizations run sessions, progress, messaging, and Stripe payouts from one platform.',
+  }), []);
+
   usePageMeta({
     title: 'Find Verified Sports Coaches & Book Private Training',
-    description: 'Search verified coaches across 15 sports, compare real reviews and availability, and book private training with Stripe-protected payments and guardian controls for minors.',
+    description: 'Search verified coaches across 15 sports, compare real reviews and availability, and book private training with Stripe-protected payments and guardian controls for athletes under 18.',
+    jsonLd,
   });
 
   return (

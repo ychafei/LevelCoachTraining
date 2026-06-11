@@ -274,7 +274,7 @@ function AccountSection() {
                 onChange={(e) => set('dob', e.target.value)}
                 className="mt-1 bg-background"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">Sets whether you&apos;re a minor (under 18).</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Used to apply guardian protections if you&apos;re under 18.</p>
             </div>
           </div>
 

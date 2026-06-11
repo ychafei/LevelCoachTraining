@@ -52,6 +52,7 @@ export default function Navbar() {
     if (!authenticated || !user) {
       return [
         { label: 'Find a coach', path: '/coaches' },
+        { label: 'Sports', path: '/sports' },
         { label: 'Organizations', path: '/organizations' },
         { label: 'How it works', path: '/how-it-works' },
         {
@@ -69,7 +70,9 @@ export default function Navbar() {
           path: '/resources',
           items: [
             { label: 'Resource center', path: '/resources' },
+            { label: 'FAQ', path: '/faq' },
             { label: 'Blog', path: '/blog' },
+            { label: 'Support', path: '/support' },
             { label: 'About', path: '/about' },
           ],
         },
@@ -322,6 +325,19 @@ export default function Navbar() {
 
           {/* Mobile toggle */}
           <div className="md:hidden flex items-center gap-1">
+            {/* The primary CTA must exist outside the hamburger — visible in
+                the collapsed mobile header for guests. */}
+            {!authenticated && (
+              <Button
+                size="sm"
+                onClick={() => navigate('/create-account')}
+                className={`mr-1 h-9 px-3 text-xs font-semibold ${
+                  isGuestPlatform ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-accent text-accent-foreground hover:bg-accent/90'
+                }`}
+              >
+                Create free account
+              </Button>
+            )}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
               className={`p-2 ${isGuestPlatform ? 'text-slate-950' : 'text-foreground'}`}

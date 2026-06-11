@@ -72,14 +72,20 @@ export default function OrganizationDirectory() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return orgs;
-    return orgs.filter((org) => [
-      org.name,
-      org.service_area_label,
-      org.description,
-      ...orgSports(org),
-    ].filter(Boolean).join(' ').toLowerCase().includes(term));
-  }, [orgs, query]);
+    const matches = term
+      ? orgs.filter((org) => [
+        org.name,
+        org.service_area_label,
+        org.description,
+        ...orgSports(org),
+      ].filter(Boolean).join(' ').toLowerCase().includes(term))
+      : orgs;
+    // Bookable rosters first — an org with zero published coaches is a weak
+    // first impression and must never outrank one a family can act on.
+    return [...matches].sort(
+      (a, b) => (coachCounts.get(b.id) || 0) - (coachCounts.get(a.id) || 0),
+    );
+  }, [orgs, query, coachCounts]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -93,8 +99,10 @@ export default function OrganizationDirectory() {
             Training organizations
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Academies and clubs running coach rosters on LevelCoach. Every organization listed here
-            is active, with its published coaches bookable through the marketplace.
+            Academies and clubs running coach rosters on LevelCoach. Booking through an
+            organization adds a layer of oversight: a program behind the coach, shared
+            standards across the roster, and the same server-enforced waivers, payments,
+            and guardian controls as every marketplace booking.
           </p>
 
           <label className="relative mt-6 block max-w-xl">
@@ -169,7 +177,9 @@ export default function OrganizationDirectory() {
                   <div className="mt-auto flex items-center justify-between pt-4">
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600">
                       <Users className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-                      {coachCount} published coach{coachCount === 1 ? '' : 'es'}
+                      {coachCount > 0
+                        ? `${coachCount} bookable coach${coachCount === 1 ? '' : 'es'}`
+                        : 'Roster coming soon'}
                     </span>
                     <span className="inline-flex items-center gap-1 text-sm font-bold text-blue-700">
                       View
