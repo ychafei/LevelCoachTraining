@@ -32,6 +32,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useMyCoach } from '@/features/coach/useMyCoach';
 import { formatCents, formatMonthLabel } from '@/features/coach/money';
 import OnboardingChecklist from '@/components/coach-portal/OnboardingChecklist';
+import PendingOrgInvites from '@/features/coach/PendingOrgInvites';
 import { connectStatusLabel } from '@/features/coach/StripeConnectPanel';
 import { formatInTz, formatInstantInTz } from '@/lib/scheduleET';
 import { cn } from '@/lib/utils';
@@ -240,6 +241,14 @@ export default function CoachOverview() {
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-3xl font-extrabold tracking-wider uppercase text-foreground">Coach Dashboard</h1>
         <p className="text-muted-foreground">Your business at a glance — all numbers are live.</p>
+      </div>
+
+      <div id="org-invites">
+        <PendingOrgInvites
+          coachId={coachId}
+          profileId={user?.id}
+          onChange={() => { void reloadCoach(); }}
+        />
       </div>
 
       <OnboardingChecklist

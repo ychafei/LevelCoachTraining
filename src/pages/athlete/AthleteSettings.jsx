@@ -353,7 +353,15 @@ function SportSection({ athlete }) {
       sports: initialSports,
       skill_level: initialLevel,
       sport_position: initialPosition,
-      location: { ...parseLocationLabel(user?.location_label), zip: '', county: '', lat: undefined, lng: undefined },
+      location: {
+        ...parseLocationLabel(user?.location_label),
+        zip: '',
+        county: '',
+        // Load any saved proximity coords so they survive a save that doesn't
+        // touch the location picker.
+        lat: Number.isFinite(user?.location_lat) ? user.location_lat : undefined,
+        lng: Number.isFinite(user?.location_lng) ? user.location_lng : undefined,
+      },
       bio: user?.bio || '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,6 +370,8 @@ function SportSection({ athlete }) {
     initialLevel,
     initialPosition,
     user?.location_label,
+    user?.location_lat,
+    user?.location_lng,
     user?.bio,
   ]);
 
@@ -392,13 +402,18 @@ function SportSection({ athlete }) {
   const save = async () => {
     setSaving(true);
     try {
-      await auth.updateCurrentUser({
+      const payload = {
         sports: form.sports,
         skill_level: form.skill_level,
         sport_position: form.sport_position.trim(),
         location_label: locationLabel,
         bio: form.bio.trim(),
-      });
+      };
+      // Persist resolved coords (whitelisted by accountProfile.update) so coaches
+      // can gauge proximity; only when the picker resolved finite values.
+      if (Number.isFinite(form.location.lat)) payload.location_lat = form.location.lat;
+      if (Number.isFinite(form.location.lng)) payload.location_lng = form.location.lng;
+      await auth.updateCurrentUser(payload);
       await refetchUser();
       toast.success('Sport profile saved.');
     } catch (err) {

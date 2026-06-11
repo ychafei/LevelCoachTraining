@@ -35,6 +35,7 @@ const EDITABLE_KEYS = [
   'bio', 'quote', 'training_area', 'specializations', 'sports',
   'service_city', 'service_state', 'service_zip', 'service_radius_miles',
   'service_type', 'service_venue', 'timezone', 'intro_video_url',
+  'location_lat', 'location_lng',
 ];
 
 function pickEditable(coach) {
@@ -45,6 +46,10 @@ function pickEditable(coach) {
       out[key] = Array.isArray(c[key]) ? [...c[key]] : [];
     } else if (key === 'service_radius_miles') {
       out[key] = c[key] != null && c[key] !== '' ? String(c[key]) : '';
+    } else if (key === 'location_lat' || key === 'location_lng') {
+      // Coords are kept as finite numbers (or null) — resolved from the
+      // location picker, never typed by hand.
+      out[key] = Number.isFinite(c[key]) ? c[key] : null;
     } else {
       out[key] = c[key] ?? '';
     }
@@ -85,6 +90,10 @@ function draftToPayload(draft) {
     intro_video_url: draft.intro_video_url || '',
   };
   if (draft.timezone) payload.timezone = draft.timezone;
+  // Proximity coords (coaches.location_lat / location_lng) — only persisted when
+  // the picker resolved finite values; consumed by getPublicCoaches + CoachSearch.
+  if (Number.isFinite(draft.location_lat)) payload.location_lat = draft.location_lat;
+  if (Number.isFinite(draft.location_lng)) payload.location_lng = draft.location_lng;
   if (draft.service_radius_miles !== '') {
     const radius = Number(draft.service_radius_miles);
     if (Number.isInteger(radius) && radius >= 0) payload.service_radius_miles = radius;
@@ -744,8 +753,9 @@ export default function CoachProfile() {
           {/* Service area */}
           <Section title="Service Area">
             {/* Location entry — shared US fields: state dropdown, city type-ahead,
-                zip auto-resolve. Only city/state/zip are persisted (the live
-                coaches collection has no lat/lng columns). */}
+                zip auto-resolve. City/state/zip map onto service_*; resolved
+                lat/lng persist to coaches.location_lat / location_lng for
+                proximity search. County is not persisted. */}
             <div className="mb-3">
               <p className="font-display tracking-wider uppercase text-xs text-foreground mb-2">Location</p>
               <USLocationFields
@@ -759,11 +769,13 @@ export default function CoachProfile() {
                 }}
                 onChange={(patch) => {
                   // Map the shared field names onto the coach's service_* draft
-                  // keys. Ignore county/lat/lng — they are not persisted here.
+                  // keys; carry resolved coords into location_lat/location_lng.
                   const mapped = {};
                   if ('city' in patch) mapped.service_city = patch.city;
                   if ('state' in patch) mapped.service_state = patch.state;
                   if ('zip' in patch) mapped.service_zip = patch.zip;
+                  if ('lat' in patch && Number.isFinite(patch.lat)) mapped.location_lat = patch.lat;
+                  if ('lng' in patch && Number.isFinite(patch.lng)) mapped.location_lng = patch.lng;
                   if (Object.keys(mapped).length) updateDraft(mapped);
                 }}
               />

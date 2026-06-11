@@ -1,5 +1,5 @@
-import { findPlaceSuggestions, METRO_DETROIT_PLACES, resolvePlace } from '@/lib/metroDetroitPlaces';
 import { getSport, sportOptions } from '@/lib/sportsCatalog';
+import { toStateCode } from '@/lib/usStates';
 
 // Catalog-driven options (ARCHITECTURE.md §6). Values are sport_key strings;
 // labels are display names.
@@ -43,16 +43,10 @@ export const RELATIONSHIP_OPTIONS = [
   'Other authorized adult',
 ];
 
-export const CITY_OPTIONS = METRO_DETROIT_PLACES.filter((place) => place.type === 'city');
-
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function compact(value) {
   return String(value || '').trim();
-}
-
-function normalizeForCompare(value) {
-  return compact(value).toLowerCase();
 }
 
 export function validatePersonName(value, label) {
@@ -129,34 +123,30 @@ export function validateSportKey(value) {
   return '';
 }
 
-export function citySuggestions(query, limit = 8) {
-  const trimmed = compact(query);
-  if (!trimmed) return CITY_OPTIONS.slice(0, limit);
-  return findPlaceSuggestions(trimmed, limit * 2)
-    .filter((place) => place.type === 'city')
-    .slice(0, limit);
-}
-
-export function resolveCityPlace(value) {
-  const trimmed = compact(value);
-  if (!trimmed) return null;
-  const direct = CITY_OPTIONS.find((place) => normalizeForCompare(place.label) === normalizeForCompare(trimmed));
-  if (direct) return direct;
-  const resolved = resolvePlace(trimmed);
-  return resolved?.type === 'city' ? resolved : null;
-}
-
 // Location is city/state plus optional free-text detail. Free text is allowed —
-// suggestions only add lat/lng when the city resolves to a known place.
+// USLocationFields (Photon) supplies county/lat/lng on a pick, nationwide.
 export function validateLocation(value, label = 'Training city or area') {
   if (!compact(value)) return `${label} is required.`;
   return '';
 }
 
-export function buildLocationLabel(city, detail = '') {
-  const cityText = compact(city);
+// location_label is stored as "City, ST — optional detail" so signup
+// (CreateAccount), onboarding, and settings round-trip on the same convention.
+export function buildLocationLabel(cityState, detail = '') {
+  const cityStateText = compact(cityState);
   const detailText = compact(detail);
-  return [cityText, detailText].filter(Boolean).join(' — ').slice(0, 500);
+  return [cityStateText, detailText].filter(Boolean).join(' — ').slice(0, 500);
+}
+
+// Inverse of buildLocationLabel: pull the structured pieces back out of a stored
+// "City, ST — detail" label. Coords/county are not encoded in the label, so they
+// come back empty until the user re-picks a city in USLocationFields.
+export function parseLocationLabel(label) {
+  const [cityState = '', detail = ''] = String(label || '').split('—').map((part) => part.trim());
+  const parts = cityState.split(',').map((part) => part.trim());
+  const state = parts.length > 1 ? toStateCode(parts[parts.length - 1]) : '';
+  const city = state ? parts.slice(0, -1).join(', ') : cityState;
+  return { city, state, detail, county: '', lat: undefined, lng: undefined };
 }
 
 export function validateEmail(value, label = 'Email address') {

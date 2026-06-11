@@ -231,29 +231,47 @@ export default async ({ req, res, error }) => {
       ? Number(refreshedCharge.amount_refunded || 0)
       : previouslyRefunded + refundCents;
     const fullRefund = newRefundedTotal >= totalAmount;
+    const cappedRefundedTotal = Math.min(newRefundedTotal, totalAmount);
     const reversals = [];
     for (const transfer of transferRows.documents) {
       if (!transfer.transfer_id || transfer.status === 'reversed') continue;
-      const reversalAmount = Math.floor((Number(transfer.amount || 0) * refundCents) / totalAmount);
-      if (reversalAmount <= 0) continue;
+      // Drive off the charge's CUMULATIVE refunded total and the transfer's own
+      // amount_reversed (re-fetched from Stripe, the source of truth) — mirrors
+      // the webhook path so both converge to the same end-state and dedupe.
+      const liveTransfer = await stripe.transfers.retrieve(transfer.transfer_id).catch(() => null);
+      if (!liveTransfer) continue;
+      const transferAmount = Number(liveTransfer.amount || 0);
+      const alreadyReversed = Number(liveTransfer.amount_reversed || 0);
+      // Integer cents only; identical formula to stripeWebhook so the same
+      // logical end-state yields the same `target` and therefore the same key.
+      const target = Math.floor((transferAmount * cappedRefundedTotal) / totalAmount);
+      // Reverse only the remaining delta; clamp negatives and never exceed what
+      // Stripe still allows (transfer.amount - amount_reversed).
+      const maxReversible = Math.max(0, transferAmount - alreadyReversed);
+      const delta = Math.min(Math.max(0, target - alreadyReversed), maxReversible);
+      if (delta <= 0) continue;
       const reversal = await stripe.transfers.createReversal(transfer.transfer_id, {
-        amount: reversalAmount,
+        amount: delta,
         metadata: {
           payment_record_id: paymentRecord.$id,
           request_id: requestId,
         },
       }, {
-        idempotencyKey: `refund_${paymentRecord.$id}_${requestId}_rev_${transfer.$id}`,
+        // Unified deterministic key shared with stripeWebhook: keyed to the
+        // transfer id + cumulative target so the same logical reversal dedupes
+        // in Stripe regardless of which path fires first.
+        idempotencyKey: `rev_${transfer.transfer_id}_${target}`,
       });
+      const fullyReversed = target >= transferAmount;
       await databases.updateDocument(DB_ID, 'stripe_transfer_records', transfer.$id, {
         reversal_id: reversal.id,
-        status: fullRefund ? 'reversed' : transfer.status || 'paid',
+        status: fullyReversed ? 'reversed' : transfer.status || 'paid',
       }).catch(() => {});
       reversals.push({
         transfer_record_id: transfer.$id,
         transfer_id: transfer.transfer_id,
         reversal_id: reversal.id,
-        amount: reversalAmount,
+        amount: delta,
         destination: transfer.destination_account_id || '',
       });
     }

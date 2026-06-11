@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -52,65 +51,42 @@ export default function AdminCoaches() {
   }, []);
   const loadCoaches = () => coachRepo.list('display_order').then(setCoaches);
 
-  // Same email can map to multiple accounts/profiles (e.g. Google + password
-  // sign-in). Gather every profile row sharing an email so link/unlink stamps
-  // all of them — otherwise the coach portal breaks on the "other" account.
-  const profilesForEmail = async (email, seed) => {
-    const norm = (s) => (s || '').trim().toLowerCase();
-    const target = norm(email);
-    const map = new Map();
-    if (seed) map.set(seed.id, seed);
-    if (!target) return [...map.values()];
-    // Index-free: match against the already-loaded profile list (no Appwrite
-    // equality query, which would need an index on profiles.email).
-    for (const u of users) if (norm(u.email) === target) map.set(u.id, u);
-    // Re-pull the full list in case local state is stale.
-    try {
-      const all = await profileRepo.list();
-      for (const p of all) if (norm(p.email) === target) map.set(p.id, p);
-    } catch (err) {
-      console.warn('profilesForEmail: list failed', err);
-    }
-    return [...map.values()];
-  };
-
   const linkUser = async (userId) => {
     let seed = users.find(u => u.id === userId);
     if (!seed) seed = await profileRepo.get(userId).catch(() => null);
     if (!seed) { toast.error('Could not load that account.'); return; }
 
     const email = (seed.email || '').trim();
-    const matches = await profilesForEmail(email, seed);
     const coach_id = linkDialog.id;
 
-    for (const p of matches) {
-      const upd = { coach_id };
-      if (p.role !== 'admin' && p.role !== 'super_admin') upd.role = 'coach';
-      await profileRepo.updateById(p.id, upd);
-    }
-    const ids = new Set(matches.map(p => p.id));
-    setUsers(prev => prev.map(u => ids.has(u.id)
-      ? { ...u, coach_id, ...(u.role !== 'admin' && u.role !== 'super_admin' ? { role: 'coach' } : {}) }
-      : u));
+    try {
+      // Foreign profiles can't be written client-side ("Only your own profile
+      // can be updated"). Link through the audited server path, which stamps
+      // the coach_id/label/role on the account's profile(s) server-side.
+      await coachRepo.adminLinkAccount(coach_id, seed.id);
 
-    await logAdminAction({
-      actor: user,
-      action: 'coach.link_user',
-      entityType: 'User',
-      entityId: userId,
-      before: { coach_id: seed.coach_id || null, role: seed.role || 'user' },
-      after: { coach_id },
-      metadata: {
-        coach_id,
-        coach_name: `${linkDialog.first_name || ''} ${linkDialog.last_name || ''}`.trim(),
-        target_email: email,
-        profiles_updated: matches.length,
-      },
-    });
-    toast.success(matches.length > 1
-      ? `Linked as coach (${matches.length} profiles for this email)`
-      : 'User linked as coach');
-    setLinkDialog(null);
+      setUsers(prev => prev.map(u => u.id === seed.id
+        ? { ...u, coach_id, ...(u.role !== 'admin' && u.role !== 'super_admin' ? { role: 'coach' } : {}) }
+        : u));
+
+      await logAdminAction({
+        actor: user,
+        action: 'coach.link_user',
+        entityType: 'User',
+        entityId: userId,
+        before: { coach_id: seed.coach_id || null, role: seed.role || 'user' },
+        after: { coach_id },
+        metadata: {
+          coach_id,
+          coach_name: `${linkDialog.first_name || ''} ${linkDialog.last_name || ''}`.trim(),
+          target_email: email,
+        },
+      });
+      toast.success('User linked as coach');
+      setLinkDialog(null);
+    } catch (err) {
+      toast.error(err?.message || 'Could not link that account.');
+    }
   };
 
   // Manual link: admin types an email, we find that profile (even if it's
@@ -182,34 +158,33 @@ export default function AdminCoaches() {
     });
     if (!ok) return;
 
-    // Clear the link on every profile sharing this email (duplicate accounts).
-    const matches = await profilesForEmail(linked.email, linked);
-    for (const p of matches) {
-      const keepAdmin = p.role === 'admin' || p.role === 'super_admin';
-      await profileRepo.updateById(p.id, { coach_id: null, ...(keepAdmin ? {} : { role: 'user' }) });
-    }
-    const ids = new Set(matches.map(p => p.id));
-    setUsers(prev => prev.map(u => ids.has(u.id)
-      ? { ...u, coach_id: null, ...(u.role === 'admin' || u.role === 'super_admin' ? {} : { role: 'user' }) }
-      : u));
+    try {
+      // Clearing a foreign profile client-side throws ("Only your own profile
+      // can be updated"). Unlink through the audited server path, the inverse
+      // of adminLinkAccount.
+      await coachRepo.adminUnlinkCoach(coach.id);
 
-    await logAdminAction({
-      actor: user,
-      action: 'coach.unlink_user',
-      entityType: 'User',
-      entityId: linked.id,
-      before: { coach_id: linked.coach_id || null, role: linked.role || 'user' },
-      after: { coach_id: null },
-      metadata: {
-        coach_id: coach.id,
-        coach_name: `${coach.first_name || ''} ${coach.last_name || ''}`.trim(),
-        target_email: linked.email,
-        profiles_updated: matches.length,
-      },
-    });
-    toast.success(matches.length > 1
-      ? `Account unlinked (${matches.length} profiles for this email)`
-      : 'Account unlinked');
+      setUsers(prev => prev.map(u => u.id === linked.id
+        ? { ...u, coach_id: null, ...(u.role === 'admin' || u.role === 'super_admin' ? {} : { role: 'user' }) }
+        : u));
+
+      await logAdminAction({
+        actor: user,
+        action: 'coach.unlink_user',
+        entityType: 'User',
+        entityId: linked.id,
+        before: { coach_id: linked.coach_id || null, role: linked.role || 'user' },
+        after: { coach_id: null },
+        metadata: {
+          coach_id: coach.id,
+          coach_name: `${coach.first_name || ''} ${coach.last_name || ''}`.trim(),
+          target_email: linked.email,
+        },
+      });
+      toast.success('Account unlinked');
+    } catch (err) {
+      toast.error(err?.message || 'Could not unlink that account.');
+    }
   };
 
   const save = async () => {
@@ -235,55 +210,60 @@ export default function AdminCoaches() {
       }
     }
 
-    if (isUpdate) {
-      await coachRepo.update(editing.id, editing);
-    } else {
-      const created = await coachRepo.create(editing);
-      // Capture the new id for audit metadata.
-      if (created?.id) editing.id = created.id;
-    }
+    try {
+      if (isUpdate) {
+        await coachRepo.adminUpdateCoach(editing.id, editing);
+      } else {
+        const res = await coachRepo.adminCreateCoach(editing);
+        // Capture the new id for audit metadata.
+        const created = res?.coach || res;
+        if (created?.id) editing.id = created.id;
+      }
 
-    if (isUpdate && previous && previous.is_active !== editing.is_active) {
+      if (isUpdate && previous && previous.is_active !== editing.is_active) {
+        await logAdminAction({
+          actor: user,
+          action: editing.is_active ? 'coach.activate' : 'coach.deactivate',
+          entityType: 'Coach',
+          entityId: editing.id,
+          before: { is_active: previous.is_active },
+          after: { is_active: editing.is_active },
+          metadata: {
+            coach_name: `${editing.first_name || ''} ${editing.last_name || ''}`.trim(),
+          },
+        });
+      }
       await logAdminAction({
         actor: user,
-        action: editing.is_active ? 'coach.activate' : 'coach.deactivate',
+        action: isUpdate ? 'coach.update' : 'coach.create',
         entityType: 'Coach',
-        entityId: editing.id,
-        before: { is_active: previous.is_active },
-        after: { is_active: editing.is_active },
-        metadata: {
-          coach_name: `${editing.first_name || ''} ${editing.last_name || ''}`.trim(),
+        entityId: editing.id || '',
+        before: isUpdate ? {
+          first_name: previous?.first_name,
+          last_name: previous?.last_name,
+          county: previous?.county,
+          is_active: previous?.is_active,
+          is_head_coach: previous?.is_head_coach,
+          platform_fee_type: previous?.platform_fee_type,
+          platform_fee_value: previous?.platform_fee_value,
+        } : undefined,
+        after: {
+          first_name: editing.first_name,
+          last_name: editing.last_name,
+          county: editing.county,
+          is_active: editing.is_active,
+          is_head_coach: editing.is_head_coach,
+          platform_fee_type: editing.platform_fee_type,
+          platform_fee_value: editing.platform_fee_value,
         },
       });
-    }
-    await logAdminAction({
-      actor: user,
-      action: isUpdate ? 'coach.update' : 'coach.create',
-      entityType: 'Coach',
-      entityId: editing.id || '',
-      before: isUpdate ? {
-        first_name: previous?.first_name,
-        last_name: previous?.last_name,
-        county: previous?.county,
-        is_active: previous?.is_active,
-        is_head_coach: previous?.is_head_coach,
-        platform_fee_type: previous?.platform_fee_type,
-        platform_fee_value: previous?.platform_fee_value,
-      } : undefined,
-      after: {
-        first_name: editing.first_name,
-        last_name: editing.last_name,
-        county: editing.county,
-        is_active: editing.is_active,
-        is_head_coach: editing.is_head_coach,
-        platform_fee_type: editing.platform_fee_type,
-        platform_fee_value: editing.platform_fee_value,
-      },
-    });
 
-    toast.success('Coach saved');
-    setOpen(false);
-    loadCoaches();
+      toast.success('Coach saved');
+      setOpen(false);
+      loadCoaches();
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save coach');
+    }
   };
 
   const remove = async (coach) => {
@@ -305,11 +285,13 @@ export default function AdminCoaches() {
     if (!ok) return;
 
     try {
+      // The server deletes the coach THEN clears the linked profile's coach_id.
+      // Do NOT unlink client-side first — that orphans the link if the delete
+      // fails, and the server already handles the unlink atomically.
+      await coachRepo.adminDeleteCoach(coach.id);
       if (linkedUser) {
-        await profileRepo.updateById(linkedUser.id, { coach_id: null });
         setUsers(prev => prev.map(u => u.id === linkedUser.id ? { ...u, coach_id: null } : u));
       }
-      await coachRepo.delete(coach.id);
       await logAdminAction({
         actor: user,
         action: 'coach.delete',
@@ -398,14 +380,7 @@ export default function AdminCoaches() {
                   </div>
                   <div>
                     <Label className="font-display tracking-wider uppercase text-xs">County</Label>
-                    <Select value={editing.county} onValueChange={v => setEditing({...editing, county: v})}>
-                      <SelectTrigger className="bg-secondary border-border mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Oakland">Oakland</SelectItem>
-                        <SelectItem value="Macomb">Macomb</SelectItem>
-                        <SelectItem value="Wayne">Wayne</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input value={editing.county || ''} onChange={e => setEditing({...editing, county: e.target.value})} className="bg-secondary border-border mt-1" placeholder="County (e.g. Oakland)" />
                   </div>
                   <div>
                     <Label className="font-display tracking-wider uppercase text-xs">Training Area</Label>

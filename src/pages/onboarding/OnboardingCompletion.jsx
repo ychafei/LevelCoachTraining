@@ -4,14 +4,12 @@ import { ArrowRight, Building2, Briefcase, CheckCircle2, FileText, ShieldCheck, 
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import {
-  CITY_OPTIONS,
   buildAthleteBio,
   buildLocationLabel,
-  citySuggestions,
   normalizePhoneForStorage,
   parseAthleteBio,
+  parseLocationLabel,
   requiresGuardian,
-  resolveCityPlace,
   validateDob,
   validateLocation,
   validatePersonName,
@@ -28,6 +26,7 @@ import EmailVerificationBanner from '@/features/onboarding/EmailVerificationBann
 import ParentAthletesStep from '@/features/onboarding/ParentAthletesStep';
 import GuardianLegalStep from '@/features/onboarding/GuardianLegalStep';
 import { homePathForRole } from '@/lib/roleHome';
+import USLocationFields from '@/components/forms/USLocationFields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,10 +59,6 @@ function normalizeRequestedRole(role) {
   return ROLE_IDS.has(role) ? role : '';
 }
 
-function splitLocationLabel(label) {
-  const [city = '', detail = ''] = String(label || '').split('—').map((part) => part.trim());
-  return { city, detail };
-}
 
 export default function OnboardingCompletion() {
   const navigate = useNavigate();
@@ -231,14 +226,21 @@ export default function OnboardingCompletion() {
 function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
   const name = useMemo(() => splitName(user), [user]);
   const parsedBio = useMemo(() => parseAthleteBio(user?.bio), [user?.bio]);
-  const savedLocation = useMemo(() => splitLocationLabel(user?.location_label), [user?.location_label]);
+  const savedLocation = useMemo(() => parseLocationLabel(user?.location_label), [user?.location_label]);
 
   const [form, setForm] = useState({
     first_name: name.first,
     last_name: name.last,
     phone: user?.phone || '',
     dob: user?.dob ? String(user.dob).slice(0, 10) : '',
-    city: savedLocation.city,
+    location: {
+      city: savedLocation.city,
+      state: savedLocation.state,
+      zip: '',
+      county: savedLocation.county,
+      lat: savedLocation.lat,
+      lng: savedLocation.lng,
+    },
     locationDetail: savedLocation.detail,
     trainingGoal: parsedBio.trainingGoal,
   });
@@ -266,11 +268,16 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
   const [formError, setFormError] = useState('');
 
   const guardianRequired = requiresGuardian(form.dob);
-  const locationSuggestions = useMemo(() => citySuggestions(form.city, 10), [form.city]);
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  // Merge the changed subset from USLocationFields into the structured location.
+  const updateLocation = (patch) => {
+    setForm((current) => ({ ...current, location: { ...current.location, ...patch } }));
+    setErrors((current) => ({ ...current, city: undefined, state: undefined }));
   };
 
   const validate = () => {
@@ -279,12 +286,12 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
     const lastNameError = validatePersonName(form.last_name, 'Last name');
     const phoneError = validatePhone(form.phone, 'Phone');
     const dobError = validateDob(form.dob);
-    const cityError = validateLocation(form.city);
     if (firstNameError) next.first_name = firstNameError;
     if (lastNameError) next.last_name = lastNameError;
     if (phoneError) next.phone = phoneError;
     if (dobError) next.dob = dobError;
-    if (cityError) next.city = cityError;
+    if (validateLocation(form.location.city)) next.city = 'Training city is required.';
+    if (!form.location.state) next.state = 'Select your state.';
     Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
     if (guardianRequired) Object.assign(next, validateGuardianContact(guardian));
     setErrors(next);
@@ -300,7 +307,10 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
     }
     setSaving(true);
     try {
-      const cityPlace = resolveCityPlace(form.city);
+      const { city, state, lat, lng } = form.location;
+      // "City, ST" matches CreateAccount so signup→onboarding→settings round-trips.
+      const cityStateLabel = [city.trim(), state].filter(Boolean).join(', ');
+      const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
       // onboarding_role / onboarding_status are only writable pre-completion;
       // skip them for profiles that already crossed that transition.
       const alreadyComplete = user?.onboarding_status === 'complete';
@@ -317,8 +327,8 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
         parent_email: guardianRequired ? guardian.parentEmail.trim() : '',
         parent_phone: guardianRequired ? normalizePhoneForStorage(guardian.parentPhone) : '',
         parent_relationship: guardianRequired ? guardian.parentRelationship.trim() : '',
-        location_label: buildLocationLabel(cityPlace?.label || form.city, form.locationDetail),
-        ...(cityPlace ? { location_lat: cityPlace.lat, location_lng: cityPlace.lng } : {}),
+        location_label: buildLocationLabel(cityStateLabel, form.locationDetail),
+        ...(hasCoords ? { location_lat: lat, location_lng: lng } : {}),
         bio: buildAthleteBio({
           ...sportDetails,
           trainingGoal: form.trainingGoal,
@@ -335,12 +345,6 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
 
   return (
     <form onSubmit={finish} className="mt-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm" noValidate>
-      <datalist id="levelcoach-city-options">
-        {(form.city.trim() ? locationSuggestions : CITY_OPTIONS).map((place) => (
-          <option key={place.label} value={place.label} />
-        ))}
-      </datalist>
-
       {fromCreateAccount && (
         <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Saved from account creation</p>
@@ -385,19 +389,25 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
           error={errors.dob}
           required
         />
-        <Field
-          label="Training city / state"
-          value={form.city}
-          onChange={(value) => updateForm('city', value)}
-          onBlur={() => {
-            const city = resolveCityPlace(form.city);
-            if (city) updateForm('city', city.label);
-          }}
-          error={errors.city}
-          list="levelcoach-city-options"
-          placeholder="e.g., Troy, MI"
+      </div>
+
+      <fieldset className="mt-5">
+        <legend className="mb-2 block text-sm font-bold text-slate-900">
+          Training location<span className="text-red-600"> *</span>
+        </legend>
+        <USLocationFields
+          idPrefix="onboarding-athlete-loc"
+          fields={['state', 'city', 'zip']}
           required
+          disabled={saving}
+          value={form.location}
+          onChange={updateLocation}
+          errors={{ city: errors.city, state: errors.state }}
+          columns="grid grid-cols-1 gap-4 sm:grid-cols-3"
         />
+      </fieldset>
+
+      <div className="mt-5">
         <Field
           label="Location details (optional)"
           value={form.locationDetail}

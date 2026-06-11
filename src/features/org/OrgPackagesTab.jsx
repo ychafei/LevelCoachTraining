@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { organizationRepo } from '@/api/repo';
+import { organizationRepo, pricingPackageRepo } from '@/api/repo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,15 +63,29 @@ export default function OrgPackagesTab({ organizationId, isOrgAdmin }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  // Member-readable direct read of an org's active packages. pricing_packages is
+  // PUBLIC read, so this works for billing/coach_manager/viewer roles that the
+  // admin-only orgAdmin.listPackages call would 403 on.
+  const loadReadOnly = () => pricingPackageRepo.listForOrg(organizationId);
+
   const load = () => {
     if (!organizationId) { setLoading(false); return; }
     setLoading(true);
-    organizationRepo.listPackages(organizationId)
+    // Non-admins never have orgAdmin access — read directly. Admins use the
+    // admin function (returns hidden packages too) but fall back to the public
+    // read if it 403s rather than erroring the whole tab.
+    const fetchPackages = isOrgAdmin
+      ? organizationRepo.listPackages(organizationId).catch((err) => {
+          if (err?.code === 403 || err?.status === 403) return loadReadOnly();
+          throw err;
+        })
+      : loadReadOnly();
+    fetchPackages
       .then((rows) => setPackages(rows || []))
       .catch((err) => toast.error(err?.message || 'Could not load your packages.'))
       .finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, [organizationId]);
+  useEffect(() => { load(); }, [organizationId, isOrgAdmin]);
 
   const startNew = () => setDraft({ ...emptyDraft });
   const startEdit = (pkg) => setDraft({

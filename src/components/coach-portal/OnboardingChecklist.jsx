@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, AlertCircle, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ const MISSING_LABELS = {
   photo: 'Upload a profile photo',
   sport: 'Add at least one sport',
   availability: 'Set weekly availability',
+  pricing: 'Create at least one active package',
 };
 
 function weeklyAvailabilitySet(coach) {
@@ -28,8 +29,8 @@ function weeklyAvailabilitySet(coach) {
 }
 
 // extras: { connectReady?: boolean, hasSportProfiles?: boolean,
-//           legalPacketSigned?: boolean|null } — null/undefined = unknown,
-// never guessed.
+//           legalPacketSigned?: boolean|null, hasActivePackage?: boolean|null }
+//           — null/undefined = unknown, never guessed.
 export function computeChecklist(user, coach, extras = {}) {
   const items = [
     {
@@ -90,6 +91,19 @@ export function computeChecklist(user, coach, extras = {}) {
     },
   ];
 
+  // Pricing — publishing requires at least one active package (server
+  // hasActivePackage gate). Only shown once known so we never guess.
+  if (extras.hasActivePackage !== undefined && extras.hasActivePackage !== null) {
+    items.push({
+      key: 'pricing',
+      label: 'Create at least one active package',
+      blurb: 'Athletes book against your packages — at least one active package is required to publish.',
+      href: '/coach/profile',
+      done: extras.hasActivePackage === true,
+      blocking: false,
+    });
+  }
+
   if (extras.legalPacketSigned !== undefined && extras.legalPacketSigned !== null) {
     items.push({
       key: 'legal_packet',
@@ -113,9 +127,33 @@ export function computeChecklist(user, coach, extras = {}) {
 }
 
 export default function OnboardingChecklist({ user, coach, extras = {}, compact = false, onPublished }) {
-  const { items, totalDone, total, hasBlocking, pct } = computeChecklist(user, coach, extras);
   const [publishing, setPublishing] = useState(false);
   const [serverMissing, setServerMissing] = useState([]);
+
+  // Active-package state mirrors the server's hasActivePackage publish gate.
+  // Prefer a value supplied by the consumer; otherwise self-load it (tri-state:
+  // null = unknown until the fetch resolves, so the item is never guessed).
+  const consumerHasActivePackage = extras.hasActivePackage;
+  const [loadedHasActivePackage, setLoadedHasActivePackage] = useState(null);
+
+  useEffect(() => {
+    if (consumerHasActivePackage !== undefined && consumerHasActivePackage !== null) return undefined;
+    if (!coach?.id) { setLoadedHasActivePackage(null); return undefined; }
+    let cancelled = false;
+    coachRepo.listPackages()
+      .then((pkgs) => {
+        if (cancelled) return;
+        setLoadedHasActivePackage((pkgs || []).some((p) => p?.is_active !== false));
+      })
+      .catch(() => { if (!cancelled) setLoadedHasActivePackage(null); });
+    return () => { cancelled = true; };
+  }, [coach?.id, consumerHasActivePackage]);
+
+  const resolvedExtras = consumerHasActivePackage !== undefined && consumerHasActivePackage !== null
+    ? extras
+    : { ...extras, hasActivePackage: loadedHasActivePackage };
+
+  const { items, totalDone, total, hasBlocking, pct } = computeChecklist(user, coach, resolvedExtras);
 
   const published = coach?.published === true;
   if (published && totalDone === total) return null; // fully set up + live → hide

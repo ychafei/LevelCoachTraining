@@ -433,9 +433,10 @@ async function reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmou
       amount: delta,
       metadata: { payment_record_id: paymentRecord.$id, source: 'stripeWebhook.refund' },
     }, {
-      // Deterministic per cumulative target: a retried event recomputes the
-      // same target and the same key, so Stripe deduplicates the reversal.
-      idempotencyKey: `whrev_${record.$id}_${target}`,
+      // Unified deterministic key shared with refundStripePayment: keyed to the
+      // transfer id + cumulative target so the same logical reversal dedupes in
+      // Stripe regardless of which path (admin refund or webhook) fires first.
+      idempotencyKey: `rev_${record.transfer_id}_${target}`,
     }).catch((err) => {
       console.error(`[stripeWebhook] reversal failed for ${record.transfer_id}: ${err?.message || err}`);
       return null;

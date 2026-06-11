@@ -87,6 +87,57 @@ function int(value, min, max) {
   return n;
 }
 
+// Create a coach document, tolerating a live `coaches` collection that is
+// missing newer attributes (the ~25-attribute cap means some marketplace
+// fields may not exist). On an "Unknown attribute" error we drop that key and
+// retry, so the write succeeds with whatever the schema currently supports.
+async function createCoachResilient(databases, data) {
+  const payload = { ...data };
+  for (let i = 0; i < 25; i += 1) {
+    try {
+      return await databases.createDocument(DB_ID, 'coaches', ID.unique(), payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Could not create coach record.');
+}
+
+// Update a coach document with the same strip-unknown-attribute-and-retry
+// resilience as the create path. Returns the updated doc, or null if nothing
+// could be written.
+async function updateCoachResilient(databases, coachId, updates) {
+  const payload = { ...updates };
+  for (let i = 0; i < 25; i += 1) {
+    if (Object.keys(payload).length === 0) return null;
+    try {
+      return await databases.updateDocument(DB_ID, 'coaches', coachId, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
+// Find the profile linked to this coach (profiles.coach_id === coachId).
+async function profileForCoach(databases, coachId) {
+  const rows = await databases.listDocuments(DB_ID, 'profiles', [
+    Query.equal('coach_id', coachId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
 // --- Action handlers ----------------------------------------------------------
 
 async function inviteUser(ctx, payload) {
@@ -330,6 +381,149 @@ async function linkCoachAccount(ctx, payload) {
   return { status: 200, body: { ok: true } };
 }
 
+async function unlinkCoachAccount(ctx, payload) {
+  const { databases, users, actor } = ctx;
+  const coachId = String(payload.coach_id || '');
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  // Inverse of linkCoachAccount: clear the coach's user_id, drop the link on
+  // the linked profile (coach_id + coach role), and remove the coach label.
+  const profile = await profileForCoach(databases, coachId);
+  const accountId = profile?.account_id || coach.user_id || '';
+
+  await databases.updateDocument(DB_ID, 'coaches', coachId, { user_id: '' }).catch(() => {});
+  if (profile) {
+    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { role: 'user', coach_id: '' }).catch(() => {});
+  }
+  if (accountId) {
+    const account = await users.get(accountId).catch(() => null);
+    if (account) {
+      await users.updateLabels(accountId, (account.labels || []).filter((l) => l !== 'coach')).catch(() => {});
+    }
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.unlink_account',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    before: JSON.stringify({ user_id: coach.user_id || '', profile_id: profile?.$id || '' }),
+    after: JSON.stringify({ user_id: '', profile_id: '' }),
+    metadata: JSON.stringify({ profile_email: profile?.email || '' }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
+async function createCoach(ctx, payload) {
+  const { databases, actor } = ctx;
+  const fields = payload.fields;
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+    return { status: 400, body: { error: 'fields must be an object (coach document body).' } };
+  }
+
+  let coach;
+  try {
+    coach = await createCoachResilient(databases, { ...fields });
+  } catch (err) {
+    ctx.error?.(err?.message || String(err));
+    return { status: 500, body: { error: 'Could not create the coach record.' } };
+  }
+
+  // Optionally link the new coach to an existing profile.
+  const profileId = str(payload.profile_id ?? '', 0, 64);
+  if (profileId) {
+    await databases.updateDocument(DB_ID, 'profiles', profileId, { coach_id: coach.$id }).catch((err) => {
+      ctx.error?.(`createCoach: failed to set profile.coach_id: ${err?.message || err}`);
+    });
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.create',
+    entity_type: 'Coach',
+    entity_id: coach.$id,
+    after: JSON.stringify({ coach_id: coach.$id }),
+    metadata: JSON.stringify({ profile_id: profileId || '' }),
+  });
+  return { status: 200, body: { ok: true, coach } };
+}
+
+async function updateCoach(ctx, payload) {
+  const { databases, actor } = ctx;
+  const coachId = String(payload.coach_id || '');
+  const updates = payload.updates;
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return { status: 400, body: { error: 'updates must be an object.' } };
+  }
+  if (Object.keys(updates).length === 0) {
+    return { status: 400, body: { error: 'updates must include at least one field.' } };
+  }
+
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  let updated;
+  try {
+    updated = await updateCoachResilient(databases, coachId, { ...updates });
+  } catch (err) {
+    ctx.error?.(err?.message || String(err));
+    return { status: 500, body: { error: 'Could not update the coach record.' } };
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.update',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    after: JSON.stringify({ keys: Object.keys(updates) }),
+  });
+  return { status: 200, body: { ok: true, coach: updated || coach } };
+}
+
+async function deleteCoach(ctx, payload) {
+  const { databases, actor } = ctx;
+  const coachId = String(payload.coach_id || '');
+  if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
+
+  const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
+
+  // Ordering fix: delete the coach FIRST. Only after the delete succeeds do we
+  // clear the linked profile's coach_id. The old order cleared the profile link
+  // before the delete, orphaning the profile when the delete failed.
+  try {
+    await databases.deleteDocument(DB_ID, 'coaches', coachId);
+  } catch (err) {
+    ctx.error?.(err?.message || String(err));
+    return { status: 500, body: { error: 'Could not delete the coach record.' } };
+  }
+
+  const profile = await profileForCoach(databases, coachId);
+  if (profile) {
+    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { coach_id: '' }).catch((err) => {
+      ctx.error?.(`deleteCoach: failed to clear profile.coach_id: ${err?.message || err}`);
+    });
+  }
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'coach.delete',
+    entity_type: 'Coach',
+    entity_id: coachId,
+    before: JSON.stringify({ coach_id: coachId }),
+    metadata: JSON.stringify({ profile_id: profile?.$id || '' }),
+  });
+  return { status: 200, body: { ok: true } };
+}
+
 async function setCoachFee(ctx, payload) {
   const { databases, actor, labels } = ctx;
   if (!labels.includes('superadmin')) {
@@ -466,8 +660,17 @@ async function publishBlogPost(ctx, payload) {
   const post = await databases.getDocument(DB_ID, 'blog_posts', postId).catch(() => null);
   if (!post) return { status: 404, body: { error: 'Blog post not found.' } };
 
-  // Published posts carry a per-document public read grant; unpublishing removes it.
-  const permissions = payload.publish ? [Permission.read(Role.any())] : [];
+  // Publishing only toggles the public read(any) grant. Preserve every other
+  // existing grant — admin update/delete and the creator's grants — so a
+  // published post stays editable/deletable by admins. (The old code overwrote
+  // the whole permission array, erasing those grants.)
+  const publicRead = Permission.read(Role.any());
+  const preserved = (post.$permissions || []).filter((p) => p !== publicRead);
+  const adminUpdate = Permission.update(Role.label('admin'));
+  const adminDelete = Permission.delete(Role.label('admin'));
+  if (!preserved.includes(adminUpdate)) preserved.push(adminUpdate);
+  if (!preserved.includes(adminDelete)) preserved.push(adminDelete);
+  const permissions = payload.publish ? [...preserved, publicRead] : preserved;
   await databases.updateDocument(DB_ID, 'blog_posts', postId, {
     status: payload.publish ? 'published' : 'draft',
   }, permissions);
@@ -527,6 +730,18 @@ export default async ({ req, res, error }) => {
         break;
       case 'linkCoachAccount':
         result = await linkCoachAccount(ctx, payload);
+        break;
+      case 'unlinkCoachAccount':
+        result = await unlinkCoachAccount(ctx, payload);
+        break;
+      case 'createCoach':
+        result = await createCoach(ctx, payload);
+        break;
+      case 'updateCoach':
+        result = await updateCoach(ctx, payload);
+        break;
+      case 'deleteCoach':
+        result = await deleteCoach(ctx, payload);
         break;
       case 'setCoachFee':
         result = await setCoachFee(ctx, payload);

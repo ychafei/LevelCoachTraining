@@ -40,6 +40,7 @@ import BookingSummaryCard from '@/components/booking/BookingSummaryCard';
 import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { legalSignerRoleForUser } from '@/lib/legal';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
+import { useMyAthlete } from '@/features/athlete/useMyAthlete';
 
 // Display-only estimates; createStripeCheckout recomputes the charge in cents
 // from pricing_packages on the server using this same duration table.
@@ -215,6 +216,14 @@ export default function Book() {
     signerRole: bookingSignerRole,
     athleteId: selectedAthleteId,
   });
+
+  // The buyer's own athlete identity (athlete_profiles row id, falling back to
+  // the profiles row id for self-managed adults). createStripeCheckout now
+  // requires an athlete_id and verifies that athlete's legal consent, mirroring
+  // the booking function. For a guardian buying for a child the SELECTED child's
+  // athlete id is authoritative; otherwise the buyer's own athlete id is sent.
+  const { athleteProfile: myAthleteProfile } = useMyAthlete(user);
+  const checkoutAthleteId = selectedAthleteId || myAthleteProfile?.id || user?.id || '';
 
   useEffect(() => {
     let cancelled = false;
@@ -413,7 +422,15 @@ export default function Book() {
     : [];
 
   const sessionPrice = calcPrice(selectedPackage, duration);
-  const legalReadyForCheckout = !user || checkoutLegalStatus.complete;
+  // createStripeCheckout now verifies per-athlete legal consent (mirroring
+  // booking), so the pay action is gated on BOTH the buyer's profile-level
+  // packet AND — when buying for a SELECTED child — that child's athlete-scoped
+  // consent. A guardian who picks an unconsented child sees checkout disabled.
+  const selectedAthleteConsentReady = !selectedAthleteId
+    || bookingLegalStatus.loading
+    || bookingLegalStatus.complete;
+  const legalReadyForCheckout = !user
+    || (checkoutLegalStatus.complete && selectedAthleteConsentReady);
   const flexibleAvailabilityValid = availabilityMode !== 'flexible'
     || (
       availabilityPreference.preferredDays.length > 0
@@ -423,6 +440,10 @@ export default function Book() {
       && availabilityPreference.earliestStart < availabilityPreference.latestStart
     );
   const checkoutExtraPayload = {
+    // Who the credits/sessions are for: the SELECTED child's athlete id when a
+    // guardian buys for a child, else the buyer's own athlete id. The server
+    // requires this for guardian/parent buyers and checks its legal consent.
+    athlete_id: checkoutAthleteId,
     booking_location_label: bookingLocation.label || '',
     booking_location_lat: bookingLocation.lat ?? '',
     booking_location_lng: bookingLocation.lng ?? '',
@@ -1281,7 +1302,9 @@ export default function Book() {
                   <div className="space-y-4">
                     {!legalReadyForCheckout && (
                       <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-500">
-                        Stripe Checkout unlocks after the required legal packet is complete.
+                        {checkoutLegalStatus.complete && selectedAthleteId && !selectedAthleteConsentReady
+                          ? 'Stripe Checkout unlocks after you complete the legal packet for the selected athlete.'
+                          : 'Stripe Checkout unlocks after the required legal packet is complete.'}
                       </p>
                     )}
                     {stripeCheckoutMessage && (

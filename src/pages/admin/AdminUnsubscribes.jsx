@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { MailX } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
+import { toast } from 'sonner';
 
 export default function AdminUnsubscribes() {
   const { isAdmin } = useCurrentUser();
@@ -12,7 +13,13 @@ export default function AdminUnsubscribes() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    unsubscribeRepo.list('-created_date').then(data => { setRecords(data); setLoading(false); });
+    unsubscribeRepo.list('-created_date')
+      .then(data => { setRecords(data); })
+      .catch(err => {
+        console.error('Failed to load unsubscribe records', err);
+        toast.error(err?.message || 'Could not load unsubscribe records.');
+      })
+      .finally(() => { setLoading(false); });
   }, []);
 
   const columns = [

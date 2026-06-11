@@ -37,6 +37,56 @@ export const organizationRepo = {
   inviteCoach: (payload) => callFn('orgAdmin', { action: 'inviteCoach', ...payload }),
   acceptInvite: (payload) => callFn('orgAdmin', { action: 'acceptInvite', ...payload }),
   removeCoach: (payload) => callFn('orgAdmin', { action: 'removeCoach', ...payload }),
+
+  // Pending coach-roster invites addressed to the signed-in coach. The
+  // `organization_coaches` rows are keyed by `coach_id` (the Coach record id)
+  // and inviteCoach grants the invited coach's account a per-document read,
+  // so this is a direct, permission-scoped read. Each row is enriched with the
+  // inviting organization's name/slug for display (organizations are read-any).
+  listPendingInvitesForCoach: async ({ coachId } = /** @type {{ coachId?: string }} */ ({})) => {
+    if (!coachId) return [];
+    const res = await databases.listDocuments(DB_ID, COL.OrganizationCoach, [
+      Query.equal('coach_id', String(coachId)),
+      Query.equal('status', 'invited'),
+      Query.limit(50),
+    ]);
+    const rows = res.documents.map(mapDoc);
+    const orgIds = [...new Set(rows.map((r) => r.organization_id).filter(Boolean))];
+    const orgs = await Promise.all(
+      orgIds.map((id) => databases.getDocument(DB_ID, COL.Organization, id).then(mapDoc).catch(() => null)),
+    );
+    const byId = new Map(orgs.filter(Boolean).map((o) => [o.id, o]));
+    return rows.map((r) => ({
+      ...r,
+      organization: byId.get(r.organization_id) || null,
+      organization_name: byId.get(r.organization_id)?.name || 'An organization',
+    }));
+  },
+
+  // Pending org-team (member) invites addressed to the signed-in account.
+  // `organization_members` rows are keyed by `profile_id` and inviteMember
+  // grants the target account a per-document read. Coaches can also be invited
+  // as staff members, so the coach portal surfaces these alongside roster
+  // invites.
+  listPendingMemberInvites: async ({ profileId } = /** @type {{ profileId?: string }} */ ({})) => {
+    if (!profileId) return [];
+    const res = await databases.listDocuments(DB_ID, COL.OrganizationMember, [
+      Query.equal('profile_id', String(profileId)),
+      Query.equal('status', 'invited'),
+      Query.limit(50),
+    ]);
+    const rows = res.documents.map(mapDoc);
+    const orgIds = [...new Set(rows.map((r) => r.organization_id).filter(Boolean))];
+    const orgs = await Promise.all(
+      orgIds.map((id) => databases.getDocument(DB_ID, COL.Organization, id).then(mapDoc).catch(() => null)),
+    );
+    const byId = new Map(orgs.filter(Boolean).map((o) => [o.id, o]));
+    return rows.map((r) => ({
+      ...r,
+      organization: byId.get(r.organization_id) || null,
+      organization_name: byId.get(r.organization_id)?.name || 'An organization',
+    }));
+  },
   suspendCoach: (payload) => callFn('orgAdmin', { action: 'suspendCoach', ...payload }),
   setPayoutRule: (payload) => callFn('orgAdmin', { action: 'setPayoutRule', ...payload }),
 

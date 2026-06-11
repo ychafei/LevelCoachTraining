@@ -575,7 +575,15 @@ async function hasAvailability(databases, coach) {
   if (typeof coach.availability === 'string' && coach.availability.trim()) {
     try {
       const parsed = JSON.parse(coach.availability);
-      if (Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed || {}).length > 0) return true;
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 0) return true;
+      } else if (parsed && typeof parsed === 'object') {
+        // Legacy weekly map: valid only when at least one day is enabled
+        // (mirror client weeklyAvailabilitySet). An all-days-disabled object
+        // would pass a bare key-count check yet be unbookable on every day,
+        // so fall through to the availability_blocks check instead.
+        if (Object.values(parsed).some((d) => d?.enabled)) return true;
+      }
     } catch { /* fall through to blocks */ }
   }
   const rows = await databases.listDocuments(DB_ID, 'availability_blocks', [

@@ -27,7 +27,12 @@ export default function AdminBlog() {
   const [tagInput, setTagInput] = useState('');
 
   useEffect(() => { load(); }, []);
-  const load = () => blogPostRepo.list('-created_date').then(setPosts);
+  const load = () => blogPostRepo.list('-created_date')
+    .then(setPosts)
+    .catch(err => {
+      console.error('Failed to load blog posts', err);
+      toast.error(err?.message || 'Could not load blog posts.');
+    });
 
   // Draft fields save directly (admin label); publish/unpublish must go
   // through adminOps.publishBlogPost so the server flips the public
@@ -51,8 +56,9 @@ export default function AdminBlog() {
       }
       toast.success('Post saved');
       setOpen(false);
-      load();
+      await load();
     } catch (err) {
+      console.error('Failed to save blog post', err);
       toast.error(err?.message || 'Could not save the post.');
     }
   };
@@ -61,8 +67,9 @@ export default function AdminBlog() {
     try {
       await blogPostRepo.delete(id);
       toast.success('Post deleted');
-      load();
+      await load();
     } catch (err) {
+      console.error('Failed to delete blog post', err);
       toast.error(err?.message || 'Could not delete the post. Unpublish it instead if deletion is not permitted.');
     }
   };

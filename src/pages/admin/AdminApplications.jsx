@@ -19,22 +19,6 @@ const statusColor = {
   rejected: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
-const TYPE_TABS = [
-  { value: 'all', label: 'All' },
-  { value: 'private_training_coach', label: 'Private Coach' },
-  { value: 'general', label: 'General' },
-];
-
-const typeBadge = {
-  private_training_coach: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  general: 'bg-secondary text-muted-foreground border-border',
-};
-
-const typeLabel = {
-  private_training_coach: 'Private Coach',
-  general: 'General',
-};
-
 // Approve/reject through the applications function — approval creates the
 // coach record, assigns the coach label, and emails the applicant server-side.
 function DecisionDialog({ app, decision, onClose, onDone }) {
@@ -111,7 +95,6 @@ export default function AdminApplications() {
   const { isAdmin } = useCurrentUser();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [typeFilter, setTypeFilter] = useState('all');
   const [decisionTarget, setDecisionTarget] = useState(null);
 
   useEffect(() => {
@@ -121,14 +104,9 @@ export default function AdminApplications() {
       .finally(() => setLoading(false));
   }, []);
 
-  const visible = typeFilter === 'all'
-    ? apps
-    : apps.filter(a => (a.application_type || 'general') === typeFilter);
-
-  const rows = visible.map(a => ({
+  const rows = apps.map(a => ({
     ...a,
     _name: `${a.first_name || ''} ${a.last_name || ''}`.trim(),
-    _type: a.application_type || 'general',
   }));
 
   const columns = [
@@ -143,17 +121,6 @@ export default function AdminApplications() {
           <p className="text-xs text-muted-foreground">{row.email}</p>
           {row.dob && <p className="text-xs text-muted-foreground">DOB: {format(new Date(row.dob), 'MMM d, yyyy')}</p>}
         </div>
-      ),
-    },
-    {
-      key: 'type',
-      header: 'Type',
-      sortable: true,
-      sortAccessor: '_type',
-      cell: (row) => (
-        <Badge className={`${typeBadge[row._type] || typeBadge.general} border text-[10px] font-display tracking-widest uppercase`}>
-          {typeLabel[row._type] || row._type}
-        </Badge>
       ),
     },
     {
@@ -231,31 +198,6 @@ export default function AdminApplications() {
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">APPLICATIONS</h1>
-
-        <div className="flex items-center gap-1 mb-6 border-b border-border overflow-x-auto" role="tablist" aria-label="Filter by application type">
-          {TYPE_TABS.map(t => {
-            const count = t.value === 'all'
-              ? apps.length
-              : apps.filter(a => (a.application_type || 'general') === t.value).length;
-            const active = typeFilter === t.value;
-            return (
-              <button
-                key={t.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTypeFilter(t.value)}
-                className={`px-4 py-2 text-xs font-display tracking-wider uppercase transition-colors border-b-2 -mb-px whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  active
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t.label} <span className="ml-1 text-muted-foreground">({count})</span>
-              </button>
-            );
-          })}
-        </div>
 
         {loading ? (
           <div className="space-y-3 py-6" aria-busy="true" aria-label="Loading applications">

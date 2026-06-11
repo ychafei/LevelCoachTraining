@@ -1,9 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Inbox } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Bell, Inbox } from 'lucide-react';
 import { notificationRepo } from '@/api/repo';
 import { useAuth } from '@/lib/AuthContext';
 import { formatInstantInTz } from '@/lib/scheduleET';
 import { cn } from '@/lib/utils';
+
+// Org-invite notifications are actionable: deep-link the coach to the Pending
+// Organization Invites panel on the dashboard (CoachOverview, #org-invites),
+// where the invite can actually be accepted.
+const ORG_INVITE_TYPES = new Set(['org_invite', 'org_member_invite']);
+const ORG_INVITE_LINK = '/coach#org-invites';
 
 // Real notifications bell for the coach topbar. Reads the caller's own
 // notifications rows (per-document grants scope listMine to the recipient),
@@ -105,23 +112,36 @@ export default function NotificationsBell({ buttonClassName = '' }) {
             </div>
           ) : (
             <ul className="max-h-80 space-y-1 overflow-y-auto">
-              {items.slice(0, 25).map((n) => (
-                <li key={n.id} className="rounded-md px-2 py-2 hover:bg-secondary/60">
-                  <div className="flex items-start gap-2">
-                    <span
-                      className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-transparent' : 'bg-accent')}
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">{n.title || 'Notification'}</p>
-                      {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>}
-                      <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                        {formatInstantInTz(n.created_date)}
-                      </p>
+              {items.slice(0, 25).map((n) => {
+                const isOrgInvite = ORG_INVITE_TYPES.has(n.type);
+                return (
+                  <li key={n.id} className="rounded-md px-2 py-2 hover:bg-secondary/60">
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-transparent' : 'bg-accent')}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">{n.title || 'Notification'}</p>
+                        {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>}
+                        <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+                          {formatInstantInTz(n.created_date)}
+                        </p>
+                        {isOrgInvite && (
+                          <Link
+                            to={n.link || ORG_INVITE_LINK}
+                            onClick={() => setOpen(false)}
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+                          >
+                            Review invitation
+                            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -61,6 +61,21 @@ export const coachRepo = {
   adminLinkAccount: (coach_id, profile_id) =>
     callFn('adminOps', { action: 'linkCoachAccount', coach_id, profile_id }),
 
+  // Coaches are server-only writable, so admin CRUD routes through adminOps
+  // (createCoach links a profile, deleteCoach unlinks the profile after the
+  // delete succeeds, unlinkCoachAccount is the inverse of linkCoachAccount).
+  adminCreateCoach: (fields, profileId) =>
+    callFn('adminOps', { action: 'createCoach', fields, profile_id: profileId }),
+
+  adminUpdateCoach: (coach_id, updates) =>
+    callFn('adminOps', { action: 'updateCoach', coach_id, updates }),
+
+  adminDeleteCoach: (coach_id) =>
+    callFn('adminOps', { action: 'deleteCoach', coach_id }),
+
+  adminUnlinkCoach: (coach_id) =>
+    callFn('adminOps', { action: 'unlinkCoachAccount', coach_id }),
+
   adminSetFee: (coach_id, platform_fee_bps) =>
     callFn('adminOps', { action: 'setCoachFee', coach_id, platform_fee_bps }),
 

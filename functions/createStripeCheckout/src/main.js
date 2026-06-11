@@ -92,7 +92,12 @@ function agreementMatchesTemplate(agreement, template) {
     && (!template.checksum || !agreement.template_checksum || agreement.template_checksum === template.checksum);
 }
 
-async function legalPacketComplete(db, profile) {
+// Buyer legal gate. For guardian/parent buyers the packet must be complete for
+// the SPECIFIC athlete being purchased for (athleteId), mirroring booking's
+// legalPacketCompleteFor: a signed guardian agreement must bind to that athlete
+// (legacy unbound rows are accepted). Non-guardian (athlete-self) buyers keep
+// the original role-scoped behavior; athleteId is ignored for them.
+async function legalPacketComplete(db, profile, athleteId) {
   const signerRole = signerRoleForProfile(profile);
   const templateRole = SIGNER_TO_TEMPLATE_ROLE[signerRole];
   if (!templateRole) return false;
@@ -115,7 +120,10 @@ async function legalPacketComplete(db, profile) {
   if (templates.length === 0) return false;
   return templates.every((template) =>
     agreementRows.documents.some((agreement) =>
-      matchesEntity(agreement, signerRole, profile) && agreementMatchesTemplate(agreement, template)
+      matchesEntity(agreement, signerRole, profile)
+      && agreementMatchesTemplate(agreement, template)
+      // Guardian signings should bind to the athlete; accept legacy unbound rows.
+      && (signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
     )
   );
 }
@@ -443,13 +451,27 @@ export default async ({ req, res, error }) => {
     if (payload.bookingId && !validId(payload.bookingId)) {
       return res.json({ error: 'bookingId is invalid.' }, 400);
     }
+    // Guardian buyers purchase for a specific child; the consent gate below is
+    // athlete-scoped. Accept athlete_id from the payload and validate its shape.
+    const athleteId = payload.athleteId || payload.athlete_id || '';
+    if (athleteId && !validId(athleteId)) {
+      return res.json({ error: 'athlete_id is invalid.' }, 400);
+    }
 
     const db = databases();
     const profile = await profileForAccount(db, accountId);
     if (!profile) return res.json({ error: 'No profile found for checkout user.' }, 404);
     if (await callerBanned(db, profile)) return res.json({ error: 'Account access is restricted.' }, 403);
     if (!profile.email) return res.json({ error: 'Checkout user must have an email address.' }, 400);
-    if (!(await legalPacketComplete(db, profile))) {
+    // Guardian/parent buyers must identify the child they are purchasing for so
+    // the legal gate is athlete-scoped (parity with booking). Otherwise a
+    // multi-child guardian who only signed for one child could pay then be
+    // blocked at scheduling for another.
+    const isGuardianBuyer = signerRoleForProfile(profile) === 'guardian';
+    if (isGuardianBuyer && !athleteId) {
+      return res.json({ error: 'athlete_id is required for guardian checkout.' }, 400);
+    }
+    if (!(await legalPacketComplete(db, profile, athleteId))) {
       return res.json({ error: 'Complete the current required legal packet before checkout.' }, 403);
     }
 
@@ -525,6 +547,7 @@ export default async ({ req, res, error }) => {
       client_profile_id: profile.$id,
       client_account_id: accountId,
       client_email: profile.email,
+      athlete_id: athleteId || '',
       package_id: pkg.$id,
       package_name: pkg.name || 'Training sessions',
       package_sessions: String(pkg.sessions || 1),
@@ -555,6 +578,9 @@ export default async ({ req, res, error }) => {
     // Transfers are created by the webhook after the charge succeeds.
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // Card only: a delayed-notification method (ACH/SEPA) could mint a credit
+      // before funds settle. Pin to immediate-settlement cards.
+      payment_method_types: ['card'],
       success_url: `${appBaseUrl}/book?stripe_success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appBaseUrl}/book?stripe_cancel=1`,
       client_reference_id: bookingReference,
