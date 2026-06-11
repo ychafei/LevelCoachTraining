@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Building2, Briefcase, CheckCircle2, FileText, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
@@ -35,7 +35,7 @@ const ROLE_CARDS = [
   { id: 'athlete', title: 'Athlete', body: 'Book coaches, manage sessions, and track training.', icon: UserRound },
   { id: 'parent', title: 'Parent / Guardian', body: 'Create and manage child athlete profiles.', icon: Users },
   { id: 'coach_applicant', title: 'Coach', body: 'Continue into the coach application and verification flow.', icon: Briefcase },
-  { id: 'organization', title: 'Organization', body: 'Create a tenant workspace for your training business.', icon: Building2 },
+  { id: 'organization', title: 'Organization', body: 'Run your training business — coaches, programs, and payouts in one workspace.', icon: Building2 },
 ];
 
 const ROLE_IDS = new Set(ROLE_CARDS.map((role) => role.id));
@@ -91,7 +91,7 @@ export default function OnboardingCompletion() {
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-10 pt-24 text-slate-950">
+      <div className="min-h-[60vh] bg-slate-50 px-4 py-10 text-slate-950">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" aria-label="Loading" />
       </div>
     );
@@ -137,22 +137,29 @@ export default function OnboardingCompletion() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10 pt-24 text-slate-950 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <EmailVerificationBanner user={user} className="mb-5" />
 
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">
             <ShieldCheck className="h-4 w-4" />
-            Required Setup
+            Finish setup
           </div>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-normal sm:text-4xl">
+          <h1 className="mt-4 text-3xl font-extrabold tracking-[-0.01em] sm:text-4xl">
             {fromCreateAccount ? 'Finish setting up your account' : 'Finish your LevelCoach account'}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             {fromCreateAccount
               ? 'A few more steps and your account is ready. Review what we saved, complete the remaining steps, and confirm.'
-              : 'Choose the role for this account before entering any dashboard. This keeps OAuth and password signups on the right production path.'}
+              : 'Pick how you’ll use LevelCoach to unlock your dashboard. Your account is saved — you can come back to this anytime.'}
+          </p>
+          <p className="mt-3 text-sm text-slate-500">
+            Want to look around first?{' '}
+            <Link to="/coaches" className="font-semibold text-blue-700 hover:underline">
+              Browse coaches
+            </Link>
+            {' '}— this page will be here when you’re ready.
           </p>
         </div>
 

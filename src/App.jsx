@@ -116,12 +116,15 @@ const PageLoader = () => (
   </div>
 );
 
-// Public root: guests see the marketing landing page; signed-in users are
-// sent to their role home (admin → /admin, coach → /coach, client →
+// Public root: guests see the marketing landing page; fully-onboarded users
+// are sent to their role home (admin → /admin, coach → /coach, client →
 // /dashboard) so they don't get stranded on the public site after login.
+// Half-onboarded users keep access to the homepage like every other public
+// page — the onboarding funnel catches them at every app entry (post-auth
+// redirect, /dashboard, portal guards), so the front door never has to trap.
 const RootRoute = () => {
-  const { isAuthenticated, user } = useAuth();
-  if (isAuthenticated && user) {
+  const { isAuthenticated, user, onboardingComplete } = useAuth();
+  if (isAuthenticated && user && onboardingComplete) {
     return <Navigate to={homePathForRole(user)} replace />;
   }
   return <Landing />;
@@ -240,9 +243,13 @@ const AuthenticatedApp = () => {
           <Route element={<RequireMasterAdmin />}>
             <Route path="/master-admin" element={<MasterAdminPortal />} />
           </Route>
+
+          {/* Inside PublicLayout on purpose: a half-onboarded user must never
+              be trapped on a chromeless page with no nav, no sign-out, and no
+              way back to the marketplace. */}
+          <Route path="/onboarding" element={<OnboardingCompletion />} />
         </Route>
 
-        <Route path="/onboarding" element={<OnboardingCompletion />} />
         <Route path="/login"           element={<Login />} />
         <Route path="/signup"          element={<Signup />} />
         <Route path="/sign-in"         element={<SignIn />} />
