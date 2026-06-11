@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { coachReviewRepo, sessionRepo } from '@/api/repo';
 import { callFn } from '@/lib/rpc';
+import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import {
   formatInTz,
   formatRangeInTz,
@@ -32,10 +33,6 @@ import {
   isUpcomingSession,
   sessionStartMs,
 } from '@/features/athlete/portalShared';
-
-const CANCEL_POLICY_COPY =
-  'Cancel at least 24 hours before the start time and your session credit is restored automatically. '
-  + 'Cancellations inside 24 hours forfeit the credit, unless your coach cancels.';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -223,7 +220,7 @@ export default function SessionsPanel({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">
           Upcoming sessions
         </h3>
         {upcoming.length === 0 ? (
@@ -274,7 +271,7 @@ export default function SessionsPanel({
       </div>
 
       <div>
-        <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">
           Past sessions
         </h3>
         {past.length === 0 ? (

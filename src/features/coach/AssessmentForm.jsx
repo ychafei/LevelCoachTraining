@@ -80,11 +80,11 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
     <div className="bg-card border border-border rounded-lg p-5 space-y-5">
       <div className="flex items-center gap-2">
         <ClipboardCheck className="w-4 h-4 text-accent" aria-hidden="true" />
-        <h3 className="font-display text-sm font-bold tracking-widest uppercase text-foreground">New Assessment</h3>
+        <h3 className="text-sm font-bold tracking-[-0.01em] text-foreground">New assessment</h3>
       </div>
 
       <div>
-        <Label htmlFor="assessment-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
+        <Label htmlFor="assessment-sport" className="text-xs font-semibold">Sport</Label>
         <Select value={sportKey} onValueChange={pickSport}>
           <SelectTrigger id="assessment-sport" className="bg-secondary border-border mt-1 w-full sm:w-72">
             <SelectValue placeholder="Choose a sport" />
@@ -113,7 +113,7 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
         <div className="space-y-5">
           {template.categories.map((category) => (
             <fieldset key={category.key} className="border border-border rounded-lg p-4">
-              <legend className="px-2 text-xs font-display tracking-widest uppercase text-accent">{category.label}</legend>
+              <legend className="px-2 text-xs font-bold uppercase tracking-[0.18em] text-accent">{category.label}</legend>
               <div className="space-y-4">
                 {category.skills.map((skill) => {
                   const value = scores[skill.key];
@@ -145,7 +145,7 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
           ))}
 
           <div>
-            <Label htmlFor="assessment-notes" className="font-display tracking-wider uppercase text-xs">Summary</Label>
+            <Label htmlFor="assessment-notes" className="text-xs font-semibold">Summary</Label>
             <Textarea
               id="assessment-notes"
               value={notes}
@@ -158,16 +158,16 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
 
           <div className="flex items-center justify-end gap-2">
             {onCancel && (
-              <Button variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">
+              <Button variant="ghost" onClick={onCancel} className="text-xs font-semibold">
                 Cancel
               </Button>
             )}
             <Button
               onClick={save}
               disabled={saving || scoredCount === 0}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+              className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
             >
-              {saving ? 'Saving…' : `Save Assessment (${scoredCount} skill${scoredCount === 1 ? '' : 's'} scored)`}
+              {saving ? 'Saving…' : `Save assessment (${scoredCount} skill${scoredCount === 1 ? '' : 's'} scored)`}
             </Button>
           </div>
         </div>

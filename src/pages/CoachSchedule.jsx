@@ -240,8 +240,8 @@ export default function CoachSchedule() {
     <div className="mx-auto max-w-[1280px] space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Coach Schedule</p>
-          <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-slate-950 sm:text-4xl">Schedule Overview</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Coach schedule</p>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-slate-950 sm:text-4xl">Schedule overview</h1>
           <p className="mt-2 max-w-2xl text-base text-slate-600">
             The bookable rhythm your clients see, your upcoming sessions, and your unavailable time.
             {tzAbbr ? ` Times are shown in your coaching timezone (${tzAbbr}).` : ''}
@@ -255,7 +255,7 @@ export default function CoachSchedule() {
         </Button>
       </div>
 
-      <SummaryCard title="Upcoming Sessions" icon={Users}>
+      <SummaryCard title="Upcoming sessions" icon={Users}>
         {actionableSessions.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-500">
             No pending or confirmed sessions.
@@ -320,7 +320,7 @@ export default function CoachSchedule() {
 
                   {cancelId === s.id && (
                     <div className="mt-3 rounded-lg border border-red-100 bg-white p-3">
-                      <label htmlFor={`cancel-reason-${s.id}`} className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      <label htmlFor={`cancel-reason-${s.id}`} className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                         Cancellation reason (shared with the client)
                       </label>
                       <Textarea
@@ -335,10 +335,10 @@ export default function CoachSchedule() {
                         <Button size="sm" disabled={busyActing}
                           onClick={() => runSessionAction('cancel', { session_id: s.id, reason: cancelReason.trim() }, 'Session cancelled. The client\'s credit was restored.')}
                           className="h-9 bg-red-600 font-bold text-white hover:bg-red-700">
-                          {busyActing ? 'Cancelling...' : 'Confirm Cancellation'}
+                          {busyActing ? 'Cancelling...' : 'Confirm cancellation'}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setCancelId('')} className="h-9 font-bold">
-                          Keep Session
+                          Keep session
                         </Button>
                       </div>
                     </div>
@@ -348,7 +348,7 @@ export default function CoachSchedule() {
                     <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="block">
-                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">New date</span>
+                          <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">New date</span>
                           <Input
                             type="date"
                             min={format(new Date(), 'yyyy-MM-dd')}
@@ -358,7 +358,7 @@ export default function CoachSchedule() {
                           />
                         </label>
                         <label className="block">
-                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                             New time{tzAbbr ? ` (${tzAbbr})` : ''}
                           </span>
                           <select
@@ -385,7 +385,7 @@ export default function CoachSchedule() {
                             start_time: rescheduleTime,
                           }, 'Session rescheduled.')}
                           className="h-9 bg-blue-600 font-bold text-white hover:bg-blue-700">
-                          {busyActing ? 'Rescheduling...' : 'Confirm Reschedule'}
+                          {busyActing ? 'Rescheduling...' : 'Confirm reschedule'}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setRescheduleId('')} className="h-9 font-bold">
                           Close
@@ -401,7 +401,7 @@ export default function CoachSchedule() {
       </SummaryCard>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <SummaryCard title="Weekly Bookable Windows" icon={Clock}>
+        <SummaryCard title="Weekly bookable windows" icon={Clock}>
           {availableDays.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-500">
               No weekly availability is active yet.
@@ -425,19 +425,19 @@ export default function CoachSchedule() {
         </SummaryCard>
 
         <SummaryCard
-          title="Unavailable Time"
+          title="Unavailable time"
           icon={Ban}
           action={(
             <Button size="sm" variant="outline" onClick={() => setShowBlockForm((open) => !open)} className="h-8 font-bold">
               <Plus className="h-3.5 w-3.5" />
-              Add Block
+              Add block
             </Button>
           )}
         >
           {showBlockForm && (
             <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Label</span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Label</span>
                 <Input
                   value={newBlock.label}
                   onChange={(event) => setNewBlock((prev) => ({ ...prev, label: event.target.value }))}
@@ -447,13 +447,13 @@ export default function CoachSchedule() {
               </label>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Start date</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Start date</span>
                   <Input type="date" value={newBlock.start_date}
                     onChange={(event) => setNewBlock((prev) => ({ ...prev, start_date: event.target.value }))}
                     className="mt-1 bg-white" />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">End date</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">End date</span>
                   <Input type="date" value={newBlock.end_date}
                     onChange={(event) => setNewBlock((prev) => ({ ...prev, end_date: event.target.value }))}
                     className="mt-1 bg-white" />
@@ -470,13 +470,13 @@ export default function CoachSchedule() {
               {!newBlock.block_all_day && (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">From</span>
+                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">From</span>
                     <Input type="time" value={newBlock.blocked_start_time}
                       onChange={(event) => setNewBlock((prev) => ({ ...prev, blocked_start_time: event.target.value }))}
                       className="mt-1 bg-white" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">To</span>
+                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">To</span>
                     <Input type="time" value={newBlock.blocked_end_time}
                       onChange={(event) => setNewBlock((prev) => ({ ...prev, blocked_end_time: event.target.value }))}
                       className="mt-1 bg-white" />
@@ -485,7 +485,7 @@ export default function CoachSchedule() {
               )}
               <div className="mt-3 flex gap-2">
                 <Button size="sm" onClick={addBlock} className="h-9 bg-blue-600 font-bold text-white hover:bg-blue-700">
-                  Add to List
+                  Add to list
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setShowBlockForm(false)} className="h-9 font-bold">
                   Close
@@ -519,20 +519,20 @@ export default function CoachSchedule() {
           {blocksDirty && (
             <div className="mt-4 flex justify-end">
               <Button onClick={saveBlocks} disabled={savingBlocks} className="h-10 bg-blue-600 font-bold text-white hover:bg-blue-700">
-                {savingBlocks ? 'Saving...' : 'Save Unavailable Time'}
+                {savingBlocks ? 'Saving...' : 'Save unavailable time'}
               </Button>
             </div>
           )}
         </SummaryCard>
       </div>
 
-      <SummaryCard title="Live Schedule" icon={CalendarDays}>
+      <SummaryCard title="Live schedule" icon={CalendarDays}>
         <div className="grid gap-3 md:grid-cols-7">
           {DAYS.map((day) => {
             const windows = weeklyWindows[day] || [];
             return (
               <div key={day} className="min-h-[140px] rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">{day.slice(0, 3)}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{day.slice(0, 3)}</p>
                 {windows.length ? (
                   <div className="mt-3 space-y-2">
                     {windows.map((window, index) => (

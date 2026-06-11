@@ -5,6 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { MessageSquare } from 'lucide-react';
 
+// Display-only labels for stored conversation types.
+const typeLabel = { coach_client: 'Coach–client' };
+
 export default function AdminMessages() {
   const { isAdmin } = useCurrentUser();
   const [conversations, setConversations] = useState([]);
@@ -30,7 +33,7 @@ export default function AdminMessages() {
   return (
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-8">CONVERSATIONS</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground mb-8">Conversations</h1>
 
         {loading ? (
           <div className="text-center py-12"><div className="w-8 h-8 border-4 border-muted border-t-accent rounded-full animate-spin mx-auto" /></div>
@@ -48,7 +51,7 @@ export default function AdminMessages() {
                     <MessageSquare className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{convo.participant_names?.join(', ') || 'Unknown'}</p>
-                      <Badge variant="secondary" className="text-xs mt-0.5">{convo.type}</Badge>
+                      <Badge variant="secondary" className="text-xs mt-0.5">{typeLabel[convo.type] || convo.type}</Badge>
                     </div>
                   </div>
                   {convo.last_message && <p className="text-xs text-muted-foreground mt-1.5 truncate">{convo.last_message}</p>}
@@ -66,7 +69,7 @@ export default function AdminMessages() {
                   {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.sender_email === selected.participant_emails?.[0] ? 'justify-start' : 'justify-end'}`}>
                       <div className="max-w-[70%] bg-secondary rounded-lg px-3 py-2">
-                        <p className="text-xs text-accent font-display tracking-wider mb-0.5">{msg.sender_name}</p>
+                        <p className="text-xs font-semibold text-accent mb-0.5">{msg.sender_name}</p>
                         <p className="text-sm text-foreground">{msg.content}</p>
                         <p className="text-xs text-muted-foreground mt-1">{msg.created_date ? format(new Date(msg.created_date), 'MMM d, h:mm a') : ''}</p>
                       </div>

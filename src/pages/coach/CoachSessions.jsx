@@ -44,6 +44,13 @@ function todayInTz(timezone = 'America/Detroit') {
   }).format(new Date());
 }
 
+// Display-only: turn a raw enum like 'no_show' into 'No show'. Stored values
+// and lifecycle logic are untouched.
+function humanizeStatus(value) {
+  const text = String(value || '').replace(/_/g, ' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}
+
 function statusMeta(s) {
   switch (s.status) {
     case 'pending':   return { icon: Clock,         color: 'bg-accent/10 text-accent border-accent/20', label: 'Pending' };
@@ -51,7 +58,7 @@ function statusMeta(s) {
     case 'completed': return { icon: CheckCircle2,  color: 'bg-green-500/10 text-green-600 border-green-500/20', label: 'Completed' };
     case 'no_show':   return { icon: AlertTriangle, color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20', label: 'No-show' };
     case 'cancelled': return { icon: XCircle,       color: 'bg-destructive/10 text-destructive border-destructive/20', label: 'Cancelled' };
-    default:          return { icon: Clock,         color: 'bg-muted text-muted-foreground border-border', label: s.status || '—' };
+    default:          return { icon: Clock,         color: 'bg-muted text-muted-foreground border-border', label: humanizeStatus(s.status) || '—' };
   }
 }
 
@@ -59,7 +66,7 @@ function paymentMeta(s) {
   if (s.payment_status === 'paid') return { tone: 'green', label: 'Paid' };
   if (s.payment_method === 'credits') return { tone: 'accent', label: 'Credits' };
   if (s.payment_method === 'electronic') return { tone: 'muted', label: 'Stripe' };
-  return { tone: 'muted', label: s.payment_status || 'unpaid' };
+  return { tone: 'muted', label: humanizeStatus(s.payment_status) || 'Unpaid' };
 }
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'no_show']);
@@ -303,7 +310,7 @@ export default function CoachSessions() {
   if (!coach && isAdmin) {
     return (
       <div className="bg-card border border-accent/30 rounded-lg p-6">
-        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-2">Sessions</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-2">Sessions</h2>
         <p className="text-sm text-muted-foreground">
           Your admin account isn't linked to a coach profile, so there are no sessions to show.
         </p>
@@ -316,7 +323,7 @@ export default function CoachSessions() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-display tracking-wider text-foreground uppercase text-sm">Coach Profile Not Linked</p>
+          <p className="text-sm font-semibold text-foreground">Coach profile not linked</p>
           <p className="text-sm text-muted-foreground mt-1">Ask an admin to link your account to a coach record.</p>
         </div>
       </div>
@@ -329,7 +336,7 @@ export default function CoachSessions() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Sessions</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] text-foreground">Sessions</h1>
           <p className="text-sm text-muted-foreground mt-1">Run your day — complete sessions, handle no-shows, cancel or reschedule.</p>
         </div>
       </div>
@@ -343,7 +350,7 @@ export default function CoachSessions() {
               role="tab"
               aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2.5 text-xs font-display tracking-wider uppercase border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                 tab === t.key
                   ? 'text-accent border-accent'
                   : 'text-muted-foreground border-transparent hover:text-foreground'
@@ -373,7 +380,7 @@ export default function CoachSessions() {
         </div>
 
         <div>
-          <label htmlFor="session-payment" className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">Payment</label>
+          <label htmlFor="session-payment" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground block mb-1">Payment</label>
           <Select value={paymentFilter} onValueChange={setPaymentFilter}>
             <SelectTrigger id="session-payment" className="w-44 bg-secondary border-border h-9">
               <SelectValue />
@@ -387,7 +394,7 @@ export default function CoachSessions() {
         </div>
 
         <div>
-          <label htmlFor="session-from" className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">From</label>
+          <label htmlFor="session-from" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground block mb-1">From</label>
           <Input
             id="session-from"
             type="date"
@@ -397,7 +404,7 @@ export default function CoachSessions() {
           />
         </div>
         <div>
-          <label htmlFor="session-to" className="text-[10px] font-display tracking-widest uppercase text-muted-foreground block mb-1">To</label>
+          <label htmlFor="session-to" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground block mb-1">To</label>
           <Input
             id="session-to"
             type="date"
@@ -411,7 +418,7 @@ export default function CoachSessions() {
           <Button
             variant="ghost"
             onClick={() => { setSearch(''); setPaymentFilter('all'); setFromDate(''); setToDate(''); }}
-            className="text-xs font-display tracking-wider uppercase"
+            className="text-xs font-semibold"
           >
             <Filter className="w-3 h-3 mr-1" aria-hidden="true" /> Reset
           </Button>
@@ -458,7 +465,7 @@ export default function CoachSessions() {
       >
         <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl font-bold tracking-tight uppercase">Reschedule Session</DialogTitle>
+            <DialogTitle className="text-2xl font-bold tracking-[-0.01em]">Reschedule session</DialogTitle>
             {rescheduleSession && (
               <DialogDescription>
                 Pick a new date and time for {rescheduleSession.client_name}. Times shown in {tzAbbr || coachTz}.
@@ -476,7 +483,7 @@ export default function CoachSessions() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">Pick a date</p>
                   <Calendar
                     mode="single"
                     selected={rescheduleDate}
@@ -487,8 +494,8 @@ export default function CoachSessions() {
                 </div>
                 {rescheduleDate && (
                   <div>
-                    <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">
-                      Open Times ({tzAbbr || coachTz})
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">
+                      Open times ({tzAbbr || coachTz})
                     </p>
                     {openSlots.length === 0 ? (
                       <p className="text-sm text-muted-foreground border border-border rounded-lg p-4">
@@ -500,7 +507,7 @@ export default function CoachSessions() {
                           <button
                             key={time}
                             onClick={() => setRescheduleTime(time)}
-                            className={`p-2 rounded-md border text-xs font-display tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                            className={`p-2 rounded-md border text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                               rescheduleTime === time
                                 ? 'border-accent bg-accent/10 text-accent'
                                 : 'border-border bg-card hover:border-accent/30'
@@ -519,15 +526,15 @@ export default function CoachSessions() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRescheduleSession(null)} className="font-display tracking-wider uppercase">
+            <Button variant="outline" onClick={() => setRescheduleSession(null)} className="font-semibold">
               Cancel
             </Button>
             <Button
               onClick={confirmReschedule}
               disabled={!rescheduleDate || !rescheduleTime || rescheduling}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
-              {rescheduling ? 'Rescheduling…' : 'Confirm Reschedule'}
+              {rescheduling ? 'Rescheduling…' : 'Confirm reschedule'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -561,27 +568,27 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-4 min-w-0 flex-1">
           <div className="text-center flex-shrink-0 w-16">
-            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
               {new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
             <p className="font-display text-2xl font-bold text-foreground leading-none">
               {new Intl.DateTimeFormat('en-US', { timeZone: tz, day: 'numeric' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
-            <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mt-1">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mt-1">
               {new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(new Date(`${s.date}T12:00:00Z`))}
             </p>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-display tracking-wider text-foreground text-base">
+              <p className="text-base font-semibold text-foreground">
                 {formatTimeInTz(s.date, s.start_time, tz)}
                 <span className="text-muted-foreground"> · {s.duration_minutes} min</span>
               </p>
-              <Badge className={`${sm.color} border text-[10px] font-display tracking-widest uppercase`}>
+              <Badge className={`${sm.color} border text-xs font-semibold`}>
                 <StatusIcon className="w-3 h-3 mr-1" aria-hidden="true" />{sm.label}
               </Badge>
-              <Badge className={`${paymentTone} border text-[10px] font-display tracking-widest uppercase`}>
+              <Badge className={`${paymentTone} border text-xs font-semibold`}>
                 {pm.label}
               </Badge>
             </div>
@@ -602,7 +609,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
             </div>
             {s.session_goals && (
               <p className="text-xs text-muted-foreground mt-2">
-                <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Goals: </span>
                 {s.session_goals}
               </p>
             )}
@@ -620,9 +627,9 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
             size="sm"
             disabled={busy}
             onClick={() => onMarkCompleted(s)}
-            className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
+            className="bg-green-600 text-white text-xs font-semibold hover:bg-green-700"
           >
-            <CheckCircle2 className="w-3 h-3 mr-1" aria-hidden="true" /> Mark Completed
+            <CheckCircle2 className="w-3 h-3 mr-1" aria-hidden="true" /> Mark completed
           </Button>
         )}
         {canMarkNoShow && (
@@ -631,7 +638,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
             variant="outline"
             disabled={busy}
             onClick={() => onMarkNoShow(s)}
-            className="font-display tracking-wider uppercase text-xs text-yellow-600 border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-700"
+            className="text-xs font-semibold text-yellow-600 border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-700"
           >
             <UserCheck className="w-3 h-3 mr-1" aria-hidden="true" /> No-show
           </Button>
@@ -642,7 +649,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
             variant="outline"
             disabled={busy}
             onClick={() => onReschedule(s)}
-            className="font-display tracking-wider uppercase text-xs"
+            className="text-xs font-semibold"
           >
             <CalendarClock className="w-3 h-3 mr-1" aria-hidden="true" /> Reschedule
           </Button>
@@ -653,7 +660,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
             variant="outline"
             disabled={busy}
             onClick={() => onCancel(s)}
-            className="font-display tracking-wider uppercase text-xs text-destructive hover:text-destructive"
+            className="text-xs font-semibold text-destructive hover:text-destructive"
           >
             <XCircle className="w-3 h-3 mr-1" aria-hidden="true" /> Cancel
           </Button>
@@ -663,7 +670,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
           size="sm"
           variant="ghost"
           onClick={onMessage}
-          className="font-display tracking-wider uppercase text-xs"
+          className="text-xs font-semibold"
         >
           <MessageSquare className="w-3 h-3 mr-1" aria-hidden="true" /> Message
         </Button>
@@ -671,7 +678,7 @@ function SessionCard({ s, coachTz, busy, onMarkCompleted, onMarkNoShow, onCancel
           <Button
             size="sm"
             variant="ghost"
-            className="font-display tracking-wider uppercase text-xs"
+            className="text-xs font-semibold"
           >
             <ExternalLink className="w-3 h-3 mr-1" aria-hidden="true" /> Client
           </Button>

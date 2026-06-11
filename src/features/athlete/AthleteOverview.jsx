@@ -62,7 +62,7 @@ function NextSessionCard({ sessions, coachesById, loading, onGoToSessions }) {
         />
       ) : (
         <div>
-          <p className="font-display text-xl font-bold tracking-tight text-foreground">
+          <p className="text-xl font-bold tracking-[-0.01em] text-foreground">
             {formatInTz(next.date, next.start_time, next.timezone)}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -102,7 +102,7 @@ function CreditsCard({ credits, remaining, loading }) {
         />
       ) : (
         <div>
-          <p className="font-display text-3xl font-bold text-foreground">
+          <p className="text-3xl font-bold tabular-nums text-foreground">
             {remaining}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               session{remaining === 1 ? '' : 's'} remaining

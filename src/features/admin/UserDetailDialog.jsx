@@ -18,6 +18,13 @@ function parseMaybeJson(value) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
+// Display-only humanizer for stored enum values ('pending_review' → 'Pending review').
+function enumLabel(value) {
+  if (!value) return value;
+  const text = String(value).replaceAll('_', ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function Field({ label, value }) {
   if (value === undefined || value === null || value === '') return null;
   return (
@@ -31,7 +38,7 @@ function Field({ label, value }) {
 function Section({ title, children }) {
   return (
     <div className="rounded-lg border border-border bg-secondary/30 p-4">
-      <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">{title}</h3>
+      <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-2">{title}</h3>
       {children}
     </div>
   );
@@ -75,7 +82,7 @@ export default function UserDetailDialog({ profile, onClose }) {
     <Dialog open={!!profile} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl bg-card border-border max-h-[88vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">
+          <DialogTitle>
             {[profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email}
           </DialogTitle>
         </DialogHeader>
@@ -90,9 +97,9 @@ export default function UserDetailDialog({ profile, onClose }) {
           </Section>
 
           <Section title="Account & onboarding">
-            <Field label="Role" value={profile.role} />
-            <Field label="Onboarding role" value={profile.onboarding_role} />
-            <Field label="Onboarding status" value={profile.onboarding_status} />
+            <Field label="Role" value={enumLabel(profile.role)} />
+            <Field label="Onboarding role" value={enumLabel(profile.onboarding_role)} />
+            <Field label="Onboarding status" value={enumLabel(profile.onboarding_status)} />
             <Field label="Profile complete" value={profile.profile_setup_complete ? 'Yes' : 'No'} />
             <Field label="Suspended" value={profile.suspended ? 'Yes' : undefined} />
             <Field label="Master admin locked" value={profile.master_admin_locked ? 'Yes' : undefined} />
@@ -158,7 +165,7 @@ export default function UserDetailDialog({ profile, onClose }) {
               </Section>
               {application && (
                 <Section title="Coach application">
-                  <Field label="Status" value={application.status} />
+                  <Field label="Status" value={enumLabel(application.status)} />
                   <Field label="County" value={application.county} />
                   <Field label="Background-check consent" value={application.background_check_consent ? 'Yes' : 'No'} />
                   <Field label="Submitted" value={fmtDate(application.created_date || application.$createdAt)} />

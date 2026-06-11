@@ -74,11 +74,11 @@ function GrantDialog({ onClose, onSaved }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">GRANT CREDITS</DialogTitle>
+          <DialogTitle>Grant credits</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="grant-client" className="font-display tracking-wider uppercase text-xs">Client</Label>
+            <Label htmlFor="grant-client" className="text-xs font-semibold">Client</Label>
             {selected ? (
               <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/60 px-3 py-2 text-sm">
                 <span className="truncate">
@@ -119,7 +119,7 @@ function GrantDialog({ onClose, onSaved }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="grant-count" className="font-display tracking-wider uppercase text-xs">Sessions</Label>
+              <Label htmlFor="grant-count" className="text-xs font-semibold">Sessions</Label>
               <Input
                 id="grant-count"
                 type="number"
@@ -133,24 +133,24 @@ function GrantDialog({ onClose, onSaved }) {
               />
             </div>
             <div>
-              <Label htmlFor="grant-duration" className="font-display tracking-wider uppercase text-xs">Duration</Label>
+              <Label htmlFor="grant-duration" className="text-xs font-semibold">Duration</Label>
               <Select value={duration} onValueChange={setDuration}>
                 <SelectTrigger id="grant-duration" className="mt-1 w-full bg-secondary border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="30">30 min</SelectItem>
-                  <SelectItem value="60">1 Hour</SelectItem>
-                  <SelectItem value="90">1.5 Hours</SelectItem>
-                  <SelectItem value="120">2 Hours</SelectItem>
-                  <SelectItem value="150">2.5 Hours</SelectItem>
-                  <SelectItem value="180">3 Hours</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="90">1.5 hours</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                  <SelectItem value="150">2.5 hours</SelectItem>
+                  <SelectItem value="180">3 hours</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div>
-            <Label htmlFor="grant-package" className="font-display tracking-wider uppercase text-xs">Package name</Label>
+            <Label htmlFor="grant-package" className="text-xs font-semibold">Package name</Label>
             <Input
               id="grant-package"
               value={packageName}
@@ -159,7 +159,7 @@ function GrantDialog({ onClose, onSaved }) {
             />
           </div>
           <div>
-            <Label htmlFor="grant-coach" className="font-display tracking-wider uppercase text-xs">Restrict to coach (optional)</Label>
+            <Label htmlFor="grant-coach" className="text-xs font-semibold">Restrict to coach (optional)</Label>
             <Select value={coachId || 'any'} onValueChange={(value) => setCoachId(value === 'any' ? '' : value)}>
               <SelectTrigger id="grant-coach" className="mt-1 w-full bg-secondary border-border">
                 <SelectValue />
@@ -178,7 +178,7 @@ function GrantDialog({ onClose, onSaved }) {
         <Button
           onClick={submit}
           disabled={!valid || saving}
-          className="mt-2 w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 disabled:opacity-50"
+          className="mt-2 w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 disabled:opacity-50"
         >
           {saving ? 'Granting...' : 'Grant credits'}
         </Button>
@@ -213,7 +213,7 @@ function RevokeDialog({ credit, onClose, onSaved }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">REVOKE CREDITS</DialogTitle>
+          <DialogTitle>Revoke credits</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {credit.client_name || credit.client_email} · {credit.package_name || 'Package'}
@@ -222,7 +222,7 @@ function RevokeDialog({ credit, onClose, onSaved }) {
           This forfeits the {remaining} remaining session{remaining === 1 ? '' : 's'} on this package. It cannot be undone from here.
         </p>
         <div>
-          <Label htmlFor="revoke-reason" className="font-display tracking-wider uppercase text-xs">
+          <Label htmlFor="revoke-reason" className="text-xs font-semibold">
             Reason <span className="text-destructive">*</span>
           </Label>
           <Textarea
@@ -237,7 +237,7 @@ function RevokeDialog({ credit, onClose, onSaved }) {
         <Button
           onClick={submit}
           disabled={!valid || saving}
-          className="mt-2 w-full bg-destructive text-destructive-foreground font-display tracking-wider uppercase hover:bg-destructive/90 disabled:opacity-50"
+          className="mt-2 w-full bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/90 disabled:opacity-50"
         >
           {saving ? 'Revoking...' : 'Revoke package'}
         </Button>
@@ -292,7 +292,7 @@ export default function AdminCredits() {
         <div className="flex items-center gap-2">
           <Zap className={`w-4 h-4 flex-shrink-0 ${row._remaining > 0 ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
           <div>
-            <p className="font-display tracking-wider text-foreground text-sm">{row.client_name || row.client_email}</p>
+            <p className="text-sm font-semibold text-foreground">{row.client_name || row.client_email}</p>
             <p className="text-xs text-muted-foreground">{row.client_email}</p>
           </div>
         </div>
@@ -345,7 +345,7 @@ export default function AdminCredits() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
           <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">SESSION CREDITS</h1>
+            <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Session credits</h1>
             <p className="text-muted-foreground text-sm mt-1">
               {totals.records} record{totals.records === 1 ? '' : 's'} ·
               <span className="text-accent font-medium ml-1">{totals.totalRemaining} session{totals.totalRemaining === 1 ? '' : 's'} outstanding</span>
@@ -353,7 +353,7 @@ export default function AdminCredits() {
           </div>
           <Button
             onClick={() => setGrantOpen(true)}
-            className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-semibold text-xs hover:bg-accent/90"
           >
             <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Grant credits
           </Button>

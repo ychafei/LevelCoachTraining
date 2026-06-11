@@ -119,7 +119,7 @@ export default function CoachClients() {
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-display tracking-wider text-foreground text-sm truncate">
+            <p className="text-sm font-semibold text-foreground truncate">
               {row.client_name}{row.age ? <span className="text-muted-foreground font-normal"> · {row.age}</span> : null}
             </p>
             <p className="text-xs text-muted-foreground truncate">{row.client_email}</p>
@@ -129,7 +129,7 @@ export default function CoachClients() {
     },
     {
       key: 'last',
-      header: 'Last Session',
+      header: 'Last session',
       sortable: true,
       sortAccessor: 'last_session_date',
       cell: (row) => row.last_session_date
@@ -138,7 +138,7 @@ export default function CoachClients() {
     },
     {
       key: 'next',
-      header: 'Next Session',
+      header: 'Next session',
       sortable: true,
       sortAccessor: 'next_session_date',
       cell: (row) => row.next_session_date
@@ -179,7 +179,7 @@ export default function CoachClients() {
           s.tone === 'green'  ? 'bg-green-500/10 text-green-600 border-green-500/20' :
           s.tone === 'accent' ? 'bg-accent/10 text-accent border-accent/20' :
                                 'bg-secondary text-muted-foreground border-border';
-        return <Badge className={`${tone} border text-[10px] font-display tracking-widest uppercase`}>{s.label}</Badge>;
+        return <Badge className={`${tone} border text-xs font-semibold`}>{s.label}</Badge>;
       },
     },
     {
@@ -192,7 +192,7 @@ export default function CoachClients() {
   if (!coachLoading && !coach && isAdmin) {
     return (
       <div className="bg-card border border-accent/30 rounded-lg p-6">
-        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-2">My Clients</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-2">My clients</h2>
         <p className="text-sm text-muted-foreground">
           Your admin account isn't linked to a coach profile, so there are no clients to show.
         </p>
@@ -206,7 +206,7 @@ export default function CoachClients() {
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
-            <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Coach Profile Not Linked</h2>
+            <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Coach profile not linked</h2>
             <p className="text-sm text-muted-foreground mt-1">Ask an admin to link your account to a coach record before you can see clients.</p>
           </div>
         </div>
@@ -218,7 +218,7 @@ export default function CoachClients() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-wider text-foreground uppercase">My Clients</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.01em] text-foreground">My clients</h1>
           <p className="text-sm text-muted-foreground">{clients.length} total · {clients.filter(c => c.upcoming_sessions > 0).length} with upcoming sessions</p>
         </div>
       </div>
@@ -234,7 +234,7 @@ export default function CoachClients() {
       ) : clients.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
-          <h2 className="font-display text-lg tracking-wider text-foreground uppercase">No Clients Yet</h2>
+          <h2 className="text-lg font-semibold text-foreground">No clients yet</h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
             Once a client books a session with you, they'll show up here with their full training history and toolkit.
           </p>

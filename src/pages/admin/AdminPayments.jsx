@@ -17,6 +17,21 @@ import { ArrowLeft, BookOpenText, CreditCard, RefreshCw, RotateCcw, Webhook } fr
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+// Display-only labels for stored status values.
+const STATUS_LABELS = {
+  created: 'Created',
+  paid: 'Paid',
+  processed: 'Processed',
+  refunded: 'Refunded',
+  partially_refunded: 'Partially refunded',
+  reversed: 'Reversed',
+  disputed: 'Disputed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  pending: 'Pending',
+  stored: 'Stored',
+};
+
 function statusTone(status) {
   if (status === 'paid' || status === 'processed') return 'bg-green-500/10 text-green-500 border-green-500/20';
   if (status === 'refunded' || status === 'reversed') return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
@@ -78,7 +93,7 @@ function RefundDialog({ payment, onClose, onDone }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">REFUND PAYMENT</DialogTitle>
+          <DialogTitle>Refund payment</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {formatCents(payment.amount)} paid · {formatCents(payment.refunded_amount || 0)} already refunded ·{' '}
@@ -86,7 +101,7 @@ function RefundDialog({ payment, onClose, onDone }) {
         </p>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="refund-amount" className="font-display text-xs uppercase tracking-wider">Refund amount (USD)</Label>
+            <Label htmlFor="refund-amount" className="text-xs font-semibold">Refund amount (USD)</Label>
             <Input
               id="refund-amount"
               type="number"
@@ -103,7 +118,7 @@ function RefundDialog({ payment, onClose, onDone }) {
             )}
           </div>
           <div>
-            <Label htmlFor="refund-reason" className="font-display text-xs uppercase tracking-wider">Reason</Label>
+            <Label htmlFor="refund-reason" className="text-xs font-semibold">Reason</Label>
             <Textarea
               id="refund-reason"
               value={reason}
@@ -120,7 +135,7 @@ function RefundDialog({ payment, onClose, onDone }) {
         <Button
           onClick={submit}
           disabled={!validAmount || saving}
-          className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-display uppercase tracking-wider"
+          className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-semibold"
         >
           <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
           {saving ? 'Refunding...' : `Refund ${validAmount ? formatCents(amountCents) : ''}`}
@@ -193,10 +208,10 @@ export default function AdminPayments() {
               <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
               Back to admin
             </Link>
-            <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">PAYMENTS</h1>
+            <h1 className="text-4xl font-bold tracking-[-0.01em] text-foreground">Payments</h1>
             <p className="text-muted-foreground">Stripe checkout, transfer, refund, ledger, and webhook reconciliation.</p>
           </div>
-          <Button variant="outline" onClick={load} disabled={loading} className="font-display tracking-wider uppercase">
+          <Button variant="outline" onClick={load} disabled={loading} className="font-semibold">
             <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
             Refresh
           </Button>
@@ -204,13 +219,13 @@ export default function AdminPayments() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { label: 'Paid Volume', value: formatCents(stats.paidAmount), sub: `${stats.paidCount} payments` },
+            { label: 'Paid volume', value: formatCents(stats.paidAmount), sub: `${stats.paidCount} payments` },
             { label: 'Refunded', value: formatCents(stats.refundedAmount), sub: 'accumulated refund amounts' },
             { label: 'Disputed', value: stats.disputedCount, sub: 'payments in dispute' },
-            { label: 'Webhook Events', value: events.length, sub: 'stored for idempotency' },
+            { label: 'Webhook events', value: events.length, sub: 'stored for idempotency' },
           ].map(item => (
             <div key={item.label} className="rounded-lg border border-border bg-card p-4">
-              <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{item.label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
               <p className="mt-2 font-display text-2xl font-bold text-foreground">{item.value}</p>
               <p className="mt-1 text-xs text-muted-foreground">{item.sub}</p>
             </div>
@@ -220,7 +235,7 @@ export default function AdminPayments() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="rounded-lg border border-border bg-card">
             <div className="border-b border-border p-4">
-              <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Stripe Payment Records</h2>
+              <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Stripe payment records</h2>
             </div>
             {loading ? (
               <div className="space-y-3 p-6" aria-busy="true" aria-label="Loading payments">
@@ -242,10 +257,10 @@ export default function AdminPayments() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <CreditCard className="h-4 w-4 text-accent" aria-hidden="true" />
-                            <p className="font-display text-sm font-bold tracking-wider text-foreground">{formatCents(payment.amount)}</p>
-                            <Badge className={`${statusTone(payment.status)} border`}>{payment.status || 'created'}</Badge>
+                            <p className="text-sm font-bold text-foreground">{formatCents(payment.amount)}</p>
+                            <Badge className={`${statusTone(payment.status)} border`}>{STATUS_LABELS[payment.status] || payment.status || 'Created'}</Badge>
                             {payment.state && payment.state !== payment.status && (
-                              <Badge className={`${statusTone(payment.state)} border`}>{payment.state}</Badge>
+                              <Badge className={`${statusTone(payment.state)} border`}>{STATUS_LABELS[payment.state] || payment.state}</Badge>
                             )}
                           </div>
                           {refunded > 0 && (
@@ -286,7 +301,7 @@ export default function AdminPayments() {
                           size="sm"
                           onClick={() => setRefundTarget(payment)}
                           disabled={!refundable(payment)}
-                          className="font-display tracking-wider uppercase text-xs"
+                          className="font-semibold text-xs"
                         >
                           <RotateCcw className="mr-2 h-3 w-3" aria-hidden="true" />
                           Refund
@@ -302,14 +317,14 @@ export default function AdminPayments() {
           <div className="space-y-6">
             <div className="rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4">
-                <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Transfers</h2>
+                <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Transfers</h2>
               </div>
               <div className="divide-y divide-border">
                 {transfers.slice(0, 12).map(transfer => (
                   <div key={transfer.id} className="p-4 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-display text-foreground">{formatCents(transfer.amount || 0)}</span>
-                      <Badge className={`${statusTone(transfer.status)} border`}>{transfer.status || 'pending'}</Badge>
+                      <Badge className={`${statusTone(transfer.status)} border`}>{STATUS_LABELS[transfer.status] || transfer.status || 'Pending'}</Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Destination {shortId(transfer.destination_account_id)}
@@ -323,7 +338,7 @@ export default function AdminPayments() {
 
             <div className="rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4">
-                <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Webhook Events</h2>
+                <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Webhook events</h2>
               </div>
               <div className="divide-y divide-border">
                 {events.slice(0, 12).map(event => (
@@ -333,7 +348,7 @@ export default function AdminPayments() {
                         <Webhook className="h-4 w-4 flex-shrink-0 text-accent" aria-hidden="true" />
                         <span className="truncate">{event.type || 'event'}</span>
                       </span>
-                      <Badge className={`${statusTone(event.status)} border`}>{event.status || 'stored'}</Badge>
+                      <Badge className={`${statusTone(event.status)} border`}>{STATUS_LABELS[event.status] || event.status || 'Stored'}</Badge>
                     </div>
                     <p className="mt-1 font-mono text-xs text-muted-foreground">{shortId(event.stripe_event_id)}</p>
                   </div>

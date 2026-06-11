@@ -1,26 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Shield, Briefcase, ChevronDown } from 'lucide-react';
+import { Menu, X, Shield, Briefcase, ChevronDown, LogOut, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/AuthContext';
-import { greetingName } from '@/lib/displayName';
+import { fullName, initialsOf } from '@/lib/displayName';
+import NotificationsBell from '@/features/coach/NotificationsBell';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
   const [scrolled, setScrolled] = useState(false);
-  const { user, isAuthenticated, isAdmin, isCoach, isOrganizationAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, isSuperAdmin, isCoach, isOrganizationAdmin, isGuardian, logout } = useAuth();
   const authenticated = isAuthenticated;
   const location = useLocation();
   const navigate = useNavigate();
   const isGuestPlatform = !authenticated || !user;
+
+  // Human-readable account type for the account menu. Display only — order
+  // matters because admins also pass the isCoach check.
+  const roleLabel = isSuperAdmin
+    ? 'Super admin'
+    : isAdmin
+      ? 'Admin'
+      : isCoach
+        ? 'Coach'
+        : isOrganizationAdmin
+          ? 'Organization admin'
+          : isGuardian
+            ? 'Parent'
+            : 'Athlete';
 
   // Elevate the guest navbar with a stronger shadow once the page is scrolled.
   useEffect(() => {
@@ -34,24 +51,24 @@ export default function Navbar() {
     // Guests: full marketplace/product navigation.
     if (!authenticated || !user) {
       return [
-        { label: 'Find a Coach', path: '/coaches' },
+        { label: 'Find a coach', path: '/coaches' },
         { label: 'Organizations', path: '/organizations' },
-        { label: 'How It Works', path: '/how-it-works' },
+        { label: 'How it works', path: '/how-it-works' },
         {
-          label: 'For You',
+          label: 'For you',
           path: '/for-you',
           items: [
-            { label: 'For Athletes', path: '/for-athletes' },
-            { label: 'For Parents', path: '/for-parents' },
-            { label: 'For Coaches', path: '/for-coaches' },
-            { label: 'For Organizations', path: '/for-organizations' },
+            { label: 'For athletes', path: '/for-athletes' },
+            { label: 'For parents', path: '/for-parents' },
+            { label: 'For coaches', path: '/for-coaches' },
+            { label: 'For organizations', path: '/for-organizations' },
           ],
         },
         {
           label: 'Resources',
           path: '/resources',
           items: [
-            { label: 'Resource Center', path: '/resources' },
+            { label: 'Resource center', path: '/resources' },
             { label: 'Blog', path: '/blog' },
             { label: 'About', path: '/about' },
           ],
@@ -76,15 +93,16 @@ export default function Navbar() {
     if (isOrganizationAdmin) {
       return [
         { label: 'Organization', path: '/organization', icon: Briefcase },
-        { label: 'Find a Coach', path: '/coaches' },
+        { label: 'Find a coach', path: '/coaches' },
         { label: 'Messages', path: '/messages' },
       ];
     }
 
-    // Clients (athletes / parents): account nav.
+    // Clients (athletes / parents): account nav. Parents land on the same
+    // /dashboard route — only the label differs.
     return [
-      { label: 'Dashboard', path: '/dashboard' },
-      { label: 'Find a Coach', path: '/coaches' },
+      { label: isGuardian ? 'Family portal' : 'Dashboard', path: '/dashboard' },
+      { label: 'Find a coach', path: '/coaches' },
       { label: 'Messages', path: '/messages' },
     ];
   };
@@ -133,6 +151,10 @@ export default function Navbar() {
       <div className={`${isGuestPlatform ? 'max-w-[1480px]' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8`}>
         <div className="flex items-center justify-between h-20">
           <LevelCoachLogo />
+
+          {/* Right cluster: desktop nav, the single notifications bell (all
+              breakpoints), and the mobile toggle. */}
+          <div className="flex items-center gap-1">
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-1">
@@ -209,25 +231,50 @@ export default function Navbar() {
             )}
             <div className="ml-4">
               {authenticated ? (
-                <div className="flex items-center gap-3">
-                  {greetingName(user) !== 'there' && (
-                    <span className="text-sm font-semibold text-muted-foreground hidden lg:inline">
-                      Hi, <span className="text-accent">{greetingName(user)}</span>
-                    </span>
-                  )}
-                  <Link to="/settings">
-                    <Button variant="ghost" size="sm" className="text-sm font-semibold">
-                      Settings
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => logout()}
-                    className="text-sm font-semibold border-border"
-                  >
-                    Log out
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="flex items-center gap-1.5 rounded-full p-1 pr-1.5 transition-colors hover:bg-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      aria-label="Open account menu"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
+                        {initialsOf(user)}
+                      </span>
+                      <ChevronDown className="w-3 h-3 opacity-70" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      sideOffset={8}
+                      className="min-w-[240px] p-1 bg-card border border-border"
+                    >
+                      <DropdownMenuLabel className="px-3 py-2 font-normal">
+                        <p className="text-sm font-semibold text-foreground truncate">{fullName(user)}</p>
+                        {user?.email && (
+                          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                        )}
+                        <p className="mt-0.5 text-xs text-muted-foreground">{roleLabel}</p>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link
+                          to="/settings"
+                          className="px-3 py-2 text-sm rounded-sm cursor-pointer w-full font-semibold text-foreground hover:text-accent focus:text-accent"
+                        >
+                          <Settings className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                          Settings
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild onSelect={() => logout()}>
+                        <button
+                          type="button"
+                          className="px-3 py-2 text-sm rounded-sm cursor-pointer w-full font-semibold text-foreground hover:text-accent focus:text-accent"
+                        >
+                          <LogOut className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                          Log out
+                        </button>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -256,21 +303,35 @@ export default function Navbar() {
                         : 'bg-accent text-accent-foreground hover:bg-accent/90'
                     }`}
                   >
-                    Create Free Account
+                    Create free account
                   </Button>
                 </div>
               )}
             </div>
           </div>
 
+          {/* Single bell for every breakpoint: two mounted instances would
+              double-fetch and hold desynced unread state across resizes. On
+              desktop it sits right of the account menu; on mobile, left of
+              the hamburger. */}
+          {authenticated && (
+            <div className="flex items-center">
+              <NotificationsBell buttonClassName="h-10 w-10 rounded-full text-foreground hover:bg-secondary" />
+            </div>
+          )}
+
           {/* Mobile toggle */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className={`md:hidden p-2 ${isGuestPlatform ? 'text-slate-950' : 'text-foreground'}`}
-            aria-label="Toggle menu"
-          >
-            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <div className="md:hidden flex items-center gap-1">
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className={`p-2 ${isGuestPlatform ? 'text-slate-950' : 'text-foreground'}`}
+              aria-label="Toggle menu"
+            >
+              {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+
+          </div>
         </div>
       </div>
 
@@ -350,6 +411,18 @@ export default function Navbar() {
             <div className={`pt-2 border-t space-y-2 ${isGuestPlatform ? 'border-slate-200' : 'border-border'}`}>
               {authenticated ? (
                 <>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
+                      {initialsOf(user)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{fullName(user)}</p>
+                      {user?.email && (
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                    </div>
+                  </div>
                   <Link to="/settings" onClick={closeMobile}>
                     <Button variant="ghost" className="w-full justify-start text-sm font-semibold">
                       Settings
@@ -388,7 +461,7 @@ export default function Navbar() {
                       navigate('/create-account');
                     }}
                   >
-                    Create Free Account
+                    Create free account
                   </Button>
                 </>
               )}

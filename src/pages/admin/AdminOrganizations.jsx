@@ -29,10 +29,36 @@ const STATUS_TONES = {
   archived: 'bg-secondary text-muted-foreground border-border',
 };
 
+// Display-only labels for stored status values.
+const STATUS_LABELS = {
+  draft: 'Draft',
+  pending_review: 'Pending review',
+  active: 'Active',
+  suspended: 'Suspended',
+  archived: 'Archived',
+};
+
+const MEMBER_STATUS_LABELS = {
+  active: 'Active',
+  invited: 'Invited',
+  pending: 'Pending',
+  suspended: 'Suspended',
+  removed: 'Removed',
+};
+
+const MEMBER_ROLE_LABELS = {
+  owner: 'Owner',
+  admin: 'Admin',
+  manager: 'Manager',
+  coach: 'Coach',
+  member: 'Member',
+  staff: 'Staff',
+};
+
 function StatusBadge({ status }) {
   return (
     <Badge className={`border text-xs ${STATUS_TONES[status] || STATUS_TONES.draft}`}>
-      {status || 'draft'}
+      {STATUS_LABELS[status] || status || 'Draft'}
     </Badge>
   );
 }
@@ -124,7 +150,7 @@ function OrgDetailSheet({ org, onClose }) {
         ) : detail && (
           <div className="mt-6 space-y-6 pb-8">
             <section className="rounded-lg border border-border bg-card p-4">
-              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">Contact</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground">Contact</h3>
               <dl className="mt-2 space-y-1 text-sm">
                 <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Email</dt><dd className="text-foreground">{org.contact_email || '—'}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Phone</dt><dd className="text-foreground">{org.contact_phone || '—'}</dd></div>
@@ -134,7 +160,7 @@ function OrgDetailSheet({ org, onClose }) {
             </section>
 
             <section className="rounded-lg border border-border bg-card p-4">
-              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">Publish gates</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground">Publish gates</h3>
               <div className="mt-2 flex items-center gap-2 text-sm">
                 {connectReady
                   ? <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden="true" />
@@ -150,7 +176,7 @@ function OrgDetailSheet({ org, onClose }) {
 
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4">
-                <h3 className="font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                <h3 className="text-sm font-semibold text-muted-foreground">
                   Members ({detail.members.length})
                 </h3>
               </div>
@@ -162,9 +188,9 @@ function OrgDetailSheet({ org, onClose }) {
                     <li key={member.id} className="flex items-center justify-between gap-2 p-3 text-sm">
                       <div className="min-w-0">
                         <p className="truncate text-foreground">{personName(detail.profileMap[member.profile_id], member.profile_id)}</p>
-                        <p className="text-xs text-muted-foreground">{member.role}</p>
+                        <p className="text-xs text-muted-foreground">{MEMBER_ROLE_LABELS[member.role] || member.role}</p>
                       </div>
-                      <Badge variant="outline" className="text-xs">{member.status}</Badge>
+                      <Badge variant="outline" className="text-xs">{MEMBER_STATUS_LABELS[member.status] || member.status}</Badge>
                     </li>
                   ))}
                 </ul>
@@ -173,7 +199,7 @@ function OrgDetailSheet({ org, onClose }) {
 
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4">
-                <h3 className="font-display text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                <h3 className="text-sm font-semibold text-muted-foreground">
                   Coaches ({detail.coachLinks.length})
                 </h3>
               </div>
@@ -193,7 +219,7 @@ function OrgDetailSheet({ org, onClose }) {
                               : 'no payout rule'}
                           </p>
                         </div>
-                        <Badge variant="outline" className="text-xs">{link.status}</Badge>
+                        <Badge variant="outline" className="text-xs">{MEMBER_STATUS_LABELS[link.status] || link.status}</Badge>
                       </li>
                     );
                   })}
@@ -238,7 +264,7 @@ export default function AdminOrganizations() {
       sortAccessor: 'name',
       cell: (row) => (
         <div>
-          <p className="font-display text-sm tracking-wider text-foreground">{row.name}</p>
+          <p className="text-sm font-semibold text-foreground">{row.name}</p>
           <p className="text-xs text-muted-foreground">/{row.slug}{row.type ? ` · ${row.type}` : ''}</p>
         </div>
       ),
@@ -281,7 +307,7 @@ export default function AdminOrganizations() {
         <Link to="/admin" className="mb-3 inline-flex items-center text-sm text-muted-foreground hover:text-accent">
           <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to admin
         </Link>
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">ORGANIZATIONS</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Organizations</h1>
         <p className="mt-1 text-muted-foreground">All organization workspaces across the platform.</p>
 
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -292,7 +318,7 @@ export default function AdminOrganizations() {
             { label: 'Draft', value: stats.draft },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-border bg-card p-4">
-              <p className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">{item.label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
               <p className="mt-2 font-display text-2xl font-bold text-foreground">{item.value}</p>
             </div>
           ))}

@@ -37,6 +37,12 @@ import { connectStatusLabel } from '@/features/coach/StripeConnectPanel';
 import { formatInTz, formatInstantInTz } from '@/lib/scheduleET';
 import { cn } from '@/lib/utils';
 
+// Display-only labels for the upcoming-session status pill.
+const UPCOMING_STATUS_LABELS = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+};
+
 function todayInTz(timezone = 'America/Detroit') {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -58,7 +64,7 @@ function Card({ className, children, ...props }) {
 function SectionHeader({ title, action, href }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-4">
-      <h2 className="font-display text-base font-bold tracking-wider uppercase text-foreground">{title}</h2>
+      <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">{title}</h2>
       {action && href && (
         <Link to={href} className="text-sm font-semibold text-accent hover:underline">
           {action}
@@ -68,7 +74,7 @@ function SectionHeader({ title, action, href }) {
   );
 }
 
-function StatCard({ label, value, sub, href, action, icon: Icon }) {
+function StatCard({ label, value, sub, href, action, icon: Icon, loading = false }) {
   return (
     <Card className="flex flex-col justify-between p-5">
       <div className="flex items-start gap-3">
@@ -78,13 +84,22 @@ function StatCard({ label, value, sub, href, action, icon: Icon }) {
         <p className="text-sm font-semibold leading-snug text-foreground">{label}</p>
       </div>
       <div className="mt-4">
-        <p className="font-display text-2xl font-extrabold text-foreground truncate">{value}</p>
-        {sub && <p className="mt-1 text-xs text-muted-foreground truncate">{sub}</p>}
-        {href && action && (
-          <Link to={href} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:underline">
-            {action}
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
+        {loading ? (
+          <div role="status" aria-label="Loading">
+            <div className="h-8 w-16 animate-pulse rounded bg-secondary/60" />
+            <span className="sr-only">Loading…</span>
+          </div>
+        ) : (
+          <>
+            <p className="font-display text-2xl font-extrabold text-foreground truncate">{value}</p>
+            {sub && <p className="mt-1 text-xs text-muted-foreground truncate">{sub}</p>}
+            {href && action && (
+              <Link to={href} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:underline">
+                {action}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            )}
+          </>
         )}
       </div>
     </Card>
@@ -223,7 +238,7 @@ export default function CoachOverview() {
           <div className="flex items-start gap-3">
             <AlertTriangle className={cn('w-5 h-5 flex-shrink-0 mt-0.5', isAdmin ? 'text-accent' : 'text-destructive')} aria-hidden="true" />
             <div>
-              <h1 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">No Coach Profile Linked</h1>
+              <h1 className="text-lg font-bold tracking-[-0.01em] text-foreground">No coach profile linked</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {isAdmin
                   ? 'Your admin account is not linked to a coach record, so there is nothing to show here. Link an account from the admin coaches page if you also coach.'
@@ -239,7 +254,7 @@ export default function CoachOverview() {
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
       <div className="flex flex-col gap-1">
-        <h1 className="font-display text-3xl font-extrabold tracking-wider uppercase text-foreground">Coach Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Coach dashboard</h1>
         <p className="text-muted-foreground">Your business at a glance — all numbers are live.</p>
       </div>
 
@@ -261,31 +276,35 @@ export default function CoachOverview() {
       {/* Stat cards */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Upcoming Sessions"
-          value={sessions === null ? '…' : upcoming.length}
+          label="Upcoming sessions"
+          value={upcoming.length}
+          loading={sessions === null}
           href="/coach/schedule"
           action="View schedule"
           icon={CalendarDays}
         />
         <StatCard
-          label="Completed This Month"
-          value={sessions === null ? '…' : completedThisMonth}
+          label="Completed this month"
+          value={completedThisMonth}
+          loading={sessions === null}
           href="/coach/sessions"
           action="View sessions"
           icon={CheckCircle2}
         />
         <StatCard
-          label="Total Earned"
+          label="Total earned"
           value={earnings ? formatCents(earnings.totals?.earned_cents) : '—'}
           sub={earnings ? `${formatCents(earnings.totals?.transfers_paid_cents)} paid out` : 'Earnings appear after your first paid session'}
+          loading={sessions === null}
           href="/coach/earnings"
           action="View earnings"
           icon={DollarSign}
         />
         <StatCard
-          label="Stripe Payouts"
+          label="Stripe payouts"
           value={status.label}
           sub={connectAccount?.stripe_account_id || 'Connect account required'}
+          loading={sessions === null}
           href="/coach/earnings"
           action="Manage"
           icon={DollarSign}
@@ -295,7 +314,7 @@ export default function CoachOverview() {
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Upcoming sessions */}
         <Card className="p-5">
-          <SectionHeader title="Upcoming Sessions" action="View all" href="/coach/sessions" />
+          <SectionHeader title="Upcoming sessions" action="View all" href="/coach/sessions" />
           {sessions === null ? (
             <SkeletonRows />
           ) : upcoming.length === 0 ? (
@@ -320,8 +339,8 @@ export default function CoachOverview() {
                         {formatInTz(s.date, s.start_time, s.timezone || tz)} · {s.duration_minutes} min
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-accent/10 px-3 py-1 text-[10px] font-display tracking-widest uppercase text-accent">
-                      {s.status}
+                    <span className="shrink-0 rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+                      {UPCOMING_STATUS_LABELS[s.status] || s.status}
                     </span>
                   </Link>
                 </li>
@@ -372,7 +391,7 @@ export default function CoachOverview() {
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Recent reviews */}
         <Card id="reviews" className="p-5">
-          <SectionHeader title="Recent Reviews" />
+          <SectionHeader title="Recent reviews" />
           {reviews === null ? (
             <SkeletonRows />
           ) : reviews.length === 0 ? (
@@ -400,7 +419,7 @@ export default function CoachOverview() {
                   <p className="mt-1 text-[11px] text-muted-foreground/70">{formatInstantInTz(review.created_date, tz, { hour: undefined, minute: undefined, timeZoneName: undefined })}</p>
                   {review.coach_response && (
                     <div className="mt-2 rounded border border-accent/20 bg-accent/5 p-2">
-                      <p className="text-[10px] font-display tracking-widest uppercase text-accent">Your response</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Your response</p>
                       <p className="text-sm text-foreground whitespace-pre-wrap">{review.coach_response}</p>
                     </div>
                   )}
@@ -412,7 +431,7 @@ export default function CoachOverview() {
 
         {/* Recent messages */}
         <Card className="p-5">
-          <SectionHeader title="Recent Messages" action="Open inbox" href="/coach/messages" />
+          <SectionHeader title="Recent messages" action="Open inbox" href="/coach/messages" />
           {conversations === null ? (
             <SkeletonRows />
           ) : conversations.length === 0 ? (

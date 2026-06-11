@@ -184,7 +184,7 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-display tracking-widest uppercase text-accent">Profile Setup</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Profile setup</p>
             <p className="text-sm text-foreground mt-1">
               {totalDone}/{total} complete
               {hasBlocking && <span className="ml-2 text-destructive">· Action needed</span>}
@@ -202,8 +202,8 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
     <div className="bg-card border border-border rounded-lg p-5">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">
-            {published ? 'Profile Checklist' : 'Get Published'}
+          <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">
+            {published ? 'Profile checklist' : 'Get published'}
           </h2>
           <p className="text-xs text-muted-foreground">
             {totalDone} of {total} complete
@@ -280,10 +280,10 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
           <Button
             onClick={publish}
             disabled={publishing}
-            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
           >
             <Rocket className="w-4 h-4 mr-2" aria-hidden="true" />
-            {publishing ? 'Publishing…' : 'Publish Profile'}
+            {publishing ? 'Publishing…' : 'Publish profile'}
           </Button>
         </div>
       )}

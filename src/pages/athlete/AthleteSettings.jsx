@@ -104,7 +104,7 @@ function SettingsCard({ title, icon: Icon, blurb, children }) {
     <section className="rounded-xl border border-border bg-card p-5 sm:p-6" aria-label={title}>
       <div className="flex items-center gap-2">
         {Icon && <Icon className="h-4 w-4 text-accent" aria-hidden="true" />}
-        <h2 className="font-display text-sm font-bold uppercase tracking-widest text-foreground">{title}</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
       </div>
       {blurb && <p className="mt-1 text-xs text-muted-foreground">{blurb}</p>}
       <div className="mt-5">{children}</div>
@@ -690,7 +690,7 @@ function LegalSection({ user }) {
     <div className="space-y-4">
       <LegalSignaturePanel
         signerRole="athlete"
-        title="Athlete Legal Packet"
+        title="Athlete legal packet"
         description="Review and sign the current athlete participation, safety, and platform documents. Booking requires a complete packet."
       />
       <SignedAgreementsList user={user} />
@@ -724,7 +724,7 @@ export default function AthleteSettings() {
         </Link>
 
         <header className="mt-4">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground">Settings</h1>
+          <h1 className="text-3xl font-extrabold tracking-[-0.02em] text-foreground">Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Manage your account, sport profile, notifications, security, and legal documents.
           </p>

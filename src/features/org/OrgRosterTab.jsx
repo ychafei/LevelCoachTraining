@@ -18,6 +18,14 @@ const STATUS_TONES = {
   removed: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
+// Display-only labels for roster link statuses — stored values never change.
+const STATUS_LABELS = {
+  active: 'Active',
+  invited: 'Invited',
+  suspended: 'Suspended',
+  removed: 'Removed',
+};
+
 function coachName(coach) {
   if (!coach) return 'Coach';
   return [coach.first_name, coach.last_name].filter(Boolean).join(' ').trim() || coach.email || 'Coach';
@@ -64,14 +72,14 @@ function PayoutDialog({ link, coach, rule, organizationId, onClose, onSaved }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">PAYOUT SPLIT — {coachName(coach).toUpperCase()}</DialogTitle>
+          <DialogTitle>Payout split — {coachName(coach)}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           Coach, organization, and platform shares must total 100%. Splits apply to new payments only.
         </p>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <Label htmlFor="payout-coach-pct" className="text-xs uppercase tracking-wider text-muted-foreground">Coach %</Label>
+            <Label htmlFor="payout-coach-pct" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Coach %</Label>
             <Input
               id="payout-coach-pct"
               type="number"
@@ -85,7 +93,7 @@ function PayoutDialog({ link, coach, rule, organizationId, onClose, onSaved }) {
             />
           </div>
           <div>
-            <Label htmlFor="payout-org-pct" className="text-xs uppercase tracking-wider text-muted-foreground">Organization %</Label>
+            <Label htmlFor="payout-org-pct" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Organization %</Label>
             <Input
               id="payout-org-pct"
               type="number"
@@ -99,7 +107,7 @@ function PayoutDialog({ link, coach, rule, organizationId, onClose, onSaved }) {
             />
           </div>
           <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Platform %</Label>
+            <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Platform %</Label>
             <div className="mt-1 flex h-9 items-center rounded-md border border-border bg-secondary/60 px-3 text-sm text-muted-foreground" aria-label={`Platform share ${bpsLabel(platformBps)}`}>
               {bpsLabel(platformBps)} (fixed)
             </div>
@@ -111,7 +119,7 @@ function PayoutDialog({ link, coach, rule, organizationId, onClose, onSaved }) {
         <Button
           onClick={submit}
           disabled={!valid || saving}
-          className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-display tracking-wider uppercase"
+          className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
         >
           {saving ? 'Saving...' : 'Save split'}
         </Button>
@@ -237,7 +245,7 @@ export default function OrgRosterTab({ organizationId, isOrgAdmin }) {
                 className="bg-secondary border-border"
               />
             </div>
-            <Button type="submit" disabled={inviting} className="bg-accent text-accent-foreground hover:bg-accent/90 font-display tracking-wider uppercase">
+            <Button type="submit" disabled={inviting} className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold">
               <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
               {inviting ? 'Sending...' : 'Send invite'}
             </Button>
@@ -267,7 +275,7 @@ export default function OrgRosterTab({ organizationId, isOrgAdmin }) {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-foreground">{coachName(coach)}</p>
                       <Badge className={`border text-xs ${STATUS_TONES[link.status] || 'bg-secondary text-muted-foreground border-border'}`}>
-                        {link.status}
+                        {STATUS_LABELS[link.status] || link.status}
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">

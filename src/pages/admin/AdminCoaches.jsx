@@ -18,6 +18,9 @@ import { getLegalPacketStatus } from '@/lib/legal';
 
 const emptyCoach = { first_name: '', last_name: '', email: '', phone: '', county: '', training_area: '', bio: '', quote: '', specializations: [], is_active: true, is_head_coach: false, platform_fee_type: 'none', platform_fee_value: 0 };
 
+// Display-only labels for stored role values.
+const roleLabel = { user: 'User', coach: 'Coach', admin: 'Admin', super_admin: 'Super admin' };
+
 export default function AdminCoaches() {
   const { user, isAdmin } = useCurrentUser();
   const [coaches, setCoaches] = useState([]);
@@ -352,15 +355,15 @@ export default function AdminCoaches() {
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">MANAGE COACHES</h1>
+          <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Manage coaches</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => setEditing({...emptyCoach})} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-                <Plus className="w-4 h-4 mr-2" /> Add Coach
+              <Button onClick={() => setEditing({...emptyCoach})} className="bg-accent text-accent-foreground font-semibold text-xs hover:bg-accent/90">
+                <Plus className="w-4 h-4 mr-2" /> Add coach
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto bg-card border-border">
-              <DialogHeader><DialogTitle className="font-display tracking-wider">{editing?.id ? 'EDIT COACH' : 'ADD COACH'}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editing?.id ? 'Edit coach' : 'Add coach'}</DialogTitle></DialogHeader>
               {editing && (
                 <div className="space-y-4 mt-4">
                   {/* Profile Photo */}
@@ -374,49 +377,49 @@ export default function AdminCoaches() {
                     </div>
                     <label className="cursor-pointer">
                       <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                      <Button type="button" variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs pointer-events-none">
-                        <Upload className="w-3 h-3 mr-1" />{uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                      <Button type="button" variant="outline" size="sm" className="font-semibold text-xs pointer-events-none">
+                        <Upload className="w-3 h-3 mr-1" />{uploadingPhoto ? 'Uploading...' : 'Upload photo'}
                       </Button>
                     </label>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">First Name</Label>
+                      <Label className="text-xs font-semibold">First name</Label>
                       <Input value={editing.first_name} onChange={e => setEditing({...editing, first_name: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Last Name</Label>
+                      <Label className="text-xs font-semibold">Last name</Label>
                       <Input value={editing.last_name} onChange={e => setEditing({...editing, last_name: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Email</Label>
+                      <Label className="text-xs font-semibold">Email</Label>
                       <Input value={editing.email} onChange={e => setEditing({...editing, email: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                     <div>
-                      <Label className="font-display tracking-wider uppercase text-xs">Phone</Label>
+                      <Label className="text-xs font-semibold">Phone</Label>
                       <Input value={editing.phone} onChange={e => setEditing({...editing, phone: e.target.value})} className="bg-secondary border-border mt-1" />
                     </div>
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">County</Label>
+                    <Label className="text-xs font-semibold">County</Label>
                     <Input value={editing.county || ''} onChange={e => setEditing({...editing, county: e.target.value})} className="bg-secondary border-border mt-1" placeholder="County (e.g. Oakland)" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Training Area</Label>
+                    <Label className="text-xs font-semibold">Training area</Label>
                     <Input value={editing.training_area || ''} onChange={e => setEditing({...editing, training_area: e.target.value})} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Bio</Label>
+                    <Label className="text-xs font-semibold">Bio</Label>
                     <Textarea value={editing.bio || ''} onChange={e => setEditing({...editing, bio: e.target.value})} className="bg-secondary border-border mt-1" rows={3} />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Quote</Label>
+                    <Label className="text-xs font-semibold">Quote</Label>
                     <Input value={editing.quote || ''} onChange={e => setEditing({...editing, quote: e.target.value})} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Specializations</Label>
+                    <Label className="text-xs font-semibold">Specializations</Label>
                     <div className="flex gap-2 mt-1">
                       <Input value={specInput} onChange={e => setSpecInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSpec())} className="bg-secondary border-border" placeholder="Add specialization" />
                       <Button type="button" onClick={addSpec} variant="outline" size="sm">Add</Button>
@@ -428,7 +431,7 @@ export default function AdminCoaches() {
                     </div>
                   </div>
                   <div className="border border-border rounded-lg p-3">
-                    <Label className="font-display tracking-wider uppercase text-xs">Stripe Connect</Label>
+                    <Label className="text-xs font-semibold">Stripe Connect</Label>
                     <p className="text-xs text-muted-foreground mt-1">
                       Coach payouts are managed through Stripe Connect from the coach Earnings page.
                     </p>
@@ -437,7 +440,7 @@ export default function AdminCoaches() {
                     </p>
                   </div>
                   <div className="border border-border rounded-lg p-3 space-y-3">
-                    <Label className="font-display tracking-wider uppercase text-xs">Platform Fee</Label>
+                    <Label className="text-xs font-semibold">Platform fee</Label>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { v: 'none', label: 'None' },
@@ -450,7 +453,7 @@ export default function AdminCoaches() {
                             key={opt.v}
                             type="button"
                             onClick={() => setEditing({ ...editing, platform_fee_type: opt.v, platform_fee_value: opt.v === 'none' ? 0 : (editing.platform_fee_value || 0) })}
-                            className={`px-3 py-2 text-xs font-display tracking-wider uppercase rounded border transition-colors ${active ? 'bg-accent text-accent-foreground border-accent' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
+                            className={`px-3 py-2 text-xs font-semibold rounded border transition-colors ${active ? 'bg-accent text-accent-foreground border-accent' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
                           >
                             {opt.label}
                           </button>
@@ -476,9 +479,9 @@ export default function AdminCoaches() {
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2"><Switch checked={editing.is_active} onCheckedChange={v => setEditing({...editing, is_active: v})} /><Label className="text-sm">Active</Label></div>
-                    <div className="flex items-center gap-2"><Switch checked={editing.is_head_coach} onCheckedChange={v => setEditing({...editing, is_head_coach: v})} /><Label className="text-sm">Head Coach</Label></div>
+                    <div className="flex items-center gap-2"><Switch checked={editing.is_head_coach} onCheckedChange={v => setEditing({...editing, is_head_coach: v})} /><Label className="text-sm">Head coach</Label></div>
                   </div>
-                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">Save Coach</Button>
+                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90">Save coach</Button>
                 </div>
               )}
             </DialogContent>
@@ -495,12 +498,12 @@ export default function AdminCoaches() {
                   <span className="font-display text-sm text-muted-foreground">{coach.first_name?.[0]}{coach.last_name?.[0]}</span>
                 </div>
                 <div>
-                  <p className="font-display tracking-wider text-foreground">{coach.first_name} {coach.last_name}</p>
+                  <p className="font-semibold text-foreground">{coach.first_name} {coach.last_name}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {coach.county && (
                       <span className="text-xs text-accent flex items-center gap-1"><MapPin className="w-3 h-3" />{coach.county}</span>
                     )}
-                    {coach.is_head_coach && <Badge className="bg-accent/10 text-accent border-accent/20 text-xs">Head Coach</Badge>}
+                    {coach.is_head_coach && <Badge className="bg-accent/10 text-accent border-accent/20 text-xs">Head coach</Badge>}
                     {!coach.is_active && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
                   </div>
                 </div>
@@ -513,19 +516,19 @@ export default function AdminCoaches() {
                     : '';
                   return linked ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-accent font-display tracking-wide">Linked: {linkedName}</span>
+                      <span className="text-xs font-medium text-accent">Linked: {linkedName}</span>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs font-display tracking-wider uppercase h-7 hover:text-red-500 hover:border-red-500/50"
+                        className="text-xs font-semibold h-7 hover:text-red-500 hover:border-red-500/50"
                         onClick={() => unlinkUser(coach)}
                       >
                         Unlink
                       </Button>
                     </div>
                   ) : (
-                    <Button size="sm" variant="outline" className="text-xs font-display tracking-wider uppercase h-7" onClick={() => setLinkDialog(coach)}>
-                      Link User
+                    <Button size="sm" variant="outline" className="text-xs font-semibold h-7" onClick={() => setLinkDialog(coach)}>
+                      Link user
                     </Button>
                   );
                 })()}
@@ -552,7 +555,7 @@ export default function AdminCoaches() {
         onOpenChange={(o) => { if (!o) { setLinkDialog(null); setLinkSearch(''); setLinkShowAll(false); setLinkEmail(''); } }}
       >
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="font-display tracking-wider">LINK USER TO {linkDialog?.first_name?.toUpperCase()} {linkDialog?.last_name?.toUpperCase()}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Link user to {linkDialog?.first_name} {linkDialog?.last_name}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground mb-3">Select the user account that belongs to this coach. Their role will be set to "coach".</p>
           <Input
             value={linkSearch}
@@ -589,13 +592,13 @@ export default function AdminCoaches() {
                       onClick={() => linkUser(u.id)}
                       className="w-full text-left p-3 rounded-lg border border-border bg-secondary hover:border-accent/50 transition-all"
                     >
-                      <p className="font-display tracking-wide text-sm text-foreground">
+                      <p className="text-sm font-semibold text-foreground">
                         {name || '(no name set)'}
                         {u.role && u.role !== 'user' && (
-                          <span className="ml-2 text-[10px] uppercase text-accent">{u.role}</span>
+                          <span className="ml-2 text-[10px] font-semibold text-accent">{roleLabel[u.role] || u.role}</span>
                         )}
                         {linkedElsewhere && (
-                          <span className="ml-2 text-[10px] uppercase text-muted-foreground">already linked</span>
+                          <span className="ml-2 text-[10px] font-semibold text-muted-foreground">Already linked</span>
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">{u.email || 'no email on profile'}</p>
@@ -607,7 +610,7 @@ export default function AdminCoaches() {
           })()}
 
           <div className="border-t border-border mt-4 pt-4">
-            <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-2">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-2">
               Or link manually by email
             </p>
             <div className="flex gap-2">
@@ -623,14 +626,14 @@ export default function AdminCoaches() {
                 onClick={linkByEmail}
                 disabled={linkingEmail || sendingVerify || !linkEmail.trim()}
                 variant="outline"
-                className="font-display tracking-wider uppercase text-xs shrink-0 border-border"
+                className="font-semibold text-xs shrink-0 border-border"
               >
                 {linkingEmail ? 'Linking…' : 'Link now'}
               </Button>
               <Button
                 onClick={sendVerifyLink}
                 disabled={sendingVerify || linkingEmail || !linkEmail.trim()}
-                className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs shrink-0"
+                className="bg-accent text-accent-foreground font-semibold text-xs shrink-0"
               >
                 {sendingVerify ? 'Linking…' : 'Server link'}
               </Button>

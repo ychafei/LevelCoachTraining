@@ -15,6 +15,13 @@ const STATUS_BADGES = {
   voided: 'border-border bg-secondary/50 text-muted-foreground',
 };
 
+// Display-only labels — never written back.
+const STATUS_LABELS = {
+  signed: 'Signed',
+  superseded: 'Superseded',
+  voided: 'Voided',
+};
+
 // Reusable signed-agreements list — also used by the parent portal documents
 // tab (filtered there to the guardian's own signatures).
 export function SignedAgreementsList({ user, athleteNamesById = {} }) {
@@ -55,7 +62,7 @@ export function SignedAgreementsList({ user, athleteNamesById = {} }) {
                         : 'Legal agreement'}
                     </p>
                     <Badge className={STATUS_BADGES[agreement.status] || STATUS_BADGES.voided}>
-                      {agreement.status || 'signed'}
+                      {STATUS_LABELS[agreement.status] || agreement.status || 'Signed'}
                     </Badge>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
@@ -85,7 +92,7 @@ export default function AthleteDocuments({ user }) {
     <div className="space-y-4">
       <LegalSignaturePanel
         signerRole="athlete"
-        title="Athlete Legal Packet"
+        title="Athlete legal packet"
         description="Review and sign the current athlete participation, safety, and platform documents. Booking requires a complete packet."
       />
       <SignedAgreementsList user={user} />

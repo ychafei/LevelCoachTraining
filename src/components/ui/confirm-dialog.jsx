@@ -40,7 +40,7 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-display tracking-wider uppercase">{title}</AlertDialogTitle>
+          <AlertDialogTitle className="font-bold tracking-[-0.01em]">{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         {consequences.length > 0 && (
@@ -65,7 +65,7 @@ export function ConfirmDialog({
           </div>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel className="font-display tracking-wider uppercase text-xs">
+          <AlertDialogCancel className="font-semibold">
             {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction
@@ -73,7 +73,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className={cn(
               actionClass,
-              'font-display tracking-wider uppercase text-xs',
+              'font-semibold',
               !typedOk && 'opacity-50 cursor-not-allowed pointer-events-none',
             )}
           >

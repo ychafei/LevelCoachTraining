@@ -82,13 +82,13 @@ export default function PublicCoachCard({
                 {model.displayName}
               </Link>
               {model.verified && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-100">
                   <BadgeCheck className="h-3 w-3" />
                   Email verified
                 </span>
               )}
               {coach?.is_demo && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 ring-1 ring-slate-200">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600 ring-1 ring-slate-200">
                   Demo
                 </span>
               )}
@@ -96,7 +96,7 @@ export default function PublicCoachCard({
 
             {hasOrg ? (
               <p className="mt-1">
-                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-700 ring-1 ring-violet-100">
+                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-xs font-bold uppercase tracking-[0.18em] text-violet-700 ring-1 ring-violet-100">
                   <Building2 className="h-3 w-3" aria-hidden="true" />
                   {model.organization.name}
                 </span>
@@ -200,13 +200,13 @@ export default function PublicCoachCard({
               variant="outline"
               className="h-9 rounded-lg border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-50"
             >
-              <Link to={profileHref}>View Profile</Link>
+              <Link to={profileHref}>View profile</Link>
             </Button>
             <Button
               asChild
               className="h-9 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-blue-600/20 hover:bg-blue-700"
             >
-              <Link to={bookHref}>See Availability</Link>
+              <Link to={bookHref}>See availability</Link>
             </Button>
           </div>
         </div>

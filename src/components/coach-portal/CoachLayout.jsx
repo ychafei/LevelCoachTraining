@@ -19,13 +19,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { cn } from '@/lib/utils';
 import { fullName, initialsOf } from '@/lib/displayName';
 import { coachRepo } from '@/api/repo';
+import { LevelCoachWordmarkPlate } from '@/components/public/LevelCoachLogo';
 import NotificationsBell from '@/features/coach/NotificationsBell';
 
 const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 
 const navItems = [
   { label: 'Dashboard', to: '/coach', icon: LayoutDashboard, isActive: ({ pathname, hash }) => pathname === '/coach' && !hash },
-  { label: 'Profile Builder', to: '/coach/profile', icon: UserRound, isActive: ({ pathname }) => pathname === '/coach/profile' },
+  { label: 'Profile builder', to: '/coach/profile', icon: UserRound, isActive: ({ pathname }) => pathname === '/coach/profile' },
   {
     label: 'Bookings',
     to: '/coach/sessions?view=bookings',
@@ -85,15 +86,12 @@ function SidebarNav({ onSelect }) {
 function SidebarContent({ onSelect }) {
   return (
     <div className="flex min-h-full flex-col px-4 py-5">
-      <Link
-        to="/coach"
-        onClick={onSelect}
-        className="mb-7 flex h-[64px] w-full items-center rounded-lg bg-white px-3 shadow-sm"
-      >
-        <img
-          src="/levelcoach-wordmark.png"
-          alt="LevelCoach Training"
-          className="h-[42px] w-auto max-w-full object-contain"
+      <Link to="/coach" onClick={onSelect} className="mb-7 block">
+        {/* Shared wordmark on its white plate — the wordmark itself is dark ink,
+            so the plate keeps it legible on the dark sidebar. */}
+        <LevelCoachWordmarkPlate
+          className="h-[64px] w-full"
+          imageClassName="h-[42px] w-auto max-w-full object-contain"
         />
       </Link>
 
@@ -204,14 +202,14 @@ function Topbar({ mobileOpen, setMobileOpen }) {
                   onClick={() => setProfileOpen(false)}
                   className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                 >
-                  Profile Builder
+                  Profile builder
                 </Link>
                 <Link
                   to="/coach/settings"
                   onClick={() => setProfileOpen(false)}
                   className="block rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                 >
-                  Account Settings
+                  Account settings
                 </Link>
                 <button
                   type="button"
@@ -272,9 +270,9 @@ export default function CoachLayout() {
           <footer className="mt-7 flex flex-col gap-3 border-t border-slate-200 pt-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <span>© 2026 LevelCoach Training</span>
             <div className="flex flex-wrap gap-6">
-              <Link to="/terms" className="hover:text-blue-600">Terms of Service</Link>
-              <Link to="/privacy" className="hover:text-blue-600">Privacy Policy</Link>
-              <Link to="/resources" className="hover:text-blue-600">Help Center</Link>
+              <Link to="/terms" className="hover:text-blue-600">Terms of service</Link>
+              <Link to="/privacy" className="hover:text-blue-600">Privacy policy</Link>
+              <Link to="/resources" className="hover:text-blue-600">Help center</Link>
             </div>
           </footer>
         </main>

@@ -13,7 +13,7 @@ const PATHS = [
   {
     to: '/apply/training-organization',
     icon: Building2,
-    title: 'Create Organization Account',
+    title: 'Create organization account',
     desc: 'Set up a free training organization profile.',
   },
 ];
@@ -45,7 +45,7 @@ export default function Apply() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-accent" />
                 </div>
-                <h3 className="font-display text-lg tracking-wider text-foreground mb-2">{title}</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
               </Link>
             ))}
@@ -57,10 +57,10 @@ export default function Apply() {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
             <FileText className="w-4 h-4 text-accent" />
-            <span className="text-xs font-display tracking-widest uppercase text-accent">General Application</span>
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">General application</span>
           </div>
           <h2 className="font-display text-2xl sm:text-3xl tracking-tight text-foreground mb-2">
-            NOT SURE WHICH PATH?
+            Not sure which path?
           </h2>
           <p className="text-sm text-muted-foreground">
             Use the form below to introduce yourself. We'll route you to the right setup path.
@@ -69,7 +69,7 @@ export default function Apply() {
       </section>
 
       <ApplicationForm
-        title="General Application"
+        title="General application"
         subtitle="Tell us who you are and what you want to build with LevelCoach. Every application is reviewed by a person; approvals arrive by email with onboarding instructions."
         promptLabel="What's on your mind? *"
         promptPlaceholder="Coaching, organization setup, partnerships, integrations — let us know."

@@ -25,6 +25,7 @@ import {
   normalizePublicCoach,
   publicCoachDisplay,
 } from '@/lib/publicCoach';
+import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { recurringWindowsByDay, timezoneAbbreviation } from '@/lib/scheduleET';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
@@ -220,7 +221,7 @@ export default function CoachDetail() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {model.contactVerified && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 eyebrow text-emerald-700 ring-1 ring-emerald-100">
                         <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
                         Verified email
                       </span>
@@ -273,7 +274,7 @@ export default function CoachDetail() {
             </div>
 
             <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24 lg:self-start" aria-label="Book training">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Book training</p>
+              <p className="eyebrow text-blue-700">Book training</p>
               <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Train with {model.firstName}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 Open the booking flow to see {model.firstName}'s live open times and session options.
@@ -317,9 +318,7 @@ export default function CoachDetail() {
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
-              <p className="mt-3 text-xs leading-5 text-slate-500">
-                Cancel 24 or more hours before a session starts and your credit is restored automatically. Inside 24 hours the credit is forfeited, unless the coach cancels.
-              </p>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{CANCEL_POLICY_COPY}</p>
               <div className="mt-4">
                 <p className="eyebrow text-slate-500">What happens next</p>
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-slate-600">
@@ -456,7 +455,7 @@ export default function CoachDetail() {
                       )}
                       {review.coach_response && (
                         <div className="mt-3 rounded-lg bg-blue-50 p-3 ring-1 ring-blue-100">
-                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Coach response</p>
+                          <p className="eyebrow text-blue-700">Coach response</p>
                           <p className="mt-1 text-sm leading-6 text-slate-700">{review.coach_response}</p>
                         </div>
                       )}
@@ -471,7 +470,7 @@ export default function CoachDetail() {
         <aside className="space-y-5">
           {org?.name && (
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Affiliated organization</p>
+              <p className="eyebrow text-slate-500">Affiliated organization</p>
               <div className="mt-3 flex items-center gap-3">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
                   <Building2 className="h-5 w-5" aria-hidden="true" />
@@ -490,7 +489,7 @@ export default function CoachDetail() {
           )}
 
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm" aria-label="Safety information">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">What we verify</p>
+            <p className="eyebrow text-slate-500">What we verify</p>
             <div className="mt-4 space-y-4">
               <div className="flex gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
@@ -562,9 +561,7 @@ export default function CoachDetail() {
             <Button asChild className="mt-4 w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
               <Link to={bookHref}>Book training</Link>
             </Button>
-            <p className="mt-3 text-xs leading-5 text-slate-600">
-              Cancel 24 or more hours before a session starts and your credit is restored automatically. Inside 24 hours the credit is forfeited, unless the coach cancels.
-            </p>
+            <p className="mt-3 text-xs leading-5 text-slate-600">{CANCEL_POLICY_COPY}</p>
           </div>
         </aside>
       </section>
@@ -590,7 +587,7 @@ function FocusList({ title, items, fallback }) {
   const list = items?.length ? items : [fallback];
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</p>
+      <p className="eyebrow text-slate-500">{title}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {list.map((item) => (
           <span key={item} className="rounded-md bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">

@@ -52,10 +52,16 @@ function statusTone(status) {
   }
 }
 
+// Display-only: 'in_progress' → 'In progress'. Stored values are untouched.
+function humanizeStatus(value) {
+  const text = String(value || '').replace(/_/g, ' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}
+
 function StatusBadge({ status }) {
   return (
-    <Badge className={`${statusTone(status)} border text-[10px] font-display tracking-widest uppercase`}>
-      {String(status || '').replace(/_/g, ' ')}
+    <Badge className={`${statusTone(status)} border text-xs font-semibold`}>
+      {humanizeStatus(status)}
     </Badge>
   );
 }
@@ -64,7 +70,7 @@ function PanelEmpty({ icon: Icon, title, blurb, action }) {
   return (
     <div className="bg-card border border-border rounded-lg p-8 text-center">
       <Icon className="w-8 h-8 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
-      <p className="font-display tracking-wider uppercase text-sm text-foreground">{title}</p>
+      <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">{blurb}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -131,7 +137,7 @@ function GoalForm({ athleteId, defaultSportKey, initial = null, onDone, onCancel
   return (
     <div className="bg-card border border-accent/30 rounded-lg p-4 space-y-3">
       <div>
-        <Label htmlFor="goal-title" className="font-display tracking-wider uppercase text-xs">Goal</Label>
+        <Label htmlFor="goal-title" className="text-xs font-semibold">Goal</Label>
         <Input
           id="goal-title"
           value={title}
@@ -141,7 +147,7 @@ function GoalForm({ athleteId, defaultSportKey, initial = null, onDone, onCancel
         />
       </div>
       <div>
-        <Label htmlFor="goal-desc" className="font-display tracking-wider uppercase text-xs">Details</Label>
+        <Label htmlFor="goal-desc" className="text-xs font-semibold">Details</Label>
         <Textarea
           id="goal-desc"
           value={description}
@@ -153,7 +159,7 @@ function GoalForm({ athleteId, defaultSportKey, initial = null, onDone, onCancel
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <Label htmlFor="goal-date" className="font-display tracking-wider uppercase text-xs">Target date</Label>
+          <Label htmlFor="goal-date" className="text-xs font-semibold">Target date</Label>
           <Input
             id="goal-date"
             type="date"
@@ -163,18 +169,18 @@ function GoalForm({ athleteId, defaultSportKey, initial = null, onDone, onCancel
           />
         </div>
         <div>
-          <Label htmlFor="goal-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
+          <Label htmlFor="goal-sport" className="text-xs font-semibold">Sport</Label>
           <SportSelect id="goal-sport" value={sportKey} onChange={setSportKey} />
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">Cancel</Button>
+        <Button variant="ghost" onClick={onCancel} className="text-xs font-semibold">Cancel</Button>
         <Button
           onClick={save}
           disabled={saving}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+          className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
         >
-          {saving ? 'Saving…' : initial ? 'Save Goal' : 'Create Goal'}
+          {saving ? 'Saving…' : initial ? 'Save goal' : 'Create goal'}
         </Button>
       </div>
     </div>
@@ -216,8 +222,8 @@ function GoalsPanel({ coachId, athleteId, defaultSportKey }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{goals.length} goal{goals.length === 1 ? '' : 's'}</p>
         {!creating && (
-          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New Goal
+          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New goal
           </Button>
         )}
       </div>
@@ -237,7 +243,7 @@ function GoalsPanel({ coachId, athleteId, defaultSportKey }) {
           title="No goals yet"
           blurb="Set the first goal for this athlete — goals show up on their dashboard and anchor your plans."
           action={(
-            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
+            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
               <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Create the first goal
             </Button>
           )}
@@ -256,7 +262,7 @@ function GoalsPanel({ coachId, athleteId, defaultSportKey }) {
             <div key={goal.id} className="bg-card border border-border rounded-lg p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
-                  <p className="font-display tracking-wider text-foreground">{goal.title}</p>
+                  <p className="font-semibold text-foreground">{goal.title}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
                     {goal.sport_key && <span>{getSport(goal.sport_key)?.display_name || goal.sport_key}</span>}
                     {goal.target_date && <span>Target {fmtDate(goal.target_date)}</span>}
@@ -273,10 +279,10 @@ function GoalsPanel({ coachId, athleteId, defaultSportKey }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {GOAL_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {GOAL_STATUSES.map((s) => <SelectItem key={s} value={s}>{humanizeStatus(s)}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="ghost" onClick={() => setEditingId(goal.id)} className="font-display tracking-wider uppercase text-xs">
+                <Button size="sm" variant="ghost" onClick={() => setEditingId(goal.id)} className="text-xs font-semibold">
                   Edit
                 </Button>
               </div>
@@ -304,7 +310,7 @@ function PlanItemRow({ item, onChanged }) {
     <div className="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
       <div className="min-w-0">
         <p className="text-sm text-foreground">
-          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mr-2">Week {item.week ?? 0}</span>
+          <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mr-2">Week {item.week ?? 0}</span>
           {item.title}
         </p>
         {item.description && <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{item.description}</p>}
@@ -314,7 +320,7 @@ function PlanItemRow({ item, onChanged }) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {PLAN_ITEM_STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+          {PLAN_ITEM_STATUSES.map((s) => <SelectItem key={s} value={s}>{humanizeStatus(s)}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>
@@ -382,9 +388,9 @@ function PlanItemForm({ planId, onDone, onCancel }) {
         className="bg-secondary border-border"
       />
       <div className="flex items-center justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">Cancel</Button>
-        <Button size="sm" onClick={save} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-          {saving ? 'Adding…' : 'Add Item'}
+        <Button size="sm" variant="ghost" onClick={onCancel} className="text-xs font-semibold">Cancel</Button>
+        <Button size="sm" onClick={save} disabled={saving} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+          {saving ? 'Adding…' : 'Add item'}
         </Button>
       </div>
     </div>
@@ -420,7 +426,7 @@ function PlanCard({ plan, onChanged }) {
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <p className="font-display tracking-wider text-foreground">{plan.title}</p>
+          <p className="font-semibold text-foreground">{plan.title}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
             {plan.sport_key && <span>{getSport(plan.sport_key)?.display_name || plan.sport_key}</span>}
             {(plan.starts_on || plan.ends_on) && (
@@ -436,18 +442,18 @@ function PlanCard({ plan, onChanged }) {
 
       <div className="mt-3 pt-3 border-t border-border">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Plan items</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Plan items</p>
           <div className="flex items-center gap-2">
             <Select value={plan.status} onValueChange={setStatus}>
               <SelectTrigger className="w-32 h-8 bg-secondary border-border text-xs" aria-label={`Status for plan ${plan.title}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLAN_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {PLAN_STATUSES.map((s) => <SelectItem key={s} value={s}>{humanizeStatus(s)}</SelectItem>)}
               </SelectContent>
             </Select>
             {!adding && (
-              <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="font-display tracking-wider uppercase text-xs">
+              <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="text-xs font-semibold">
                 <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Item
               </Button>
             )}
@@ -512,7 +518,7 @@ function PlanForm({ athleteId, defaultSportKey, onDone, onCancel }) {
   return (
     <div className="bg-card border border-accent/30 rounded-lg p-4 space-y-3">
       <div>
-        <Label htmlFor="plan-title" className="font-display tracking-wider uppercase text-xs">Plan title</Label>
+        <Label htmlFor="plan-title" className="text-xs font-semibold">Plan title</Label>
         <Input
           id="plan-title"
           value={title}
@@ -522,7 +528,7 @@ function PlanForm({ athleteId, defaultSportKey, onDone, onCancel }) {
         />
       </div>
       <div>
-        <Label htmlFor="plan-desc" className="font-display tracking-wider uppercase text-xs">Overview</Label>
+        <Label htmlFor="plan-desc" className="text-xs font-semibold">Overview</Label>
         <Textarea
           id="plan-desc"
           value={description}
@@ -534,22 +540,22 @@ function PlanForm({ athleteId, defaultSportKey, onDone, onCancel }) {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <Label htmlFor="plan-start" className="font-display tracking-wider uppercase text-xs">Starts</Label>
+          <Label htmlFor="plan-start" className="text-xs font-semibold">Starts</Label>
           <Input id="plan-start" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} className="bg-secondary border-border mt-1" />
         </div>
         <div>
-          <Label htmlFor="plan-end" className="font-display tracking-wider uppercase text-xs">Ends</Label>
+          <Label htmlFor="plan-end" className="text-xs font-semibold">Ends</Label>
           <Input id="plan-end" type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} className="bg-secondary border-border mt-1" />
         </div>
         <div>
-          <Label htmlFor="plan-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
+          <Label htmlFor="plan-sport" className="text-xs font-semibold">Sport</Label>
           <SportSelect id="plan-sport" value={sportKey} onChange={setSportKey} />
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">Cancel</Button>
-        <Button onClick={save} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-          {saving ? 'Creating…' : 'Create Plan'}
+        <Button variant="ghost" onClick={onCancel} className="text-xs font-semibold">Cancel</Button>
+        <Button onClick={save} disabled={saving} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+          {saving ? 'Creating…' : 'Create plan'}
         </Button>
       </div>
     </div>
@@ -581,8 +587,8 @@ function PlansPanel({ coachId, athleteId, defaultSportKey }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{plans.length} plan{plans.length === 1 ? '' : 's'}</p>
         {!creating && (
-          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New Plan
+          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New plan
           </Button>
         )}
       </div>
@@ -602,7 +608,7 @@ function PlansPanel({ coachId, athleteId, defaultSportKey }) {
           title="No training plans"
           blurb="Build a structured plan with weekly items — the athlete sees it on their dashboard."
           action={(
-            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
+            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
               <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Create the first plan
             </Button>
           )}
@@ -652,7 +658,7 @@ function HomeworkForm({ athleteId, defaultSportKey, onDone, onCancel }) {
   return (
     <div className="bg-card border border-accent/30 rounded-lg p-4 space-y-3">
       <div>
-        <Label htmlFor="hw-title" className="font-display tracking-wider uppercase text-xs">Homework</Label>
+        <Label htmlFor="hw-title" className="text-xs font-semibold">Homework</Label>
         <Input
           id="hw-title"
           value={title}
@@ -662,7 +668,7 @@ function HomeworkForm({ athleteId, defaultSportKey, onDone, onCancel }) {
         />
       </div>
       <div>
-        <Label htmlFor="hw-instructions" className="font-display tracking-wider uppercase text-xs">Instructions</Label>
+        <Label htmlFor="hw-instructions" className="text-xs font-semibold">Instructions</Label>
         <Textarea
           id="hw-instructions"
           value={instructions}
@@ -674,18 +680,18 @@ function HomeworkForm({ athleteId, defaultSportKey, onDone, onCancel }) {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <Label htmlFor="hw-due" className="font-display tracking-wider uppercase text-xs">Due date</Label>
+          <Label htmlFor="hw-due" className="text-xs font-semibold">Due date</Label>
           <Input id="hw-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="bg-secondary border-border mt-1" />
         </div>
         <div>
-          <Label htmlFor="hw-sport" className="font-display tracking-wider uppercase text-xs">Sport</Label>
+          <Label htmlFor="hw-sport" className="text-xs font-semibold">Sport</Label>
           <SportSelect id="hw-sport" value={sportKey} onChange={setSportKey} />
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel} className="font-display tracking-wider uppercase text-xs">Cancel</Button>
-        <Button onClick={save} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-          {saving ? 'Assigning…' : 'Assign Homework'}
+        <Button variant="ghost" onClick={onCancel} className="text-xs font-semibold">Cancel</Button>
+        <Button onClick={save} disabled={saving} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+          {saving ? 'Assigning…' : 'Assign homework'}
         </Button>
       </div>
     </div>
@@ -727,8 +733,8 @@ function HomeworkPanel({ coachId, athleteId, defaultSportKey }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{rows.length} assignment{rows.length === 1 ? '' : 's'}</p>
         {!creating && (
-          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Assign Homework
+          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Assign homework
           </Button>
         )}
       </div>
@@ -748,7 +754,7 @@ function HomeworkPanel({ coachId, athleteId, defaultSportKey }) {
           title="No homework assigned"
           blurb="Between-session work keeps athletes progressing. Assign the first piece of homework."
           action={(
-            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
+            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
               <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Assign homework
             </Button>
           )}
@@ -758,7 +764,7 @@ function HomeworkPanel({ coachId, athleteId, defaultSportKey }) {
           <div key={hw.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <p className="font-display tracking-wider text-foreground">{hw.title}</p>
+                <p className="font-semibold text-foreground">{hw.title}</p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
                   {hw.sport_key && <span>{getSport(hw.sport_key)?.display_name || hw.sport_key}</span>}
                   {hw.due_date && <span>Due {fmtDate(hw.due_date)}</span>}
@@ -767,7 +773,7 @@ function HomeworkPanel({ coachId, athleteId, defaultSportKey }) {
                 {hw.instructions && <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{hw.instructions}</p>}
                 {hw.athlete_notes && (
                   <div className="mt-2 rounded border border-accent/20 bg-accent/5 p-2">
-                    <p className="text-[10px] font-display tracking-widest uppercase text-accent">Athlete notes</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Athlete notes</p>
                     <p className="text-sm text-foreground whitespace-pre-wrap mt-0.5">{hw.athlete_notes}</p>
                   </div>
                 )}
@@ -779,13 +785,13 @@ function HomeworkPanel({ coachId, athleteId, defaultSportKey }) {
                 <Button
                   size="sm"
                   onClick={() => setStatus(hw, 'reviewed')}
-                  className="bg-green-600 text-white font-display tracking-wider uppercase text-xs hover:bg-green-700"
+                  className="bg-green-600 text-white text-xs font-semibold hover:bg-green-700"
                 >
-                  <ListChecks className="w-3 h-3 mr-1" aria-hidden="true" /> Mark Reviewed
+                  <ListChecks className="w-3 h-3 mr-1" aria-hidden="true" /> Mark reviewed
                 </Button>
               )}
               {hw.status !== 'archived' && (
-                <Button size="sm" variant="ghost" onClick={() => setStatus(hw, 'archived')} className="font-display tracking-wider uppercase text-xs text-muted-foreground">
+                <Button size="sm" variant="ghost" onClick={() => setStatus(hw, 'archived')} className="text-xs font-semibold text-muted-foreground">
                   <X className="w-3 h-3 mr-1" aria-hidden="true" /> Archive
                 </Button>
               )}
@@ -846,7 +852,7 @@ function AssessmentCard({ assessment }) {
       >
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <p className="font-display tracking-wider text-foreground">
+            <p className="font-semibold text-foreground">
               {sport?.display_name || assessment.sport_key || 'Assessment'}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -863,7 +869,7 @@ function AssessmentCard({ assessment }) {
         <div className="mt-3 pt-3 border-t border-border space-y-3">
           {grouped.map(([label, skills]) => (
             <div key={label}>
-              <p className="text-[10px] font-display tracking-widest uppercase text-accent mb-1">{label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent mb-1">{label}</p>
               <div className="space-y-1.5">
                 {skills.map((s) => (
                   <div key={s.key} className="grid grid-cols-[minmax(0,1fr)_minmax(80px,160px)_36px] items-center gap-2">
@@ -879,7 +885,7 @@ function AssessmentCard({ assessment }) {
           ))}
           {assessment.notes && (
             <div>
-              <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1">Summary</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1">Summary</p>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{assessment.notes}</p>
             </div>
           )}
@@ -914,8 +920,8 @@ function AssessmentsPanel({ coachId, athleteId, defaultSportKey }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{rows.length} assessment{rows.length === 1 ? '' : 's'}</p>
         {!creating && (
-          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New Assessment
+          <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+            <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> New assessment
           </Button>
         )}
       </div>
@@ -935,7 +941,7 @@ function AssessmentsPanel({ coachId, athleteId, defaultSportKey }) {
           title="No assessments yet"
           blurb="Baseline this athlete with a sport-specific skills assessment so progress is measurable."
           action={(
-            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
+            <Button size="sm" onClick={() => setCreating(true)} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
               <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> Run the first assessment
             </Button>
           )}
@@ -1072,7 +1078,7 @@ export default function TrainingToolkit({ coachId, athleteId, defaultSportKey = 
   if (!athleteId) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
-        <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground mb-1">Training Toolkit</h2>
+        <h2 className="text-sm font-bold tracking-[-0.01em] text-muted-foreground mb-1">Training toolkit</h2>
         <p className="text-sm text-muted-foreground">
           This client's sessions don't carry an athlete record yet, so goals, plans, homework, and assessments
           can't be attached. The toolkit unlocks after their next booking.
@@ -1083,14 +1089,14 @@ export default function TrainingToolkit({ coachId, athleteId, defaultSportKey = 
 
   return (
     <div>
-      <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Training Toolkit</h2>
+      <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-3">Training toolkit</h2>
       <Tabs defaultValue="goals">
         <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 bg-secondary/60">
-          <TabsTrigger value="goals" className="font-display tracking-wider uppercase text-xs">Goals</TabsTrigger>
-          <TabsTrigger value="plans" className="font-display tracking-wider uppercase text-xs">Plans</TabsTrigger>
-          <TabsTrigger value="homework" className="font-display tracking-wider uppercase text-xs">Homework</TabsTrigger>
-          <TabsTrigger value="assessments" className="font-display tracking-wider uppercase text-xs">Assessments</TabsTrigger>
-          <TabsTrigger value="checkins" className="font-display tracking-wider uppercase text-xs">Check-ins</TabsTrigger>
+          <TabsTrigger value="goals" className="text-xs font-semibold">Goals</TabsTrigger>
+          <TabsTrigger value="plans" className="text-xs font-semibold">Plans</TabsTrigger>
+          <TabsTrigger value="homework" className="text-xs font-semibold">Homework</TabsTrigger>
+          <TabsTrigger value="assessments" className="text-xs font-semibold">Assessments</TabsTrigger>
+          <TabsTrigger value="checkins" className="text-xs font-semibold">Check-ins</TabsTrigger>
         </TabsList>
         <TabsContent value="goals" className="mt-4">
           <GoalsPanel coachId={coachId} athleteId={athleteId} defaultSportKey={resolvedSportKey} />

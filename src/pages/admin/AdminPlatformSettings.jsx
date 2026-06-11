@@ -48,7 +48,7 @@ function FeeExplainer() {
           the platform&apos;s share.
         </p>
         <p className="text-xs">
-          <span className="font-display uppercase tracking-wider text-foreground">Pricing philosophy:</span>{' '}
+          <span className="font-semibold text-foreground">Pricing philosophy:</span>{' '}
           Coach package prices stay publicly visible to buyers. The platform fee is a
           backend cut shown to coaches and orgs as their net payout — never surfaced to buyers.
         </p>
@@ -103,7 +103,7 @@ function GlobalFeeCard({ isSuperAdmin }) {
     <section className="rounded-lg border border-border bg-card p-6">
       <div className="mb-1 flex items-center gap-2">
         <Percent className="h-4 w-4 text-accent" aria-hidden="true" />
-        <h2 className="font-display text-lg tracking-wider text-foreground">GLOBAL PLATFORM FEE</h2>
+        <h2 className="text-lg font-semibold text-foreground">Global platform fee</h2>
       </div>
       <p className="mb-5 text-sm text-muted-foreground">
         Applied to every booking that has no coach or organization override. Takes effect
@@ -115,7 +115,7 @@ function GlobalFeeCard({ isSuperAdmin }) {
       ) : (
         <div className="space-y-4">
           <div className="max-w-xs">
-            <Label htmlFor="global-fee-percent" className="font-display text-xs uppercase tracking-wider text-muted-foreground">
+            <Label htmlFor="global-fee-percent" className="text-xs font-semibold text-muted-foreground">
               Platform fee (%)
             </Label>
             <div className="mt-1 flex items-center gap-2">
@@ -146,7 +146,7 @@ function GlobalFeeCard({ isSuperAdmin }) {
             <Button
               onClick={save}
               disabled={saving || invalid || !dirty}
-              className="bg-accent text-accent-foreground font-display uppercase tracking-wider hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               {saving ? 'Saving…' : 'Save global fee'}
             </Button>
@@ -226,7 +226,7 @@ function OrgFeeRow({ org, globalBps, onSaved }) {
           size="sm"
           onClick={save}
           disabled={saving || invalid || !dirty}
-          className="bg-accent text-accent-foreground font-display uppercase tracking-wider hover:bg-accent/90"
+          className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
         >
           {saving ? 'Saving…' : 'Set'}
         </Button>
@@ -258,7 +258,7 @@ function OrgFeesCard({ globalBps }) {
       <div className="border-b border-border p-6">
         <div className="mb-1 flex items-center gap-2">
           <Building2 className="h-4 w-4 text-accent" aria-hidden="true" />
-          <h2 className="font-display text-lg tracking-wider text-foreground">PER-ORGANIZATION OVERRIDES</h2>
+          <h2 className="text-lg font-semibold text-foreground">Per-organization overrides</h2>
         </div>
         <p className="text-sm text-muted-foreground">
           The platform&apos;s cut for bookings routed through an organization. Leave blank to
@@ -311,8 +311,8 @@ export default function AdminPlatformSettings() {
     <div className="mb-8">
       <div className="mb-2 flex items-center gap-2">
         <SlidersHorizontal className="h-5 w-5 text-accent" aria-hidden="true" />
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">
-          PLATFORM SETTINGS
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">
+          Platform settings
         </h1>
       </div>
       <p className="text-sm text-muted-foreground">

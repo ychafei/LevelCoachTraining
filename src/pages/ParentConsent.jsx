@@ -45,8 +45,8 @@ export default function ParentConsent() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent/15">
             <ShieldCheck className="h-7 w-7 text-accent" aria-hidden="true" />
           </div>
-          <h1 className="mt-5 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            PARENT / GUARDIAN CONSENT
+          <h1 className="mt-5 text-3xl font-bold tracking-[-0.01em] text-foreground sm:text-4xl">
+            Parent / guardian consent
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
             Athletes under 18 participate on LevelCoach Training only with verified parent or
@@ -73,7 +73,7 @@ export default function ParentConsent() {
           {isAuthenticated && isGuardian ? (
             <Link
               to="/parent"
-              className="rounded-lg bg-accent px-6 py-3 text-center font-display text-sm font-bold uppercase tracking-wider text-accent-foreground transition-colors hover:bg-accent/90"
+              className="rounded-lg bg-accent px-6 py-3 text-center text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
             >
               Open your parent portal
             </Link>
@@ -81,13 +81,13 @@ export default function ParentConsent() {
             <>
               <Link
                 to="/create-account/parent"
-                className="rounded-lg bg-accent px-6 py-3 text-center font-display text-sm font-bold uppercase tracking-wider text-accent-foreground transition-colors hover:bg-accent/90"
+                className="rounded-lg bg-accent px-6 py-3 text-center text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
               >
                 Create a parent account
               </Link>
               <Link
                 to="/login?next=%2Fparent"
-                className="rounded-lg border border-border bg-card px-6 py-3 text-center font-display text-sm font-bold uppercase tracking-wider text-foreground transition-colors hover:bg-secondary"
+                className="rounded-lg border border-border bg-card px-6 py-3 text-center text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
               >
                 Sign in to an existing account
               </Link>

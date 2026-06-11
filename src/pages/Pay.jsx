@@ -33,7 +33,7 @@ export default function Pay() {
   return (
     <div className="py-24">
       <div className="max-w-2xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-4xl font-bold tracking-tight text-foreground mb-2">PAYMENT</h1>
+        <h1 className="text-4xl font-bold tracking-[-0.01em] text-foreground mb-2">Payment</h1>
         <p className="text-muted-foreground mb-8">
           LevelCoach payments are processed only through Stripe Checkout during booking.
         </p>
@@ -44,14 +44,14 @@ export default function Pay() {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-display text-lg font-bold tracking-wider text-foreground">Stripe Checkout</p>
+              <p className="text-lg font-bold tracking-[-0.01em] text-foreground">Stripe Checkout</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Buy training credits from the booking flow. Credits are issued only after Stripe sends a verified webhook.
               </p>
               <Link to="/coaches" className="inline-flex mt-4">
-                <Button className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
+                <Button className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
                   <CreditCard className="w-4 h-4 mr-2" />
-                  Book and Pay
+                  Book and pay
                 </Button>
               </Link>
             </div>
@@ -69,7 +69,7 @@ export default function Pay() {
               <div key={session.id} className="bg-card border border-border rounded-lg p-5">
                 <div className="flex justify-between items-start gap-4">
                   <div>
-                    <h3 className="font-display text-lg font-bold tracking-wider">
+                    <h3 className="text-lg font-bold tracking-[-0.01em]">
                       {format(new Date(`${session.date}T00:00:00`), 'EEEE, MMMM d')}
                     </h3>
                     <p className="text-sm text-muted-foreground">

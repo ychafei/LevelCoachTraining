@@ -19,6 +19,14 @@ const statusColor = {
   rejected: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
+// Display-only labels for stored status values.
+const statusLabel = {
+  pending: 'Pending',
+  reviewed: 'Reviewed',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
+
 // Approve/reject through the applications function — approval creates the
 // coach record, assigns the coach label, and emails the applicant server-side.
 function DecisionDialog({ app, decision, onClose, onDone }) {
@@ -51,8 +59,8 @@ function DecisionDialog({ app, decision, onClose, onDone }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">
-            {approving ? 'APPROVE APPLICATION' : 'REJECT APPLICATION'}
+          <DialogTitle>
+            {approving ? 'Approve application' : 'Reject application'}
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
@@ -64,7 +72,7 @@ function DecisionDialog({ app, decision, onClose, onDone }) {
             : 'The applicant receives a rejection email. This decision is final for this application.'}
         </p>
         <div>
-          <Label htmlFor="review-notes" className="font-display tracking-wider uppercase text-xs">Review notes (internal)</Label>
+          <Label htmlFor="review-notes" className="text-xs font-semibold">Review notes (internal)</Label>
           <Textarea
             id="review-notes"
             value={notes}
@@ -78,7 +86,7 @@ function DecisionDialog({ app, decision, onClose, onDone }) {
         <Button
           onClick={submit}
           disabled={saving}
-          className={`mt-2 w-full font-display tracking-wider uppercase ${
+          className={`mt-2 w-full font-semibold ${
             approving
               ? 'bg-accent text-accent-foreground hover:bg-accent/90'
               : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
@@ -117,7 +125,7 @@ export default function AdminApplications() {
       sortAccessor: '_name',
       cell: (row) => (
         <div>
-          <p className="font-display tracking-wider text-foreground text-sm">{row._name || '—'}</p>
+          <p className="text-sm font-semibold text-foreground">{row._name || '—'}</p>
           <p className="text-xs text-muted-foreground">{row.email}</p>
           {row.dob && <p className="text-xs text-muted-foreground">DOB: {format(new Date(row.dob), 'MMM d, yyyy')}</p>}
         </div>
@@ -144,10 +152,10 @@ export default function AdminApplications() {
             <p className="text-xs text-foreground/80 line-clamp-3">{row.coaching_background}</p>
           ) : <span className="text-xs text-muted-foreground">—</span>}
           {row.resume_url && (
-            <a href={row.resume_url} target="_blank" rel="noreferrer" className="text-xs text-accent underline mt-1 inline-block">View Resume</a>
+            <a href={row.resume_url} target="_blank" rel="noreferrer" className="text-xs text-accent underline mt-1 inline-block">View resume</a>
           )}
           <p className="text-[10px] text-muted-foreground mt-1">
-            BG Check: {row.background_check_consent ? 'consented' : 'missing'}
+            BG check: {row.background_check_consent ? 'consented' : 'missing'}
           </p>
         </div>
       ),
@@ -158,7 +166,7 @@ export default function AdminApplications() {
       sortable: true,
       sortAccessor: 'status',
       cell: (row) => (
-        <Badge className={`${statusColor[row.status] || statusColor.pending} border text-xs`}>{row.status}</Badge>
+        <Badge className={`${statusColor[row.status] || statusColor.pending} border text-xs`}>{statusLabel[row.status] || row.status}</Badge>
       ),
     },
     {
@@ -197,7 +205,7 @@ export default function AdminApplications() {
   return (
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">APPLICATIONS</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground mb-6">Applications</h1>
 
         {loading ? (
           <div className="space-y-3 py-6" aria-busy="true" aria-label="Loading applications">

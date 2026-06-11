@@ -18,17 +18,19 @@ export default function Privacy() {
           role="note"
         >
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          {/* Deliberately shouting: this is an operational tripwire, not UI voice —
+              verify-phase2 asserts the caps marker until counsel signs off. */}
           <p className="text-sm font-bold leading-6">
             OPERATIONAL PLACEHOLDER — ATTORNEY REVIEW REQUIRED. This document describes how the
             platform actually operates but has not yet been reviewed by legal counsel.
           </p>
         </div>
 
-        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">PRIVACY POLICY</h1>
+        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">Privacy Policy</h1>
         <div className="prose prose-invert prose-sm max-w-none space-y-6 text-muted-foreground">
           <p>Last updated: June 10, 2026</p>
 
-          <h2 className="text-foreground">Information We Collect</h2>
+          <h2 className="text-foreground">Information we collect</h2>
           <p>
             We collect information you provide when creating an account, booking sessions, signing
             legal agreements, or messaging through the platform. Depending on your role this can
@@ -37,7 +39,7 @@ export default function Privacy() {
             details are collected and processed by Stripe, not stored by LevelCoach Training.
           </p>
 
-          <h2 className="text-foreground">How We Use Information</h2>
+          <h2 className="text-foreground">How we use information</h2>
           <p>
             Your information is used to operate the marketplace: matching and displaying published
             coach profiles, booking and conflict-checking sessions, processing payments and payouts,
@@ -46,7 +48,7 @@ export default function Privacy() {
             email at any time.
           </p>
 
-          <h2 className="text-foreground">What Is Public and What Is Not</h2>
+          <h2 className="text-foreground">What is public and what is not</h2>
           <p>
             Coach and organization profiles are public once published — that is their purpose.
             Client and athlete profiles are private. Athlete records, sessions, credits, messages,
@@ -63,7 +65,7 @@ export default function Privacy() {
             not display minors' personal details publicly.
           </p>
 
-          <h2 className="text-foreground">Sharing & Processors</h2>
+          <h2 className="text-foreground">Sharing & processors</h2>
           <p>
             We do not sell your personal information. We share data only with service providers that
             run the platform: Stripe (payment processing and payouts), our cloud database and
@@ -71,21 +73,21 @@ export default function Privacy() {
             information necessary to deliver booked sessions.
           </p>
 
-          <h2 className="text-foreground">Messaging Review</h2>
+          <h2 className="text-foreground">Messaging review</h2>
           <p>
             Messages sent through the platform may be reviewed for safety and policy enforcement,
             including when a participant files a report. Guardian visibility for minors is described
             above.
           </p>
 
-          <h2 className="text-foreground">Data Retention & Security</h2>
+          <h2 className="text-foreground">Data retention & security</h2>
           <p>
             We retain records needed for legal, payment, and safety purposes — including signed
             agreements, payment and payout records, and audit logs. Access to data is restricted by
             per-account permissions, and administrative actions are logged.
           </p>
 
-          <h2 className="text-foreground">Your Data Rights</h2>
+          <h2 className="text-foreground">Your data rights</h2>
           <p>
             You may request access to, correction of, or deletion of your personal information,
             subject to records we must keep (such as payment and legal-agreement records). Contact{' '}
@@ -93,7 +95,7 @@ export default function Privacy() {
             and we will respond to verified requests.
           </p>
 
-          <h2 className="text-foreground">Email Preferences</h2>
+          <h2 className="text-foreground">Email preferences</h2>
           <p>
             You can unsubscribe from marketing email via the link in our emails or the{' '}
             <a href="/unsubscribe" className="text-accent underline">unsubscribe page</a>.

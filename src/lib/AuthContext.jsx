@@ -17,7 +17,7 @@ function AccountSuspendedScreen() {
         <div className="w-14 h-14 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto">
           <ShieldAlert className="w-6 h-6 text-destructive" aria-hidden="true" />
         </div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground uppercase">Account Suspended</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.01em] text-foreground">Account suspended</h1>
         <p className="text-muted-foreground text-sm">
           This account has been suspended and can no longer access LevelCoach Training.
           If you believe this is a mistake, contact us at{' '}
@@ -26,9 +26,9 @@ function AccountSuspendedScreen() {
         <Button
           variant="outline"
           onClick={() => { window.location.assign('/'); }}
-          className="font-display tracking-wider uppercase"
+          className="font-semibold"
         >
-          Go Home
+          Go home
         </Button>
       </div>
     </div>

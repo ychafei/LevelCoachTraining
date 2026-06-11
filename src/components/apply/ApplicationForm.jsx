@@ -171,7 +171,7 @@ export function ApplicationForm({
           <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-accent" aria-hidden="true" />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-4">APPLICATION SUBMITTED</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-4">Application submitted</h1>
           <p className="text-muted-foreground">{successMessage}</p>
           <WhatHappensNext />
         </div>
@@ -201,36 +201,36 @@ export function ApplicationForm({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="application-first-name" className="font-display tracking-wider uppercase text-xs">First Name *</Label>
+              <Label htmlFor="application-first-name" className="text-xs font-semibold">First name *</Label>
               <Input id="application-first-name" required value={form.first_name} onChange={(e) => update('first_name', e.target.value)} className="bg-card border-border mt-1" />
               {errors.first_name && <p className="mt-1 text-xs text-destructive">{errors.first_name}</p>}
             </div>
             <div>
-              <Label htmlFor="application-last-name" className="font-display tracking-wider uppercase text-xs">Last Name *</Label>
+              <Label htmlFor="application-last-name" className="text-xs font-semibold">Last name *</Label>
               <Input id="application-last-name" required value={form.last_name} onChange={(e) => update('last_name', e.target.value)} className="bg-card border-border mt-1" />
               {errors.last_name && <p className="mt-1 text-xs text-destructive">{errors.last_name}</p>}
             </div>
           </div>
 
           <div>
-            <Label htmlFor="application-email" className="font-display tracking-wider uppercase text-xs">Email *</Label>
+            <Label htmlFor="application-email" className="text-xs font-semibold">Email *</Label>
             <Input id="application-email" required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="bg-card border-border mt-1" />
             {errors.email && <p className="mt-1 text-xs text-destructive">{errors.email}</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="application-phone" className="font-display tracking-wider uppercase text-xs">Phone</Label>
+              <Label htmlFor="application-phone" className="text-xs font-semibold">Phone</Label>
               <Input id="application-phone" type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} className="bg-card border-border mt-1" />
             </div>
             <div>
-              <Label htmlFor="application-dob" className="font-display tracking-wider uppercase text-xs">Date of Birth</Label>
+              <Label htmlFor="application-dob" className="text-xs font-semibold">Date of birth</Label>
               <Input id="application-dob" type="date" value={form.dob} onChange={(e) => update('dob', e.target.value)} className="bg-card border-border mt-1" />
             </div>
           </div>
 
           <div>
-            <Label className="font-display tracking-wider uppercase text-xs">Sports You Coach *</Label>
+            <Label className="text-xs font-semibold">Sports you coach *</Label>
             <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Sports you coach">
               {SPORT_SELECT_OPTIONS.map((option) => {
                 const selected = sports.includes(option.label);
@@ -255,7 +255,7 @@ export function ApplicationForm({
           </div>
 
           <fieldset>
-            <legend className="font-display tracking-wider uppercase text-xs font-medium text-foreground">Service area *</legend>
+            <legend className="text-xs font-semibold text-foreground">Service area *</legend>
             <div className="mt-1">
               <USLocationFields
                 idPrefix="application-service-area"
@@ -269,7 +269,7 @@ export function ApplicationForm({
             </div>
             {errors.service_area && <p className="mt-1 text-xs text-destructive">{errors.service_area}</p>}
             <div className="mt-3">
-              <Label className="font-display tracking-wider uppercase text-xs">County</Label>
+              <Label className="text-xs font-semibold">County</Label>
               <div className="flex h-10 items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 text-sm mt-1">
                 <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <span className={form.county ? 'text-foreground' : 'text-muted-foreground'}>
@@ -282,7 +282,7 @@ export function ApplicationForm({
           </fieldset>
 
           <div>
-            <Label htmlFor="application-credentials" className="font-display tracking-wider uppercase text-xs">Credentials &amp; Certifications</Label>
+            <Label htmlFor="application-credentials" className="text-xs font-semibold">Credentials &amp; certifications</Label>
             <Textarea
               id="application-credentials"
               value={form.credentials}
@@ -294,7 +294,7 @@ export function ApplicationForm({
           </div>
 
           <div>
-            <Label htmlFor="application-background" className="font-display tracking-wider uppercase text-xs">{promptLabel || 'Coaching experience & background *'}</Label>
+            <Label htmlFor="application-background" className="text-xs font-semibold">{promptLabel || 'Coaching experience & background *'}</Label>
             <Textarea
               id="application-background"
               required
@@ -308,7 +308,7 @@ export function ApplicationForm({
           </div>
 
           <div>
-            <Label htmlFor="application-resume" className="font-display tracking-wider uppercase text-xs">Resume / Portfolio Link (optional)</Label>
+            <Label htmlFor="application-resume" className="text-xs font-semibold">Resume / portfolio link (optional)</Label>
             <Input
               id="application-resume"
               type="url"
@@ -345,9 +345,9 @@ export function ApplicationForm({
           <Button
             type="submit"
             disabled={submitting}
-            className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 py-6"
+            className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 py-6"
           >
-            {submitting ? 'Submitting...' : 'Submit Application'}
+            {submitting ? 'Submitting...' : 'Submit application'}
           </Button>
         </form>
       </div>

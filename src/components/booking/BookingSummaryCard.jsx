@@ -11,12 +11,12 @@ import { CalendarDays, ChevronDown, DollarSign, MapPin, Package, Timer, User, Za
 function Row({ label, value, icon: Icon, hint }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2">
-      <span className="flex items-center gap-1.5 text-[11px] font-display tracking-widest uppercase text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
         {Icon && <Icon className="w-3 h-3" />}
         {label}
       </span>
       <div className="text-right min-w-0">
-        <p className="text-sm font-display tracking-wider text-foreground truncate">{value || <span className="text-muted-foreground/60">—</span>}</p>
+        <p className="text-sm font-medium text-foreground truncate">{value || <span className="text-muted-foreground/60">—</span>}</p>
         {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
       </div>
     </div>
@@ -54,7 +54,7 @@ function Body({
         <>
           <Row label="Package" value={creditPackageName} icon={Package} />
           <Row
-            label="Sessions Left"
+            label="Sessions left"
             value={creditRemaining != null ? `${creditRemaining}` : ''}
             icon={Zap}
             hint={creditRemaining != null && creditRemaining > 0 ? 'using existing credits' : undefined}
@@ -66,13 +66,13 @@ function Body({
           <Row label="Package" value={pkgLabel} icon={Package} hint={pkg?.sessions > 1 ? `${pkg.sessions} sessions` : undefined} />
           <Row label="Duration" value={durationLabel} icon={Timer} hint={duration?.discount ? `−${Math.round(duration.discount * 100)}% multi-hour` : undefined} />
           <Row
-            label="Per Session"
+            label="Per session"
             value={sessionPrice != null ? `$${sessionPrice}` : ''}
             icon={DollarSign}
           />
           {pkg?.sessions > 1 && sessionPrice != null && (
             <Row
-              label="Package Total"
+              label="Package total"
               value={`$${packageTotal}`}
               icon={DollarSign}
               hint={`${pkg.sessions} × $${sessionPrice}`}
@@ -105,7 +105,7 @@ export default function BookingSummaryCard(props) {
       {/* Desktop sidebar */}
       <aside className="hidden lg:block">
         <div className="sticky top-24 bg-card border border-border rounded-lg p-5">
-          <p className="text-[10px] font-display tracking-[0.3em] uppercase text-muted-foreground mb-3">Your Selection</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">Your selection</p>
           <Body {...props} />
         </div>
       </aside>
@@ -119,8 +119,8 @@ export default function BookingSummaryCard(props) {
           aria-expanded={open}
         >
           <div className="min-w-0">
-            <p className="text-[10px] font-display tracking-[0.3em] uppercase text-muted-foreground">Your Selection</p>
-            <p className="font-display tracking-wider text-foreground text-sm truncate">{headerLine}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Your selection</p>
+            <p className="text-sm font-semibold text-foreground truncate">{headerLine}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>

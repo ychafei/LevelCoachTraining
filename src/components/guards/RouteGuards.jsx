@@ -27,23 +27,23 @@ function SignInRequired({ reason }) {
         <div className="w-14 h-14 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto">
           <LogIn className="w-6 h-6 text-accent" />
         </div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground uppercase">Sign In Required</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.01em] text-foreground">Sign in required</h1>
         <p className="text-muted-foreground text-sm">
           {reason || 'You need to be signed in to view this page.'}
         </p>
         <div className="flex gap-3 justify-center">
           <Button
             onClick={() => navigateToLogin(returnUrl)}
-            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
           >
-            Sign In
+            Sign in
           </Button>
           <Button
             variant="outline"
             onClick={() => { window.location.href = '/'; }}
-            className="font-display tracking-wider uppercase"
+            className="font-semibold"
           >
-            Go Home
+            Go home
           </Button>
         </div>
       </div>
@@ -51,28 +51,28 @@ function SignInRequired({ reason }) {
   );
 }
 
-function AccessDenied({ title = 'Access Denied', message, cta }) {
+function AccessDenied({ title = 'Access denied', message, cta }) {
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full text-center space-y-4">
         <div className="w-14 h-14 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto">
           <ShieldAlert className="w-6 h-6 text-destructive" />
         </div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground uppercase">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.01em] text-foreground">{title}</h1>
         <p className="text-muted-foreground text-sm">{message || "You don't have permission to view this page."}</p>
         <div className="flex gap-3 justify-center">
           <Button
             onClick={() => { window.location.href = '/dashboard'; }}
-            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
           >
             Dashboard
           </Button>
           <Button
             variant="outline"
             onClick={() => { window.location.href = '/'; }}
-            className="font-display tracking-wider uppercase"
+            className="font-semibold"
           >
-            Go Home
+            Go home
           </Button>
         </div>
         {cta}
@@ -109,7 +109,7 @@ export function RequireCoach() {
   if (!isCoach) {
     return (
       <AccessDenied
-        title="Coaches Only"
+        title="Coaches only"
         message="This page is reserved for coaches. If you believe this is a mistake, contact support."
       />
     );
@@ -123,12 +123,12 @@ export function RequireLinkedCoach() {
   if (isLoadingPublicSettings || isLoadingAuth) return <AuthSpinner />;
   if (!isAuthenticated || !user) return <SignInRequired />;
   if (!isCoach) {
-    return <AccessDenied title="Coaches Only" message="This page is for coaches." />;
+    return <AccessDenied title="Coaches only" message="This page is for coaches." />;
   }
   if (!user.coach_id) {
     return (
       <AccessDenied
-        title="Coach Profile Not Linked"
+        title="Coach profile not linked"
         message="Your account isn't linked to a coach profile yet. Ask an admin to set your coach_id in the Users panel."
       />
     );
@@ -144,7 +144,7 @@ export function RequireAdmin() {
   if (!isAdmin) {
     return (
       <AccessDenied
-        title="Admins Only"
+        title="Admins only"
         message="This area is restricted to administrators."
       />
     );
@@ -160,7 +160,7 @@ export function RequireSuperAdmin() {
   if (!isSuperAdmin) {
     return (
       <AccessDenied
-        title="Super Admin Only"
+        title="Super admin only"
         message="This action requires super-admin privileges."
       />
     );
@@ -190,7 +190,7 @@ export function RequireOrganizationAdmin() {
   if (!isOrganizationAdmin) {
     return (
       <AccessDenied
-        title="Organization Access Required"
+        title="Organization access required"
         message="This portal is for organization owners and admins."
       />
     );
@@ -205,7 +205,7 @@ export function RequireGuardianOfAthlete() {
   if (!isGuardian) {
     return (
       <AccessDenied
-        title="Parent Portal"
+        title="Parent portal"
         message="This portal is for parent and guardian accounts."
       />
     );
@@ -220,7 +220,7 @@ export function RequireAthlete() {
   if (!isAthlete) {
     return (
       <AccessDenied
-        title="Athlete Portal"
+        title="Athlete portal"
         message="This portal is for athlete accounts."
       />
     );
@@ -247,7 +247,7 @@ export function RequireSignedLegalPacket() {
           signerRole={signerRole}
           coachId={signerRole === 'coach' ? user?.coach_id || '' : ''}
           organizationId={signerRole === 'organization_admin' ? user?.primary_organization_id || '' : ''}
-          title="Legal Packet Required"
+          title="Legal packet required"
           description="Complete the current required legal documents before using this area."
         />
       </div>
@@ -273,16 +273,16 @@ export function RequireClient() {
   if (isCoach || isAdmin || isGuardian || isOrganizationAdmin) {
     return (
       <AccessDenied
-        title="Clients Only"
+        title="Clients only"
         message="This feature is for athlete client accounts."
         cta={
           <div className="mt-4">
             <Button
               variant="ghost"
               onClick={() => { window.location.href = '/dashboard'; }}
-              className="font-display tracking-wider uppercase text-xs"
+              className="font-semibold text-xs"
             >
-              Go to Dashboard
+              Go to dashboard
             </Button>
           </div>
         }

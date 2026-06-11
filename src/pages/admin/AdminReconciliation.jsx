@@ -21,6 +21,17 @@ const LEDGER_TONES = {
   dispute: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
+// Display-only labels for stored ledger entry types.
+const LEDGER_LABELS = {
+  charge: 'Charge',
+  platform_fee: 'Platform fee',
+  coach_payout: 'Coach payout',
+  org_payout: 'Org payout',
+  refund: 'Refund',
+  transfer_reversal: 'Transfer reversal',
+  dispute: 'Dispute',
+};
+
 function monthLabel(month) {
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) return month || '—';
   const [year, m] = month.split('-').map(Number);
@@ -82,10 +93,10 @@ export default function AdminReconciliation() {
             <Link to="/admin" className="mb-3 inline-flex items-center text-sm text-muted-foreground hover:text-accent">
               <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to admin
             </Link>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">RECONCILIATION</h1>
+            <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Reconciliation</h1>
             <p className="text-muted-foreground">Platform-wide money flow from the payment ledger and Stripe records.</p>
           </div>
-          <Button variant="outline" onClick={load} disabled={loading} className="font-display uppercase tracking-wider">
+          <Button variant="outline" onClick={load} disabled={loading} className="font-semibold">
             <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> Refresh
           </Button>
         </div>
@@ -115,7 +126,7 @@ export default function AdminReconciliation() {
                 <div key={label} className="rounded-lg border border-border bg-card p-4">
                   <div className="flex items-center gap-2">
                     <Icon className="h-4 w-4 text-accent" aria-hidden="true" />
-                    <p className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">{label}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
                   </div>
                   <p className="mt-2 font-display text-2xl font-bold text-foreground">{value}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
@@ -125,11 +136,11 @@ export default function AdminReconciliation() {
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-border bg-card p-4">
-                <p className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">Coach payouts</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Coach payouts</p>
                 <p className="mt-2 font-display text-xl font-bold text-foreground">{formatCents(totals.coach_payout_cents)}</p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
-                <p className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">Org payouts</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Org payouts</p>
                 <p className="mt-2 font-display text-xl font-bold text-foreground">{formatCents(totals.org_payout_cents)}</p>
               </div>
             </div>
@@ -148,7 +159,7 @@ export default function AdminReconciliation() {
               {/* Monthly */}
               <section className="rounded-lg border border-border bg-card">
                 <div className="border-b border-border p-4">
-                  <h2 className="font-display text-lg font-bold uppercase tracking-wider text-foreground">Monthly</h2>
+                  <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Monthly</h2>
                 </div>
                 {monthly.length === 0 ? (
                   <p className="p-4 text-sm text-muted-foreground">No monthly rows yet.</p>
@@ -156,7 +167,7 @@ export default function AdminReconciliation() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-border text-left text-[10px] font-display uppercase tracking-widest text-muted-foreground">
+                        <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
                           <th scope="col" className="p-3">Month</th>
                           <th scope="col" className="p-3 text-right">Gross</th>
                           <th scope="col" className="p-3 text-right">Fees</th>
@@ -185,7 +196,7 @@ export default function AdminReconciliation() {
               {/* Recent ledger */}
               <section className="rounded-lg border border-border bg-card">
                 <div className="border-b border-border p-4">
-                  <h2 className="flex items-center gap-2 font-display text-lg font-bold uppercase tracking-wider text-foreground">
+                  <h2 className="flex items-center gap-2 text-lg font-bold tracking-[-0.01em] text-foreground">
                     <BookOpenText className="h-4 w-4 text-accent" aria-hidden="true" /> Recent ledger
                   </h2>
                 </div>
@@ -197,7 +208,7 @@ export default function AdminReconciliation() {
                       <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
                         <div className="flex min-w-0 items-center gap-2">
                           <Badge className={`border text-[10px] ${LEDGER_TONES[entry.entry_type] || 'bg-secondary text-muted-foreground border-border'}`}>
-                            {entry.entry_type || 'entry'}
+                            {LEDGER_LABELS[entry.entry_type] || entry.entry_type || 'Entry'}
                           </Badge>
                           <span className="truncate text-xs text-muted-foreground">
                             {entry.owner_type === 'coach' && (coachNames[entry.owner_id] || 'coach')}
@@ -218,7 +229,7 @@ export default function AdminReconciliation() {
               {/* Per coach */}
               <section className="rounded-lg border border-border bg-card">
                 <div className="border-b border-border p-4">
-                  <h2 className="font-display text-lg font-bold uppercase tracking-wider text-foreground">By coach</h2>
+                  <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">By coach</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Total payout-leg cents attributed to each coach.</p>
                 </div>
                 {(report.coaches || []).length === 0 ? (
@@ -238,7 +249,7 @@ export default function AdminReconciliation() {
               {/* Per org */}
               <section className="rounded-lg border border-border bg-card">
                 <div className="border-b border-border p-4">
-                  <h2 className="font-display text-lg font-bold uppercase tracking-wider text-foreground">By organization</h2>
+                  <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">By organization</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Total payout-leg cents attributed to each organization.</p>
                 </div>
                 {(report.orgs || []).length === 0 ? (

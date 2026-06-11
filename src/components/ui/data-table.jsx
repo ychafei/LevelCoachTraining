@@ -108,7 +108,7 @@ export function DataTable({
                 return (
                   <TableHead
                     key={col.key}
-                    className={`font-display tracking-wider uppercase text-xs ${col.sortable ? 'cursor-pointer select-none hover:text-foreground' : ''} ${col.headClassName || ''}`}
+                    className={`text-xs font-bold uppercase tracking-[0.18em] ${col.sortable ? 'cursor-pointer select-none hover:text-foreground' : ''} ${col.headClassName || ''}`}
                     onClick={() => onSort(col.key, col.sortable)}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -153,7 +153,7 @@ export function DataTable({
               size="sm"
               disabled={safePage === 0}
               onClick={() => setPage(safePage - 1)}
-              className="font-display tracking-wider uppercase text-xs"
+              className="font-semibold text-xs"
             >
               Prev
             </Button>
@@ -165,7 +165,7 @@ export function DataTable({
               size="sm"
               disabled={safePage >= totalPages - 1}
               onClick={() => setPage(safePage + 1)}
-              className="font-display tracking-wider uppercase text-xs"
+              className="font-semibold text-xs"
             >
               Next
             </Button>

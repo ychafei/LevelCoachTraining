@@ -68,7 +68,7 @@ export default function Unsubscribe() {
         <div className="text-center max-w-md space-y-4">
           <CheckCircle2 className="w-12 h-12 text-accent mx-auto" />
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {resubscribed ? 'RESUBSCRIBED' : 'UNSUBSCRIBED'}
+            {resubscribed ? 'Resubscribed' : 'Unsubscribed'}
           </h1>
           <p className="text-muted-foreground text-sm">
             {resubscribed
@@ -80,9 +80,9 @@ export default function Unsubscribe() {
               variant="outline"
               disabled={submitting}
               onClick={handleResubscribe}
-              className="font-display tracking-wider uppercase"
+              className="font-semibold"
             >
-              {submitting ? 'Processing...' : 'Undo — Resubscribe'}
+              {submitting ? 'Processing...' : 'Undo — resubscribe'}
             </Button>
           )}
           {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
@@ -94,13 +94,13 @@ export default function Unsubscribe() {
   return (
     <div className="py-24">
       <div className="max-w-md mx-auto px-4">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-4">UNSUBSCRIBE</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-4">Unsubscribe</h1>
         <p className="text-muted-foreground mb-8">
           We're sorry to see you go. Confirm your email to unsubscribe from our mailing list.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="unsubscribe-email" className="font-display tracking-wider uppercase text-xs">Email</Label>
+            <Label htmlFor="unsubscribe-email" className="text-xs font-semibold">Email</Label>
             <Input
               id="unsubscribe-email"
               required
@@ -118,7 +118,7 @@ export default function Unsubscribe() {
             )}
           </div>
           <div>
-            <Label className="font-display tracking-wider uppercase text-xs">Reason (optional)</Label>
+            <Label className="text-xs font-semibold">Reason (optional)</Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger className="bg-card border-border mt-1" aria-label="Reason for unsubscribing">
                 <SelectValue placeholder="Select a reason" />
@@ -132,7 +132,7 @@ export default function Unsubscribe() {
             </Select>
           </div>
           {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
-          <Button type="submit" disabled={submitting} className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
+          <Button type="submit" disabled={submitting} className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
             {submitting ? 'Processing...' : 'Unsubscribe'}
           </Button>
         </form>

@@ -22,6 +22,22 @@ const statusConfig = {
   no_show: { icon: UserX, color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' },
 };
 
+// Display-only labels for stored status values.
+const statusLabel = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  no_show: 'No-show',
+};
+
+const paymentLabel = {
+  paid: 'Paid',
+  unpaid: 'Unpaid',
+  pending: 'Pending',
+  refunded: 'Refunded',
+};
+
 // Admin cancellation dialog — the booking function requires/records a reason
 // and applies the credit-restoration policy server-side.
 function CancelDialog({ session, onClose, onDone, actor }) {
@@ -58,7 +74,7 @@ function CancelDialog({ session, onClose, onDone, actor }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-display tracking-wider">CANCEL BOOKING</DialogTitle>
+          <DialogTitle>Cancel booking</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {session.client_name} · {formatInTz(session.date, session.start_time, session.timezone) || `${session.date} ${session.start_time}`}
@@ -67,7 +83,7 @@ function CancelDialog({ session, onClose, onDone, actor }) {
           The server applies the cancellation policy: cancellations 24+ hours out (or by the coach) restore the credit.
         </p>
         <div>
-          <Label htmlFor="cancel-reason" className="font-display tracking-wider uppercase text-xs">Reason</Label>
+          <Label htmlFor="cancel-reason" className="text-xs font-semibold">Reason</Label>
           <Textarea
             id="cancel-reason"
             value={reason}
@@ -80,7 +96,7 @@ function CancelDialog({ session, onClose, onDone, actor }) {
         <Button
           onClick={submit}
           disabled={saving}
-          className="mt-2 w-full bg-destructive text-destructive-foreground font-display tracking-wider uppercase hover:bg-destructive/90"
+          className="mt-2 w-full bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/90"
         >
           {saving ? 'Cancelling...' : 'Cancel booking'}
         </Button>
@@ -183,7 +199,7 @@ export default function AdminBookings() {
       sortAccessor: 'when_sort',
       cell: (row) => (
         <div>
-          <p className="font-display tracking-wider text-foreground text-sm">
+          <p className="text-sm font-semibold text-foreground">
             {formatInTz(row.date, row.start_time, row.timezone) || `${row.date} ${row.start_time}`}
           </p>
           <p className="text-xs text-muted-foreground">{row.duration_minutes} min</p>
@@ -220,7 +236,7 @@ export default function AdminBookings() {
         return (
           <Badge className={`${sc.color} border text-xs`}>
             <Icon className="w-3 h-3 mr-1" aria-hidden="true" />
-            {row.status}
+            {statusLabel[row.status] || row.status}
           </Badge>
         );
       },
@@ -232,7 +248,7 @@ export default function AdminBookings() {
       sortAccessor: 'payment_status',
       cell: (row) => (
         <Badge className={row.payment_status === 'paid' ? 'bg-green-500/10 text-green-400 border-green-500/20 border text-xs' : 'bg-muted text-muted-foreground border text-xs'}>
-          {row.payment_status || '—'}
+          {paymentLabel[row.payment_status] || row.payment_status || '—'}
         </Badge>
       ),
     },
@@ -293,7 +309,7 @@ export default function AdminBookings() {
     <div className="py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">ALL BOOKINGS</h1>
+          <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">All bookings</h1>
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="w-40 bg-secondary border-border" aria-label="Filter bookings by status">
               <SelectValue />

@@ -88,8 +88,8 @@ export default function AthletePortalHeader({
 
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-200">Athlete Portal</p>
-            <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">Athlete portal</p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.02em] text-white sm:text-4xl">
               Welcome, {greetingName(user)}
             </h1>
             <p className="mt-1.5 text-sm text-blue-100/80">

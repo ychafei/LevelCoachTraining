@@ -25,6 +25,14 @@ const STATUS_TONES = {
   removed: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
+// Display-only labels for membership statuses — stored values never change.
+const STATUS_LABELS = {
+  active: 'Active',
+  invited: 'Invited',
+  suspended: 'Suspended',
+  removed: 'Removed',
+};
+
 function roleLabel(role) {
   return MEMBER_ROLES.find((item) => item.value === role)?.label || role;
 }
@@ -183,7 +191,7 @@ export default function OrgMembersTab({ organizationId, isOrgAdmin, isOwner, cur
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={inviting} className="bg-accent text-accent-foreground hover:bg-accent/90 font-display tracking-wider uppercase">
+            <Button type="submit" disabled={inviting} className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold">
               <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" />
               {inviting ? 'Sending...' : 'Invite'}
             </Button>
@@ -210,7 +218,7 @@ export default function OrgMembersTab({ organizationId, isOrgAdmin, isOwner, cur
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-foreground">{memberName(member)}</p>
                     <Badge className={`border text-xs ${STATUS_TONES[member.status] || 'bg-secondary text-muted-foreground border-border'}`}>
-                      {member.status}
+                      {STATUS_LABELS[member.status] || member.status}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{roleLabel(member.role)}</p>

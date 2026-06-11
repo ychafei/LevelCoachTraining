@@ -3,6 +3,7 @@ import { organizationRepo, stripeConnectedAccountRepo } from '@/api/repo';
 import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { orgStatusLabel, orgStatusTone } from '@/features/org/orgStatus';
 import { AlertTriangle, CheckCircle2, Megaphone, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -11,13 +12,20 @@ const GATE_LABELS = {
   stripe_connect: 'Stripe Connect charges and payouts enabled',
 };
 
-const STATUS_TONES = {
-  draft: 'bg-secondary text-muted-foreground border-border',
-  pending_review: 'bg-accent/10 text-accent border-accent/20',
-  active: 'bg-green-500/10 text-green-500 border-green-500/20',
-  suspended: 'bg-destructive/10 text-destructive border-destructive/20',
-  archived: 'bg-secondary text-muted-foreground border-border',
-};
+// The org's Stripe Connect row (or null) — the same signal the server's
+// publish gate checks. Exported so the overview checklist reuses it instead
+// of duplicating the query shape.
+export async function fetchOrgConnectAccount(organizationId) {
+  if (!organizationId) return null;
+  const rows = await stripeConnectedAccountRepo
+    .filter({ owner_type: 'org', owner_id: organizationId })
+    .catch(() => []);
+  return rows[0] || null;
+}
+
+export function connectAccountReady(account) {
+  return !!account?.charges_enabled && !!account?.payouts_enabled;
+}
 
 export default function OrgComplianceTab({ organizationId, organization, isOwner, onPublished }) {
   const [legalStatus, setLegalStatus] = useState(null);
@@ -28,15 +36,12 @@ export default function OrgComplianceTab({ organizationId, organization, isOwner
 
   const loadConnect = useCallback(async () => {
     if (!organizationId) return;
-    const rows = await stripeConnectedAccountRepo
-      .filter({ owner_type: 'org', owner_id: organizationId })
-      .catch(() => []);
-    setConnectAccount(rows[0] || null);
+    setConnectAccount(await fetchOrgConnectAccount(organizationId));
   }, [organizationId]);
 
   useEffect(() => { void loadConnect(); }, [loadConnect]);
 
-  const stripeReady = !!connectAccount?.charges_enabled && !!connectAccount?.payouts_enabled;
+  const stripeReady = connectAccountReady(connectAccount);
   const isPublished = organization?.status === 'active';
 
   const publish = async () => {
@@ -79,8 +84,8 @@ export default function OrgComplianceTab({ organizationId, organization, isOwner
               The server re-verifies every requirement on publish.
             </p>
           </div>
-          <Badge className={`border text-xs ${STATUS_TONES[organization?.status] || STATUS_TONES.draft}`}>
-            {organization?.status || 'draft'}
+          <Badge className={`border text-xs ${orgStatusTone(organization?.status)}`}>
+            {orgStatusLabel(organization?.status)}
           </Badge>
         </div>
 
@@ -109,7 +114,7 @@ export default function OrgComplianceTab({ organizationId, organization, isOwner
             <Button
               onClick={publish}
               disabled={!isOwner || publishing}
-              className="bg-accent text-accent-foreground hover:bg-accent/90 font-display tracking-wider uppercase"
+              className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
             >
               <Megaphone className="mr-2 h-4 w-4" aria-hidden="true" />
               {publishing ? 'Publishing...' : 'Publish organization'}

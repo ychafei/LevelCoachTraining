@@ -30,7 +30,7 @@ export default function AdminUnsubscribes() {
       sortAccessor: 'email',
       cell: (row) => (
         <div>
-          <p className="font-display tracking-wider text-foreground text-sm">{row.email}</p>
+          <p className="text-sm font-semibold text-foreground">{row.email}</p>
           {row.reason && <p className="text-xs text-muted-foreground mt-0.5 italic">"{row.reason}"</p>}
         </div>
       ),
@@ -58,7 +58,7 @@ export default function AdminUnsubscribes() {
   return (
     <div className="py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-2">UNSUBSCRIBES</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground mb-2">Unsubscribes</h1>
         <p className="text-muted-foreground mb-2">{records.length} total · {records.filter(r => !r.resubscribed).length} active</p>
         <p className="text-xs text-muted-foreground mb-8">
           This list is read-only: unsubscribe records are server-managed through the emailDispatch function

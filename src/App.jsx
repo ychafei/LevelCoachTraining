@@ -98,10 +98,21 @@ const AdminSafety = React.lazy(() => import('@/pages/admin/AdminSafety'));
 const AdminReconciliation = React.lazy(() => import('@/pages/admin/AdminReconciliation'));
 const AdminPlatformSettings = React.lazy(() => import('@/pages/admin/AdminPlatformSettings'));
 
-// Single Suspense fallback — same spinner pattern used by the auth boot.
+// Single Suspense fallback — a calm page-shaped placeholder (header bar +
+// content blocks) instead of a bare spinner blanking the chrome, so route
+// transitions read as "loading", not "broken".
 const PageLoader = () => (
-  <div className="fixed inset-0 flex items-center justify-center bg-background">
-    <div className="w-8 h-8 border-4 border-secondary border-t-accent rounded-full animate-spin"></div>
+  <div className="fixed inset-0 bg-background" role="status" aria-label="Loading page">
+    <div className="mx-auto max-w-6xl px-4 pt-28 sm:px-6">
+      <div className="h-9 w-2/5 animate-pulse rounded-lg bg-secondary" />
+      <div className="mt-4 h-4 w-3/5 animate-pulse rounded bg-secondary/70" />
+      <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        <div className="h-28 animate-pulse rounded-lg bg-secondary/60" />
+        <div className="h-28 animate-pulse rounded-lg bg-secondary/60" />
+        <div className="h-28 animate-pulse rounded-lg bg-secondary/60" />
+      </div>
+      <span className="sr-only">Loading…</span>
+    </div>
   </div>
 );
 

@@ -202,7 +202,7 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
             { label: 'Transfers reversed', value: formatCents(totals.transfers_reversed_cents) },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-border bg-card p-4">
-              <p className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">{item.label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
               <p className="mt-2 font-display text-xl font-bold text-foreground">{item.value}</p>
             </div>
           ))}

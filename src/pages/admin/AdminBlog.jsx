@@ -15,6 +15,9 @@ import { format } from 'date-fns';
 
 const empty = { title: '', slug: '', excerpt: '', body: '', cover_image: '', tags: [], status: 'draft', author_name: '', seo_description: '', seo_keywords: '' };
 
+// Display-only labels for stored status values.
+const statusLabel = { draft: 'Draft', published: 'Published' };
+
 function slugify(str) {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
@@ -87,19 +90,19 @@ export default function AdminBlog() {
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">BLOG POSTS</h1>
+          <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Blog posts</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditing({ ...empty, tags: [] }); setTagInput(''); }} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-                <Plus className="w-4 h-4 mr-2" /> New Post
+              <Button onClick={() => { setEditing({ ...empty, tags: [] }); setTagInput(''); }} className="bg-accent text-accent-foreground font-semibold text-xs hover:bg-accent/90">
+                <Plus className="w-4 h-4 mr-2" /> New post
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl bg-card border-border max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle className="font-display tracking-wider">{editing?.id ? 'EDIT POST' : 'NEW POST'}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editing?.id ? 'Edit post' : 'New post'}</DialogTitle></DialogHeader>
               {editing && (
                 <div className="space-y-4 mt-4">
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Title</Label>
+                    <Label className="text-xs font-semibold">Title</Label>
                     <Input
                       value={editing.title}
                       onChange={e => setEditing({ ...editing, title: e.target.value, slug: editing.slug || slugify(e.target.value) })}
@@ -107,23 +110,23 @@ export default function AdminBlog() {
                     />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Slug</Label>
+                    <Label className="text-xs font-semibold">Slug</Label>
                     <Input value={editing.slug} onChange={e => setEditing({ ...editing, slug: slugify(e.target.value) })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Author</Label>
+                    <Label className="text-xs font-semibold">Author</Label>
                     <Input value={editing.author_name || ''} onChange={e => setEditing({ ...editing, author_name: e.target.value })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Cover Image URL</Label>
+                    <Label className="text-xs font-semibold">Cover image URL</Label>
                     <Input value={editing.cover_image || ''} onChange={e => setEditing({ ...editing, cover_image: e.target.value })} className="bg-secondary border-border mt-1" />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Excerpt</Label>
+                    <Label className="text-xs font-semibold">Excerpt</Label>
                     <Textarea value={editing.excerpt || ''} onChange={e => setEditing({ ...editing, excerpt: e.target.value })} className="bg-secondary border-border mt-1" rows={2} />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs mb-1 block">Body</Label>
+                    <Label className="text-xs font-semibold mb-1 block">Body</Label>
                     <ReactQuill
                       theme="snow"
                       value={editing.body || ''}
@@ -132,7 +135,7 @@ export default function AdminBlog() {
                     />
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">Tags</Label>
+                    <Label className="text-xs font-semibold">Tags</Label>
                     <div className="flex gap-2 mt-1">
                       <Input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Add tag" className="bg-secondary border-border" />
                       <Button type="button" variant="outline" size="sm" onClick={addTag}>Add</Button>
@@ -144,7 +147,7 @@ export default function AdminBlog() {
                     </div>
                   </div>
                   <div>
-                    <Label className="font-display tracking-wider uppercase text-xs">SEO Description</Label>
+                    <Label className="text-xs font-semibold">SEO description</Label>
                     <Textarea value={editing.seo_description || ''} onChange={e => setEditing({ ...editing, seo_description: e.target.value })} className="bg-secondary border-border mt-1" rows={2} />
                   </div>
                   <div className="flex items-center gap-3">
@@ -157,7 +160,7 @@ export default function AdminBlog() {
                     />
                     <Label className="text-sm">Published {!isSuperAdmin && <span className="text-xs text-muted-foreground">(super admin only)</span>}</Label>
                   </div>
-                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">Save Post</Button>
+                  <Button onClick={save} className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90">Save post</Button>
                 </div>
               )}
             </DialogContent>
@@ -169,8 +172,8 @@ export default function AdminBlog() {
             <div key={post.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-display tracking-wider text-foreground">{post.title}</p>
-                  <Badge className={post.status === 'published' ? 'bg-green-500/10 text-green-400 border-green-500/20 border text-xs' : 'bg-muted text-muted-foreground text-xs'}>{post.status}</Badge>
+                  <p className="font-semibold text-foreground">{post.title}</p>
+                  <Badge className={post.status === 'published' ? 'bg-green-500/10 text-green-400 border-green-500/20 border text-xs' : 'bg-muted text-muted-foreground text-xs'}>{statusLabel[post.status] || post.status}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">/blog/{post.slug} · {post.author_name || 'No author'} · {format(new Date(post.created_date), 'MMM d, yyyy')}</p>
               </div>

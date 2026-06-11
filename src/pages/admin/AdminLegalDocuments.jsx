@@ -15,6 +15,24 @@ import { toast } from 'sonner';
 const ROLE_FILTERS = ['all', 'athlete', 'guardian', 'coach', 'organization_admin', 'admin'];
 const STATUS_FILTERS = ['all', 'signed', 'superseded', 'voided', 'missing_pdf'];
 
+// Display-only labels for stored enum values.
+const ROLE_LABELS = {
+  all: 'All',
+  athlete: 'Athlete',
+  guardian: 'Guardian',
+  coach: 'Coach',
+  organization_admin: 'Organization admin',
+  admin: 'Admin',
+};
+
+const STATUS_LABELS = {
+  all: 'All',
+  signed: 'Signed',
+  superseded: 'Superseded',
+  voided: 'Voided',
+  missing_pdf: 'Missing PDF',
+};
+
 export default function AdminLegalDocuments() {
   const { user, isAdmin } = useCurrentUser();
   const [templates, setTemplates] = useState([]);
@@ -116,8 +134,8 @@ export default function AdminLegalDocuments() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Legal Vault</p>
-            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">Legal Documents</h1>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Legal vault</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.01em] text-foreground">Legal documents</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Audit required templates, signed agreements, generated PDFs, signer metadata, and admin notes.
             </p>
@@ -135,24 +153,24 @@ export default function AdminLegalDocuments() {
         <section className="mt-7 rounded-lg border border-border bg-card p-5">
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-52 flex-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Search</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">Search</Label>
               <Input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-1 bg-secondary border-border" placeholder="Signer, template, profile, hash..." />
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Signer role</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">Signer role</Label>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="mt-1 w-48 bg-secondary border-border"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ROLE_FILTERS.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                  {ROLE_FILTERS.map((role) => <SelectItem key={role} value={role}>{ROLE_LABELS[role] || role}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="mt-1 w-48 bg-secondary border-border"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS_FILTERS.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                  {STATUS_FILTERS.map((status) => <SelectItem key={status} value={status}>{STATUS_LABELS[status] || status}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -188,7 +206,7 @@ export default function AdminLegalDocuments() {
 
           <section className="rounded-lg border border-border bg-card">
             <div className="border-b border-border p-4">
-              <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Signed Agreements</h2>
+              <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Signed agreements</h2>
             </div>
             <div className="divide-y divide-border">
               {loading && <p className="p-4 text-sm text-muted-foreground">Loading legal records...</p>}
@@ -199,9 +217,9 @@ export default function AdminLegalDocuments() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-foreground">{agreement.typed_legal_name || agreement.signer_email || agreement.signer_profile_id}</p>
-                        <Badge variant="outline">{agreement.signer_role}</Badge>
+                        <Badge variant="outline">{ROLE_LABELS[agreement.signer_role] || agreement.signer_role}</Badge>
                         <Badge className={agreement.status === 'signed' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-secondary text-muted-foreground'}>
-                          {agreement.status || 'signed'}
+                          {STATUS_LABELS[agreement.status] || agreement.status || 'Signed'}
                         </Badge>
                         {!agreement.pdf_file_id && <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Missing PDF</Badge>}
                       </div>
@@ -242,14 +260,14 @@ export default function AdminLegalDocuments() {
       <Dialog open={!!noteDialog} onOpenChange={(open) => !open && setNoteDialog(null)}>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="font-display tracking-tight">Add Legal Note</DialogTitle>
+            <DialogTitle className="font-display tracking-tight">Add legal note</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {noteDialog?.template_key} · {noteDialog?.typed_legal_name || noteDialog?.signer_email}
           </p>
           <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={5} className="bg-secondary border-border" placeholder="Internal admin note..." />
           <Button disabled={savingNote || !note.trim()} onClick={saveNote} className="bg-accent text-accent-foreground hover:bg-accent/90">
-            {savingNote ? 'Saving...' : 'Save Note'}
+            {savingNote ? 'Saving...' : 'Save note'}
           </Button>
         </DialogContent>
       </Dialog>
@@ -262,7 +280,7 @@ function StatTile({ icon: Icon, label, value, hint }) {
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-accent" />
-        <p className="text-[10px] font-display font-bold uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       </div>
       <p className="mt-2 font-display text-2xl font-bold text-foreground">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>

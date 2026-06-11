@@ -77,7 +77,7 @@ export function SectionCard({ title, icon: Icon, description, action, children, 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {Icon && <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />}
-              <h2 className="font-display text-lg font-bold tracking-tight text-foreground">{title}</h2>
+              <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
             </div>
             {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
           </div>
@@ -230,7 +230,7 @@ export function StatTile({
         {loading ? (
           <div className="h-8 w-16 animate-pulse rounded bg-secondary/60" aria-hidden="true" />
         ) : (
-          <p className="font-display text-3xl font-extrabold tracking-tight text-foreground">{value}</p>
+          <p className="text-3xl font-extrabold tracking-tight tabular-nums text-foreground">{value}</p>
         )}
         {sub && !loading && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
         {href && action && !loading && (

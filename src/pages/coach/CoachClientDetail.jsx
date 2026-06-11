@@ -134,7 +134,7 @@ export default function CoachClientDetail() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-display tracking-wider text-foreground uppercase text-sm">Coach Profile Not Linked</p>
+          <p className="text-sm font-semibold text-foreground">Coach profile not linked</p>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
               ? 'Your admin account is not linked to a coach record.'
@@ -149,11 +149,11 @@ export default function CoachClientDetail() {
     return (
       <div className="space-y-4">
         <Link to="/coach/clients" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Clients
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to clients
         </Link>
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
-          <h2 className="font-display text-lg tracking-wider text-foreground uppercase">No record for {clientEmail}</h2>
+          <h2 className="text-lg font-semibold text-foreground">No record for {clientEmail}</h2>
           <p className="text-sm text-muted-foreground mt-1">You haven't coached this client yet — their page unlocks after their first booking.</p>
         </div>
       </div>
@@ -163,7 +163,7 @@ export default function CoachClientDetail() {
   return (
     <div className="space-y-6">
       <Link to="/coach/clients" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Clients
+        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to clients
       </Link>
 
       {/* Header card */}
@@ -174,7 +174,7 @@ export default function CoachClientDetail() {
               <UserIcon className="w-6 h-6 text-muted-foreground" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-display text-2xl font-bold tracking-wider text-foreground truncate">{clientName}</h1>
+              <h1 className="text-2xl font-bold tracking-[-0.01em] text-foreground truncate">{clientName}</h1>
               <div className="flex items-center gap-3 mt-1 flex-wrap text-sm text-muted-foreground">
                 {age != null && <span>Age {age}</span>}
                 <span className="truncate">{clientEmail}</span>
@@ -185,10 +185,10 @@ export default function CoachClientDetail() {
           <div className="flex items-center gap-2">
             <Button
               onClick={openMessaging}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+              className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
             >
               <MessageSquare className="w-3 h-3 mr-1" aria-hidden="true" />
-              {existingConvo ? 'Open Chat' : 'Start Chat'}
+              {existingConvo ? 'Open chat' : 'Start chat'}
             </Button>
           </div>
         </div>
@@ -196,12 +196,12 @@ export default function CoachClientDetail() {
         {/* Summary row */}
         <div className="mt-5 grid grid-cols-3 gap-2">
           {[
-            { label: 'Total Sessions', value: sessions.length },
+            { label: 'Total sessions', value: sessions.length },
             { label: 'Completed', value: completed.length },
             { label: 'Upcoming', value: upcoming.length },
           ].map(s => (
             <div key={s.label} className="bg-secondary/40 border border-border rounded p-3 text-center">
-              <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{s.label}</p>
               <p className="font-display text-lg font-bold text-foreground">{s.value}</p>
             </div>
           ))}
@@ -213,7 +213,7 @@ export default function CoachClientDetail() {
 
       {/* Session history */}
       <div>
-        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Session History</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-3">Session history</h2>
         <div className="space-y-3">
           {sessions.map(s => {
             const sc = statusConfig[s.status] || statusConfig.pending;
@@ -223,13 +223,13 @@ export default function CoachClientDetail() {
               <div key={s.id} className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
-                    <p className="font-display tracking-wider text-foreground">{formatLongDateInTz(s.date, tz)}</p>
+                    <p className="font-semibold text-foreground">{formatLongDateInTz(s.date, tz)}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatTimeInTz(s.date, s.start_time, tz)} · {s.duration_minutes} min
                     </p>
                     {s.session_goals && (
                       <p className="text-sm text-muted-foreground mt-2">
-                        <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Goals: </span>
+                        <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Goals: </span>
                         {s.session_goals}
                       </p>
                     )}
@@ -238,11 +238,11 @@ export default function CoachClientDetail() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <Badge className={`${sc.color} border text-[10px] font-display tracking-widest uppercase`}>
+                    <Badge className={`${sc.color} border text-xs font-semibold`}>
                       <Icon className="w-3 h-3 mr-1" aria-hidden="true" /> {sc.label}
                     </Badge>
                     {s.payment_status === 'paid' && (
-                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20 border text-[10px] font-display tracking-widest uppercase">
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20 border text-xs font-semibold">
                         <Check className="w-3 h-3 mr-1" aria-hidden="true" /> Paid
                       </Badge>
                     )}
@@ -254,8 +254,8 @@ export default function CoachClientDetail() {
                     editing is disabled rather than faked. */}
                 {s.notes ? (
                   <div className="mt-3 bg-secondary/50 border border-border rounded p-3">
-                    <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex items-center gap-1 mb-1">
-                      <StickyNote className="w-3 h-3" aria-hidden="true" /> Booking Notes
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-1 mb-1">
+                      <StickyNote className="w-3 h-3" aria-hidden="true" /> Booking notes
                     </p>
                     <p className="text-sm text-foreground whitespace-pre-wrap">{s.notes}</p>
                   </div>
@@ -273,7 +273,7 @@ export default function CoachClientDetail() {
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Message {clientName}</DialogTitle>
+            <DialogTitle className="text-xl font-bold tracking-[-0.01em]">Message {clientName}</DialogTitle>
             <DialogDescription>
               This starts a conversation in your inbox. The client (and their guardian, for minors) can read and reply.
             </DialogDescription>
@@ -290,15 +290,15 @@ export default function CoachClientDetail() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMessageOpen(false)} className="font-display tracking-wider uppercase">
+            <Button variant="outline" onClick={() => setMessageOpen(false)} className="font-semibold">
               Cancel
             </Button>
             <Button
               onClick={sendFirstMessage}
               disabled={!firstMessage.trim() || sendingMessage}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
-              {sendingMessage ? 'Sending…' : 'Send Message'}
+              {sendingMessage ? 'Sending…' : 'Send message'}
             </Button>
           </DialogFooter>
         </DialogContent>

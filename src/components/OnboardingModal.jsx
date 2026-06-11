@@ -82,7 +82,7 @@ export default function OnboardingModal({ user, onComplete }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 space-y-5">
         <div>
-          <h2 className="font-display text-2xl uppercase tracking-wider text-accent">Welcome to LevelCoach Training</h2>
+          <h2 className="text-2xl font-bold tracking-[-0.01em] text-foreground">Welcome to LevelCoach Training</h2>
           <p className="text-muted-foreground text-sm mt-1">Step {step} of {totalSteps} — Let's set up your profile</p>
           <div className="flex gap-1 mt-2">
             {Array.from({ length: totalSteps }).map((_, i) => (
@@ -96,7 +96,7 @@ export default function OnboardingModal({ user, onComplete }) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="onboarding-first-name">First Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="onboarding-first-name">First name <span className="text-destructive">*</span></Label>
                 <Input
                   id="onboarding-first-name"
                   value={form.first_name}
@@ -109,7 +109,7 @@ export default function OnboardingModal({ user, onComplete }) {
                 )}
               </div>
               <div>
-                <Label htmlFor="onboarding-last-name">Last Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="onboarding-last-name">Last name <span className="text-destructive">*</span></Label>
                 <Input
                   id="onboarding-last-name"
                   value={form.last_name}
@@ -123,7 +123,7 @@ export default function OnboardingModal({ user, onComplete }) {
               </div>
             </div>
             <div>
-              <Label htmlFor="onboarding-phone">Phone Number <span className="text-destructive">*</span></Label>
+              <Label htmlFor="onboarding-phone">Phone number <span className="text-destructive">*</span></Label>
               <Input
                 id="onboarding-phone"
                 value={form.phone}
@@ -136,13 +136,13 @@ export default function OnboardingModal({ user, onComplete }) {
               )}
             </div>
             <div>
-              <Label htmlFor="onboarding-dob">Date of Birth <span className="text-destructive">*</span></Label>
+              <Label htmlFor="onboarding-dob">Date of birth <span className="text-destructive">*</span></Label>
               <Input id="onboarding-dob" type="date" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} className="mt-1" />
             </div>
             <Button
               disabled={!canProceedStep1}
               onClick={() => setStep(2)}
-              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
             >
               Continue
             </Button>
@@ -158,7 +158,7 @@ export default function OnboardingModal({ user, onComplete }) {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="onboarding-parent-first-name">Parent First Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="onboarding-parent-first-name">Parent first name <span className="text-destructive">*</span></Label>
                 <Input
                   id="onboarding-parent-first-name"
                   value={form.parent_first_name}
@@ -171,7 +171,7 @@ export default function OnboardingModal({ user, onComplete }) {
                 )}
               </div>
               <div>
-                <Label htmlFor="onboarding-parent-last-name">Parent Last Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="onboarding-parent-last-name">Parent last name <span className="text-destructive">*</span></Label>
                 <Input
                   id="onboarding-parent-last-name"
                   value={form.parent_last_name}
@@ -185,7 +185,7 @@ export default function OnboardingModal({ user, onComplete }) {
               </div>
             </div>
             <div>
-              <Label htmlFor="onboarding-parent-phone">Parent Phone <span className="text-destructive">*</span></Label>
+              <Label htmlFor="onboarding-parent-phone">Parent phone <span className="text-destructive">*</span></Label>
               <Input
                 id="onboarding-parent-phone"
                 value={form.parent_phone}
@@ -212,7 +212,7 @@ export default function OnboardingModal({ user, onComplete }) {
               <Button
                 disabled={!canProceedStep2}
                 onClick={() => setStep(3)}
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
               >
                 Continue
               </Button>
@@ -247,9 +247,9 @@ export default function OnboardingModal({ user, onComplete }) {
               <Button
                 disabled={!canFinish || saving}
                 onClick={handleSave}
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-display uppercase tracking-wider"
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
               >
-                {saving ? 'Saving...' : 'Get Started'}
+                {saving ? 'Saving...' : 'Get started'}
               </Button>
             </div>
           </div>

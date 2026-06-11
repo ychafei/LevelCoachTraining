@@ -72,8 +72,8 @@ export default function WeeklyAvailabilityEditor({
                 onCheckedChange={(v) => updateDay(day, 'enabled', v)}
                 aria-label={`${day} availability`}
               />
-              <span className={`font-display tracking-wider text-sm w-24 ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {day.toUpperCase()}
+              <span className={`text-sm font-semibold w-24 ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {day}
               </span>
               {d.enabled ? (
                 <div className="flex items-center gap-2 ml-auto">
@@ -110,9 +110,9 @@ export default function WeeklyAvailabilityEditor({
           <Button
             onClick={handleSave}
             disabled={saving || hasAvailabilityErrors(availability)}
-            className="h-10 font-display tracking-wider uppercase"
+            className="h-10 font-semibold"
           >
-            {saving ? 'Saving...' : 'Save Weekly Availability'}
+            {saving ? 'Saving...' : 'Save weekly availability'}
           </Button>
         </div>
       )}

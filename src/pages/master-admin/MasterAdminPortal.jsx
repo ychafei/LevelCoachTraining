@@ -13,6 +13,14 @@ const DEFAULT_PLATFORM_FEE_BPS = 1500; // mirrors server env PLATFORM_FEE_BPS de
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
+// Display-only labels for stored role values.
+const ROLE_LABELS = {
+  user: 'User',
+  coach: 'Coach',
+  admin: 'Admin',
+  super_admin: 'Super admin',
+};
+
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
   if (typeof value === 'object') return value;
@@ -288,7 +296,7 @@ export default function MasterAdminPortal() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Master Admin</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Master admin</p>
             <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">Platform control</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Locked platform owner tools for admin delegation, legal template control, Stripe reconciliation, and audit oversight.
@@ -299,7 +307,7 @@ export default function MasterAdminPortal() {
 
         {!masterAdminLocked && (
           <div className="mt-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-5">
-            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Bootstrap Required</h2>
+            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Bootstrap required</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Run the server-side bootstrap after this account email is verified. The server only accepts the
               bootstrap from the authorized owner account configured in its environment.
@@ -354,7 +362,7 @@ export default function MasterAdminPortal() {
         <section className="mt-7 rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Delegated Admins</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Delegated admins</p>
               <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground">Grant or revoke platform access</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Only this locked master-admin route can grant platform admin access. Regular admins can perform assigned operations but cannot create admins or alter the master account.
@@ -390,7 +398,7 @@ export default function MasterAdminPortal() {
                         <span className="block font-semibold text-foreground">{displayName(profile)}</span>
                         <span className="text-xs text-muted-foreground">{profile.email || 'No email'}</span>
                       </span>
-                      <span className="text-xs uppercase text-muted-foreground">{profile.role || 'user'}</span>
+                      <span className="text-xs font-semibold text-muted-foreground">{ROLE_LABELS[profile.role] || profile.role || 'User'}</span>
                     </button>
                   )) : (
                     <p className="px-3 py-2 text-sm text-muted-foreground">No matching users.</p>
@@ -438,12 +446,12 @@ export default function MasterAdminPortal() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{profile.email || 'No email'} · current role: {profile.role || 'user'}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{profile.email || 'No email'} · current role: {ROLE_LABELS[profile.role] || profile.role || 'User'}</p>
                   </div>
                   {masterAdminLocked ? (
                     <RoleEditor profile={profile} onSaved={loadAdminData} />
                   ) : (
-                    <span className="text-xs uppercase text-muted-foreground">{profile.role || 'user'}</span>
+                    <span className="text-xs font-semibold text-muted-foreground">{ROLE_LABELS[profile.role] || profile.role || 'User'}</span>
                   )}
                 </div>
               );

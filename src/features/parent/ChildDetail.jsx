@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { callFn } from '@/lib/rpc';
+import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { useMySessions, useMyTraining } from '@/features/athlete/useAthletePortalData';
 import AthleteTraining from '@/features/athlete/AthleteTraining';
 import SessionsPanel from '@/features/athlete/SessionsPanel';
@@ -109,7 +110,7 @@ function EmergencyCard({ child, onEdit }) {
     >
       <div className="space-y-3">
         <div className="rounded-md border border-border bg-background/40 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Emergency contact</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Emergency contact</p>
           {contact && (contact.name || contact.phone) ? (
             <p className="mt-1 text-sm text-foreground">
               {contact.name || 'Unnamed contact'}
@@ -121,7 +122,7 @@ function EmergencyCard({ child, onEdit }) {
           )}
         </div>
         <div className="rounded-md border border-border bg-background/40 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
             <Lock className="h-3 w-3" aria-hidden="true" /> Health notes
           </p>
           {child.health_notes ? (
@@ -152,7 +153,7 @@ export default function ChildDetail({ user, child, link, onBack, onFamilyChanged
           <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> All athletes
         </Button>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">{fullName}</h2>
+          <h2 className="text-2xl font-bold tracking-[-0.01em] text-foreground">{fullName}</h2>
           {age !== null && <span className="text-sm text-muted-foreground">{age} years old</span>}
           {child.skill_level && (
             <Badge variant="outline" className="text-xs text-muted-foreground">{child.skill_level}</Badge>
@@ -181,7 +182,7 @@ export default function ChildDetail({ user, child, link, onBack, onFamilyChanged
       <SectionCard
         title={`${child.first_name || 'Athlete'}'s sessions`}
         icon={CalendarDays}
-        description="Cancel at least 24 hours ahead to restore the session credit automatically; later cancellations forfeit it unless the coach cancels."
+        description={CANCEL_POLICY_COPY}
       >
         <SessionsPanel
           sessions={childSessions}

@@ -30,8 +30,8 @@ import { toast } from 'sonner';
 
 const SECTIONS = [
   { id: 'availability', label: 'Availability', sub: 'Weekly booking windows', icon: Clock },
-  { id: 'blocks', label: 'Blackout Dates', sub: 'Time off and travel', icon: Ban },
-  { id: 'booking', label: 'Booking Rules', sub: 'Notice, buffers, advance limit', icon: CalendarDays },
+  { id: 'blocks', label: 'Blackout dates', sub: 'Time off and travel', icon: Ban },
+  { id: 'booking', label: 'Booking rules', sub: 'Notice, buffers, advance limit', icon: CalendarDays },
   { id: 'notifications', label: 'Notifications', sub: 'Email alert preferences', icon: Bell },
 ];
 
@@ -92,7 +92,7 @@ function SectionCard({ title, icon: Icon, blurb, children }) {
     <section className="bg-card border border-border rounded-lg p-5" aria-label={title}>
       <div className="flex items-center gap-2 mb-1">
         {Icon && <Icon className="w-4 h-4 text-accent" aria-hidden="true" />}
-        <h2 className="font-display text-sm font-bold tracking-widest uppercase text-foreground">{title}</h2>
+        <h2 className="text-sm font-bold tracking-[-0.01em] text-foreground">{title}</h2>
       </div>
       {blurb && <p className="text-xs text-muted-foreground mb-4">{blurb}</p>}
       {children}
@@ -207,10 +207,10 @@ function BlocksSection({ coach }) {
       )}
 
       <div className="border border-border rounded-lg p-4 space-y-3">
-        <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Add blackout</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Add blackout</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <Label htmlFor="block-label" className="font-display tracking-wider uppercase text-xs">Label</Label>
+            <Label htmlFor="block-label" className="text-xs font-semibold">Label</Label>
             <Input
               id="block-label"
               value={form.label}
@@ -220,7 +220,7 @@ function BlocksSection({ coach }) {
             />
           </div>
           <div>
-            <Label htmlFor="block-start" className="font-display tracking-wider uppercase text-xs">Start date</Label>
+            <Label htmlFor="block-start" className="text-xs font-semibold">Start date</Label>
             <Input
               id="block-start"
               type="date"
@@ -230,7 +230,7 @@ function BlocksSection({ coach }) {
             />
           </div>
           <div>
-            <Label htmlFor="block-end" className="font-display tracking-wider uppercase text-xs">End date</Label>
+            <Label htmlFor="block-end" className="text-xs font-semibold">End date</Label>
             <Input
               id="block-end"
               type="date"
@@ -274,9 +274,9 @@ function BlocksSection({ coach }) {
             <Button
               onClick={addBlock}
               disabled={saving}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+              className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
             >
-              <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Add Blackout'}
+              <Plus className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Add blackout'}
             </Button>
           </div>
         </div>
@@ -319,7 +319,7 @@ function BookingRulesSection({ coach, onSaved }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <Label htmlFor="rule-notice" className="font-display tracking-wider uppercase text-xs">Minimum notice</Label>
+          <Label htmlFor="rule-notice" className="text-xs font-semibold">Minimum notice</Label>
           <Select value={rules.min_notice_hours} onValueChange={(v) => setRules((r) => ({ ...r, min_notice_hours: v }))}>
             <SelectTrigger id="rule-notice" className="bg-secondary border-border mt-1">
               <SelectValue />
@@ -333,7 +333,7 @@ function BookingRulesSection({ coach, onSaved }) {
           <p className="text-[11px] text-muted-foreground mt-1">How far in advance clients must book.</p>
         </div>
         <div>
-          <Label htmlFor="rule-buffer" className="font-display tracking-wider uppercase text-xs">Buffer between sessions</Label>
+          <Label htmlFor="rule-buffer" className="text-xs font-semibold">Buffer between sessions</Label>
           <Select value={rules.buffer_minutes} onValueChange={(v) => setRules((r) => ({ ...r, buffer_minutes: v }))}>
             <SelectTrigger id="rule-buffer" className="bg-secondary border-border mt-1">
               <SelectValue />
@@ -347,7 +347,7 @@ function BookingRulesSection({ coach, onSaved }) {
           <p className="text-[11px] text-muted-foreground mt-1">Breathing room before and after each session.</p>
         </div>
         <div>
-          <Label htmlFor="rule-advance" className="font-display tracking-wider uppercase text-xs">Max advance booking</Label>
+          <Label htmlFor="rule-advance" className="text-xs font-semibold">Max advance booking</Label>
           <Select value={rules.max_advance_days} onValueChange={(v) => setRules((r) => ({ ...r, max_advance_days: v }))}>
             <SelectTrigger id="rule-advance" className="bg-secondary border-border mt-1">
               <SelectValue />
@@ -365,9 +365,9 @@ function BookingRulesSection({ coach, onSaved }) {
         <Button
           onClick={save}
           disabled={saving}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+          className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
         >
-          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save Booking Rules'}
+          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save booking rules'}
         </Button>
       </div>
     </div>
@@ -428,9 +428,9 @@ function NotificationsSection() {
         <Button
           onClick={save}
           disabled={saving || !dirty}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+          className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
         >
-          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save Preferences'}
+          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save preferences'}
         </Button>
       </div>
     </div>
@@ -482,7 +482,7 @@ export default function CoachSettings() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-display tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
+          <p className="text-sm font-semibold text-foreground">No coach profile linked</p>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
               ? 'Your admin account is not linked to a coach record, so there are no coach settings to manage.'
@@ -496,7 +496,7 @@ export default function CoachSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Settings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] text-foreground">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Availability, blackout dates, booking rules, and notifications.</p>
       </div>
 

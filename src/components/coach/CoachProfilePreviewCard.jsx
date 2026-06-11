@@ -50,12 +50,12 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
         {/* Top-right badges */}
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
           {c.is_head_coach && (
-            <Badge className="bg-accent text-accent-foreground border-0 text-[10px] font-display tracking-widest uppercase">
-              <Star className="w-3 h-3 mr-1" aria-hidden="true" /> Head Coach
+            <Badge className="bg-accent text-accent-foreground border-0 text-xs font-semibold">
+              <Star className="w-3 h-3 mr-1" aria-hidden="true" /> Head coach
             </Badge>
           )}
           {c.intro_video_url && (
-            <Badge variant="secondary" className="text-[10px] font-display tracking-widest uppercase">
+            <Badge variant="secondary" className="text-xs font-semibold">
               <Video className="w-3 h-3 mr-1" aria-hidden="true" /> Intro video
             </Badge>
           )}
@@ -66,13 +66,13 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
       <div className="p-6 -mt-16 relative">
         <div className="flex items-center gap-2 mb-2">
           <MapPin className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
-          <span className="text-xs font-display tracking-wider uppercase text-accent">
+          <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">
             {location || c.training_area || 'Set your service area'}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <h3 className="font-display text-xl font-bold tracking-wider text-foreground">
+          <h3 className="text-xl font-bold tracking-[-0.01em] text-foreground">
             {fullName}
           </h3>
           {c.email_verified_at && (
@@ -91,7 +91,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
         {sports.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {sports.slice(0, 4).map((key) => (
-              <Badge key={key} className="bg-accent/10 text-accent border border-accent/20 text-[10px] font-display tracking-widest uppercase">
+              <Badge key={key} className="bg-accent/10 text-accent border border-accent/20 text-xs font-semibold">
                 {getSport(key)?.display_name || key}
               </Badge>
             ))}
@@ -117,7 +117,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
               <Badge
                 key={spec}
                 variant="secondary"
-                className="text-xs font-display tracking-wide uppercase bg-secondary text-muted-foreground"
+                className="text-xs bg-secondary text-muted-foreground"
               >
                 {spec}
               </Badge>

@@ -31,7 +31,7 @@ const JOURNEYS = [
     title: 'Book, train, track progress',
     accent: 'blue',
     icon: Trophy,
-    cta: { to: '/coaches', label: 'Find a Coach' },
+    cta: { to: '/coaches', label: 'Find a coach' },
     steps: [
       {
         title: 'Search and compare',
@@ -56,7 +56,7 @@ const JOURNEYS = [
     title: 'Apply, get approved, get paid',
     accent: 'emerald',
     icon: Users,
-    cta: { to: '/apply/private-training-coach', label: 'Apply to Coach' },
+    cta: { to: '/apply/private-training-coach', label: 'Apply to coach' },
     steps: [
       {
         title: 'Apply and get reviewed',
@@ -81,7 +81,7 @@ const JOURNEYS = [
     title: 'Create, invite, split payouts',
     accent: 'violet',
     icon: Building2,
-    cta: { to: '/apply/organization', label: 'Create an Organization' },
+    cta: { to: '/apply/organization', label: 'Create an organization' },
     steps: [
       {
         title: 'Create your organization',
@@ -233,7 +233,7 @@ export default function HowItWorks() {
 
         <section className="mt-12" aria-labelledby="guarantees-heading">
           <Reveal>
-            <p className="text-center text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Under the hood</p>
+            <p className="text-center text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Under the hood</p>
             <h2 id="guarantees-heading" className="mt-2 text-center font-display text-3xl font-bold tracking-normal text-slate-950">
               Rules the platform enforces for everyone
             </h2>
@@ -257,8 +257,8 @@ export default function HowItWorks() {
       <CtaBand
         title="Pick your journey"
         description="Athlete, parent, coach, or organization — start where you are."
-        primaryCta={{ to: '/coaches', label: 'Find a Coach' }}
-        secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
+        primaryCta={{ to: '/coaches', label: 'Find a coach' }}
+        secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply to coach' }}
       />
     </div>
   );

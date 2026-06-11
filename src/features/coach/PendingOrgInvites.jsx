@@ -93,8 +93,8 @@ export default function PendingOrgInvites({ coachId, profileId, onChange }) {
     >
       <div className="mb-3 flex items-center gap-2">
         <Building2 className="h-5 w-5 text-accent" aria-hidden="true" />
-        <h2 className="font-display text-base font-bold tracking-wider uppercase text-foreground">
-          Organization {invites.length === 1 ? 'Invitation' : 'Invitations'}
+        <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">
+          Organization {invites.length === 1 ? 'invitation' : 'invitations'}
         </h2>
       </div>
       <ul className="space-y-3">

@@ -131,7 +131,7 @@ function HeroSearch() {
             <Trophy className="h-4 w-4" aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Sport</span>
+            <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Sport</span>
             <select
               value={sport}
               onChange={(event) => setSport(event.target.value)}
@@ -151,7 +151,7 @@ function HeroSearch() {
             <MapPin className="h-4 w-4" aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Location</span>
+            <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Location</span>
             <input
               type="text"
               value={locationText}
@@ -166,7 +166,7 @@ function HeroSearch() {
         <div className="bg-slate-50 p-2">
           <Button type="submit" className="h-12 w-full rounded-xl bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700 sm:h-full">
             <Search className="h-4 w-4" aria-hidden="true" />
-            Find Coaches
+            Find coaches
           </Button>
         </div>
       </div>
@@ -221,7 +221,7 @@ function SportsGrid() {
     <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="sports-heading">
       <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">15 sports &amp; training types</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">15 sports &amp; training types</p>
           <h2 id="sports-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             Explore by sport
           </h2>
@@ -330,7 +330,7 @@ export default function Landing() {
         <HeroPattern className="text-white/[0.06]" />
         <div className="relative mx-auto max-w-[1240px] px-4 py-14 sm:px-6 lg:px-8">
           <Reveal className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-300">Trust &amp; safety</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">Trust &amp; safety</p>
             <h2 id="trust-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-white sm:text-4xl">
               Safeguards built into every booking
             </h2>
@@ -361,7 +361,7 @@ export default function Landing() {
         <div className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
           <Reveal className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">How it works</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">How it works</p>
               <h2 id="how-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
                 Three steps to better training
               </h2>
@@ -393,7 +393,7 @@ export default function Landing() {
       {/* Audience cards */}
       <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="audience-heading">
         <Reveal>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Built for everyone in training</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Built for everyone in training</p>
           <h2 id="audience-heading" className="mt-2 font-display text-3xl font-bold tracking-[-0.01em] text-slate-950 sm:text-4xl">
             One platform, four roles
           </h2>
@@ -425,8 +425,8 @@ export default function Landing() {
         <CtaBand
           title="Ready to start training?"
           description="Create a free account to search coaches, book sessions, and follow progress — or apply to coach on LevelCoach."
-          primaryCta={{ to: '/create-account', label: 'Create Free Account' }}
-          secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply as a Coach' }}
+          primaryCta={{ to: '/create-account', label: 'Create free account' }}
+          secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply as a coach' }}
         />
       </div>
     </div>

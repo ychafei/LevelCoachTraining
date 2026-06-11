@@ -112,7 +112,7 @@ function Section({ title, icon: Icon, children }) {
     <div className="bg-card border border-border rounded-lg p-5">
       <div className="flex items-center gap-2 mb-3">
         {Icon && <Icon className="w-4 h-4 text-accent" aria-hidden="true" />}
-        <h2 className="font-display text-sm font-bold tracking-widest uppercase text-muted-foreground">{title}</h2>
+        <h2 className="text-sm font-bold tracking-[-0.01em] text-muted-foreground">{title}</h2>
       </div>
       {children}
     </div>
@@ -228,10 +228,10 @@ function SportProfilesEditor({ coach, selectedSports }) {
         const entry = entryFor(sportKey);
         return (
           <div key={sportKey} className="border border-border rounded-lg p-4">
-            <p className="font-display tracking-wider uppercase text-sm text-foreground mb-3">{sport.display_name}</p>
+            <p className="text-sm font-semibold text-foreground mb-3">{sport.display_name}</p>
             <div className="space-y-3">
               <div>
-                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1.5">Specialties</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Specialties</p>
                 <MultiPick
                   options={sport.specialties}
                   selected={entry.specialties}
@@ -240,7 +240,7 @@ function SportProfilesEditor({ coach, selectedSports }) {
                 />
               </div>
               <div>
-                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1.5">Levels you coach</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Levels you coach</p>
                 <MultiPick
                   options={sport.levels}
                   selected={entry.levels}
@@ -250,7 +250,7 @@ function SportProfilesEditor({ coach, selectedSports }) {
               </div>
               {sport.positions.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground mb-1.5">Positions</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Positions</p>
                   <MultiPick
                     options={sport.positions}
                     selected={entry.positions}
@@ -267,9 +267,9 @@ function SportProfilesEditor({ coach, selectedSports }) {
         <Button
           onClick={save}
           disabled={saving || !dirty}
-          className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+          className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90"
         >
-          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save Sport Profiles'}
+          <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save sport profiles'}
         </Button>
       </div>
     </div>
@@ -355,15 +355,15 @@ function EmailVerification({ coach, onVerified }) {
     <div>
       <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
         {coach.email_verified_at ? (
-          <Badge className="bg-green-500/10 text-green-600 border-green-500/30 border text-[10px] font-display tracking-widest uppercase">
+          <Badge className="bg-green-500/10 text-green-600 border-green-500/30 border text-xs font-semibold">
             <BadgeCheck className="w-3 h-3 mr-1" aria-hidden="true" /> Verified
           </Badge>
         ) : coach.email ? (
-          <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-500/30 border text-[10px] font-display tracking-widest uppercase">
+          <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-500/30 border text-xs font-semibold">
             Unverified
           </Badge>
         ) : (
-          <Badge variant="secondary" className="text-[10px] font-display tracking-widest uppercase">Not set</Badge>
+          <Badge variant="secondary" className="text-xs font-semibold">Not set</Badge>
         )}
       </div>
       {coach.email && (
@@ -402,9 +402,9 @@ function EmailVerification({ coach, onVerified }) {
           <Button
             onClick={requestCode}
             disabled={cooldown > 0}
-            className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+            className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
           >
-            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send Code'}
+            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send code'}
           </Button>
         </div>
       )}
@@ -433,7 +433,7 @@ function EmailVerification({ coach, onVerified }) {
             <Button
               onClick={confirmCode}
               disabled={enteredCode.length !== 6 || flow === 'verifying'}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               {flow === 'verifying' ? 'Verifying…' : 'Verify'}
             </Button>
@@ -559,7 +559,7 @@ export default function CoachProfile() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-display tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
+          <p className="text-sm font-semibold text-foreground">No coach profile linked</p>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
               ? 'Your admin account is not linked to a coach record.'
@@ -577,18 +577,18 @@ export default function CoachProfile() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Coach Profile</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] text-foreground">Coach profile</h1>
           <p className="text-sm text-muted-foreground mt-1">
             What clients see when picking a coach. Edit on the left, preview on the right.
           </p>
         </div>
         {dirty && (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={revert} className="text-muted-foreground text-xs font-display tracking-wider uppercase">
+            <Button variant="ghost" onClick={revert} className="text-muted-foreground text-xs font-semibold">
               <RotateCcw className="w-3 h-3 mr-1" aria-hidden="true" /> Revert
             </Button>
-            <Button onClick={saveAll} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90">
-              <Save className="w-3 h-3 mr-2" aria-hidden="true" /> {saving ? 'Saving…' : 'Save Changes'}
+            <Button onClick={saveAll} disabled={saving} className="bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90">
+              <Save className="w-3 h-3 mr-2" aria-hidden="true" /> {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
         )}
@@ -612,8 +612,8 @@ export default function CoachProfile() {
               <label className="cursor-pointer">
                 <span className="sr-only">Upload profile photo</span>
                 <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                <Button type="button" variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs pointer-events-none">
-                  <Upload className="w-3 h-3 mr-1" aria-hidden="true" /> {uploadingPhoto ? 'Uploading…' : 'Upload Photo'}
+                <Button type="button" variant="outline" size="sm" className="text-xs font-semibold pointer-events-none">
+                  <Upload className="w-3 h-3 mr-1" aria-hidden="true" /> {uploadingPhoto ? 'Uploading…' : 'Upload photo'}
                 </Button>
               </label>
               <p className="text-xs text-muted-foreground">JPG/PNG. A clear face shot works best. Required to publish.</p>
@@ -621,10 +621,10 @@ export default function CoachProfile() {
           </Section>
 
           {/* About */}
-          <Section title="About You">
+          <Section title="About you">
             <div>
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="bio" className="font-display tracking-wider uppercase text-xs">Bio</Label>
+                <Label htmlFor="bio" className="text-xs font-semibold">Bio</Label>
                 <span className={`text-[11px] ${bioLength >= 80 ? 'text-muted-foreground' : 'text-yellow-700'}`}>
                   {bioLength}/80+ characters {bioLength < 80 && '(required to publish)'}
                 </span>
@@ -639,7 +639,7 @@ export default function CoachProfile() {
               />
             </div>
             <div className="mt-4">
-              <Label htmlFor="quote" className="font-display tracking-wider uppercase text-xs">Quote</Label>
+              <Label htmlFor="quote" className="text-xs font-semibold">Quote</Label>
               <Input
                 id="quote"
                 value={draft.quote || ''}
@@ -649,7 +649,7 @@ export default function CoachProfile() {
               />
             </div>
             <div className="mt-4">
-              <Label htmlFor="intro-video" className="font-display tracking-wider uppercase text-xs">Intro Video URL</Label>
+              <Label htmlFor="intro-video" className="text-xs font-semibold">Intro video URL</Label>
               <Input
                 id="intro-video"
                 type="url"
@@ -660,7 +660,7 @@ export default function CoachProfile() {
               />
             </div>
             <div className="mt-4">
-              <Label htmlFor="price-hint" className="font-display tracking-wider uppercase text-xs">Starting Price (USD per session)</Label>
+              <Label htmlFor="price-hint" className="text-xs font-semibold">Starting price (USD per session)</Label>
               <div className="relative mt-1 w-44">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true">$</span>
                 <Input
@@ -691,7 +691,7 @@ export default function CoachProfile() {
                     type="button"
                     onClick={() => toggleSport(sport.sport_key)}
                     aria-pressed={active}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-display tracking-wide uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                       active
                         ? 'border-accent bg-accent/10 text-accent'
                         : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
@@ -704,7 +704,7 @@ export default function CoachProfile() {
             </div>
 
             <div className="mt-4">
-              <Label htmlFor="spec-input" className="font-display tracking-wider uppercase text-xs">General Specialties</Label>
+              <Label htmlFor="spec-input" className="text-xs font-semibold">General specialties</Label>
               <div className="flex gap-2 mt-1">
                 <Input
                   id="spec-input"
@@ -736,7 +736,7 @@ export default function CoachProfile() {
           </Section>
 
           {/* Sport-specific profiles */}
-          <Section title="Per-Sport Details" icon={Trophy}>
+          <Section title="Per-sport details" icon={Trophy}>
             <SportProfilesEditor coach={coach} selectedSports={coach.sports || []} />
             {dirty && (
               <p className="text-[11px] text-muted-foreground mt-2">
@@ -746,18 +746,18 @@ export default function CoachProfile() {
           </Section>
 
           {/* Packages & pricing — the coach sets their own prices */}
-          <Section title="Packages & Pricing" icon={Wallet}>
+          <Section title="Packages & pricing" icon={Wallet}>
             <PackagesManager />
           </Section>
 
           {/* Service area */}
-          <Section title="Service Area">
+          <Section title="Service area">
             {/* Location entry — shared US fields: state dropdown, city type-ahead,
                 zip auto-resolve. City/state/zip map onto service_*; resolved
                 lat/lng persist to coaches.location_lat / location_lng for
                 proximity search. County is not persisted. */}
             <div className="mb-3">
-              <p className="font-display tracking-wider uppercase text-xs text-foreground mb-2">Location</p>
+              <p className="text-xs font-semibold text-foreground mb-2">Location</p>
               <USLocationFields
                 idPrefix="svc"
                 fields={['state', 'city', 'zip']}
@@ -782,7 +782,7 @@ export default function CoachProfile() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="svc-radius" className="font-display tracking-wider uppercase text-xs">Travel Radius (miles)</Label>
+                <Label htmlFor="svc-radius" className="text-xs font-semibold">Travel radius (miles)</Label>
                 <Input
                   id="svc-radius"
                   type="number"
@@ -795,7 +795,7 @@ export default function CoachProfile() {
                 />
               </div>
               <div>
-                <Label htmlFor="svc-type" className="font-display tracking-wider uppercase text-xs">Service Type</Label>
+                <Label htmlFor="svc-type" className="text-xs font-semibold">Service type</Label>
                 <Select value={draft.service_type || 'hybrid'} onValueChange={(v) => updateDraft({ service_type: v })}>
                   <SelectTrigger id="svc-type" className="bg-secondary border-border mt-1">
                     <SelectValue />
@@ -806,7 +806,7 @@ export default function CoachProfile() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="svc-tz" className="font-display tracking-wider uppercase text-xs">Timezone</Label>
+                <Label htmlFor="svc-tz" className="text-xs font-semibold">Timezone</Label>
                 <Select value={draft.timezone || ''} onValueChange={(v) => updateDraft({ timezone: v })}>
                   <SelectTrigger id="svc-tz" className="bg-secondary border-border mt-1">
                     <SelectValue placeholder="Choose your timezone" />
@@ -819,7 +819,7 @@ export default function CoachProfile() {
               </div>
             </div>
             <div className="mt-3">
-              <Label htmlFor="svc-venue" className="font-display tracking-wider uppercase text-xs">Venue / Facility</Label>
+              <Label htmlFor="svc-venue" className="text-xs font-semibold">Venue / facility</Label>
               <Input
                 id="svc-venue"
                 value={draft.service_venue || ''}
@@ -829,7 +829,7 @@ export default function CoachProfile() {
               />
             </div>
             <div className="mt-3">
-              <Label htmlFor="training-area" className="font-display tracking-wider uppercase text-xs">Training Area Summary</Label>
+              <Label htmlFor="training-area" className="text-xs font-semibold">Training area summary</Label>
               <Input
                 id="training-area"
                 value={draft.training_area || ''}
@@ -841,7 +841,7 @@ export default function CoachProfile() {
           </Section>
 
           {/* Contact email + verification */}
-          <Section title="Contact Email" icon={Mail}>
+          <Section title="Contact email" icon={Mail}>
             <EmailVerification
               coach={coach}
               onVerified={(verifiedAt) => setCoach(prev => (prev ? { ...prev, email_verified_at: verifiedAt } : prev))}
@@ -858,8 +858,8 @@ export default function CoachProfile() {
                 Stripe account: <span className="text-foreground">{coach.stripe_account_id ? 'Connected' : 'Not connected'}</span>
               </p>
               <Link to="/coach/earnings">
-                <Button variant="outline" size="sm" className="font-display tracking-wider uppercase text-xs">
-                  <ExternalLink className="w-3 h-3 mr-1" aria-hidden="true" /> Manage Payouts
+                <Button variant="outline" size="sm" className="text-xs font-semibold">
+                  <ExternalLink className="w-3 h-3 mr-1" aria-hidden="true" /> Manage payouts
                 </Button>
               </Link>
             </div>
@@ -868,11 +868,11 @@ export default function CoachProfile() {
           {/* Bottom save bar */}
           {dirty && (
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={revert} className="text-muted-foreground text-xs font-display tracking-wider uppercase">
+              <Button variant="ghost" onClick={revert} className="text-muted-foreground text-xs font-semibold">
                 <RotateCcw className="w-3 h-3 mr-1" aria-hidden="true" /> Revert
               </Button>
-              <Button onClick={saveAll} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-                <Save className="w-3 h-3 mr-2" aria-hidden="true" /> {saving ? 'Saving…' : 'Save Changes'}
+              <Button onClick={saveAll} disabled={saving} className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+                <Save className="w-3 h-3 mr-2" aria-hidden="true" /> {saving ? 'Saving…' : 'Save changes'}
               </Button>
             </div>
           )}
@@ -881,7 +881,7 @@ export default function CoachProfile() {
         {/* Live preview — right 2/5 */}
         <div className="lg:col-span-2">
           <div className="lg:sticky lg:top-24 space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
               <Eye className="w-3 h-3" aria-hidden="true" /> Live preview {dirty && <span className="text-yellow-600">· unsaved</span>}
             </div>
             <CoachProfilePreviewCard coach={previewCoach} />

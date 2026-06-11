@@ -56,7 +56,7 @@ export default function CoachPricingSection() {
   return (
     <section id="coach-pricing" className="mt-8 scroll-mt-24 rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm sm:p-6">
       <div className="text-center">
-        <p className="text-xs font-bold uppercase tracking-widest text-blue-600">How getting paid works</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">How getting paid works</p>
         <h2 className="mt-2 font-display text-3xl font-bold leading-tight tracking-normal text-slate-950 sm:text-4xl">
           Set your rates. Get paid securely.
         </h2>
@@ -107,7 +107,7 @@ export default function CoachPricingSection() {
       </section>
 
       <div className="mx-auto mt-5 max-w-[1080px]">
-        <p className="text-center text-xs font-bold uppercase tracking-widest text-blue-600">Why coaches choose LevelCoach</p>
+        <p className="text-center text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Why coaches choose LevelCoach</p>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {WHY_COACHES.map(({ title, body, icon: Icon }) => (
             <article key={title} className="rounded-lg border border-slate-200 bg-slate-50/70 p-5">

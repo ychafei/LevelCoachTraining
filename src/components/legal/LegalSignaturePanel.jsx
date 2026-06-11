@@ -30,9 +30,9 @@ function athleteDisplayName(athlete) {
 function roleLabel(role) {
   const labels = {
     athlete: 'Athlete',
-    guardian: 'Parent / Guardian',
+    guardian: 'Parent / guardian',
     coach: 'Coach',
-    organization_admin: 'Organization Admin',
+    organization_admin: 'Organization admin',
     admin: 'Admin',
   };
   return labels[role] || role;
@@ -48,7 +48,7 @@ export default function LegalSignaturePanel({
   athleteName = '',
   coachId = '',
   organizationId = '',
-  title = 'Required Legal Packet',
+  title = 'Required legal packet',
   description = 'Review and sign the current required legal documents before continuing.',
   compact = false,
   onStatusChange = null,
@@ -228,7 +228,7 @@ export default function LegalSignaturePanel({
       <section className="rounded-lg border border-border bg-card p-5">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-accent" aria-hidden="true" />
-          <h2 className="font-display text-lg font-bold tracking-tight text-foreground">{title}</h2>
+          <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
         </div>
         <div className="mt-4 rounded-md border border-yellow-500/20 bg-yellow-500/10 p-4">
           <div className="flex gap-3">
@@ -287,7 +287,7 @@ export default function LegalSignaturePanel({
         <div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-accent" aria-hidden="true" />
-            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">{title}</h2>
+            <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           {signerRole === 'guardian' && effectiveAthleteId && effectiveAthleteName && (
@@ -395,7 +395,7 @@ export default function LegalSignaturePanel({
                     )}
                     {!signed && (
                       <Button size="sm" onClick={() => setSelectedTemplate(template)} className="h-8 bg-accent text-accent-foreground text-xs hover:bg-accent/90">
-                        <PenLine className="mr-1 h-3.5 w-3.5" /> Review & Sign
+                        <PenLine className="mr-1 h-3.5 w-3.5" /> Review & sign
                       </Button>
                     )}
                   </div>
@@ -482,7 +482,7 @@ export default function LegalSignaturePanel({
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedTemplate(null)}>Cancel</Button>
             <Button disabled={!canSign || saving} onClick={signSelected} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              {saving ? 'Signing...' : 'Sign Document'}
+              {saving ? 'Signing...' : 'Sign document'}
             </Button>
           </DialogFooter>
         </DialogContent>

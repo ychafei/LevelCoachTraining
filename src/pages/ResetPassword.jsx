@@ -47,7 +47,7 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md bg-[#FFFFFF] text-[#0F172A] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-6">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide text-center">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] text-center">
             Set a new password
           </h1>
         </div>

@@ -633,7 +633,7 @@ function FilterSelect({ label, icon: Icon, value, options, onChange, compact = f
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</span>
+        <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</span>
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -658,7 +658,7 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
         <MapPin className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Location</span>
+        <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Location</span>
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -678,7 +678,7 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
             >
               <span>{place.label}</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{place.type}</span>
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{place.type}</span>
             </button>
           ))}
         </span>

@@ -179,7 +179,7 @@ export default function Messages() {
   return (
     <div className="py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-6">MESSAGES</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground mb-6">Messages</h1>
 
         <div className="bg-card border border-border rounded-lg overflow-hidden" style={{ height: '70vh' }}>
           <div className="flex h-full">
@@ -189,9 +189,9 @@ export default function Messages() {
                 <Button
                   size="sm"
                   onClick={() => setShowNewConvo(!showNewConvo)}
-                  className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase text-xs hover:bg-accent/90"
+                  className="w-full bg-accent text-accent-foreground font-semibold text-xs hover:bg-accent/90"
                 >
-                  <Plus className="w-3 h-3 mr-1" /> Message a Coach
+                  <Plus className="w-3 h-3 mr-1" /> Message a coach
                 </Button>
                 {showNewConvo && (
                   <div className="mt-2 space-y-1">
@@ -203,7 +203,7 @@ export default function Messages() {
                         onClick={() => startConvoWithCoach(c)}
                         className="w-full text-left px-3 py-2 rounded-md bg-secondary hover:bg-secondary/80 transition-colors text-sm"
                       >
-                        <span className="font-display tracking-wider">{c.first_name} {c.last_name}</span>
+                        <span className="font-semibold">{c.first_name} {c.last_name}</span>
                       </button>
                     ))}
                   </div>
@@ -219,7 +219,7 @@ export default function Messages() {
                       onClick={() => loadMessages(convo)}
                       className={`w-full text-left p-4 border-b border-border hover:bg-secondary/50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-secondary' : ''}`}
                     >
-                      <p className="font-display tracking-wider text-sm text-foreground">{getOtherName(convo)}</p>
+                      <p className="text-sm font-semibold text-foreground">{getOtherName(convo)}</p>
                       {convo.last_message && (
                         <p className="text-xs text-muted-foreground mt-1 truncate">{convo.last_message}</p>
                       )}
@@ -242,7 +242,7 @@ export default function Messages() {
                     >
                       <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                     </button>
-                    <p className="font-display tracking-wider text-foreground">{chatTitle}</p>
+                    <p className="font-semibold text-foreground">{chatTitle}</p>
                   </div>
 
                   {/* Monitoring Disclaimer */}

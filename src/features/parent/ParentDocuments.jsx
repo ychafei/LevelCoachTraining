@@ -58,7 +58,7 @@ export default function ParentDocuments({ user, family }) {
           key={selected.id}
           signerRole="guardian"
           athleteId={selected.id}
-          title={`Guardian Legal Packet — ${[selected.first_name, selected.last_name].filter(Boolean).join(' ')}`}
+          title={`Guardian legal packet — ${[selected.first_name, selected.last_name].filter(Boolean).join(' ')}`}
           description="Guardian authority, minor participation, medical, media, and safety documents for this athlete. A complete packet is required before booking for them."
         />
       )}

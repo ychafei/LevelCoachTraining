@@ -18,13 +18,15 @@ export default function Terms() {
           role="note"
         >
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          {/* Deliberately shouting: this is an operational tripwire, not UI voice —
+              verify-phase2 asserts the caps marker until counsel signs off. */}
           <p className="text-sm font-bold leading-6">
             OPERATIONAL PLACEHOLDER — ATTORNEY REVIEW REQUIRED. This document describes how the
             platform actually operates but has not yet been reviewed by legal counsel.
           </p>
         </div>
 
-        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">TERMS OF SERVICE</h1>
+        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground mb-8">Terms of Service</h1>
         <div className="prose prose-invert prose-sm max-w-none space-y-6 text-muted-foreground">
           <p>Last updated: June 10, 2026</p>
 
@@ -54,7 +56,7 @@ export default function Terms() {
             LevelCoach Training.
           </p>
 
-          <h2 className="text-foreground">3. Accounts & Registration</h2>
+          <h2 className="text-foreground">3. Accounts & registration</h2>
           <p>
             You must provide accurate, current information when creating an account and keep it up
             to date. You are responsible for safeguarding your credentials and for activity under
@@ -63,7 +65,7 @@ export default function Terms() {
             of Stripe payout onboarding.
           </p>
 
-          <h2 className="text-foreground">4. Minors & Guardian Consent</h2>
+          <h2 className="text-foreground">4. Minors & guardian consent</h2>
           <p>
             Participants under 18 may only use the Services through a linked parent or legal
             guardian account. Guardians must sign all waivers and consent documents on the minor's
@@ -72,7 +74,7 @@ export default function Terms() {
             the minor's in-platform conversations. These controls are enforced by the platform.
           </p>
 
-          <h2 className="text-foreground">5. Booking, Credits & Cancellation</h2>
+          <h2 className="text-foreground">5. Booking, credits & cancellation</h2>
           <p>
             Sessions are booked through the platform against each coach's published availability and
             are validated for conflicts, notice periods, and booking windows. Session packages grant
@@ -86,7 +88,7 @@ export default function Terms() {
             client's credit.
           </p>
 
-          <h2 className="text-foreground">6. Payments, Fees & Refunds</h2>
+          <h2 className="text-foreground">6. Payments, fees & refunds</h2>
           <p>
             All payments are processed by Stripe. Prices are computed server-side from configured
             session packages and shown before checkout; all amounts are in US Dollars. LevelCoach
@@ -101,7 +103,7 @@ export default function Terms() {
             for refund requests.
           </p>
 
-          <h2 className="text-foreground">7. Assumption of Risk</h2>
+          <h2 className="text-foreground">7. Assumption of risk</h2>
           <p>
             Athletic training involves inherent physical risks, including but not limited to muscle
             strains, sprains, fractures, concussions, and other injuries. By participating in
@@ -111,7 +113,7 @@ export default function Terms() {
             assumption-of-risk agreement must be signed before any session.
           </p>
 
-          <h2 className="text-foreground">8. Communication & Safety</h2>
+          <h2 className="text-foreground">8. Communication & safety</h2>
           <p>
             Coach-client communication should remain within the platform's messaging system, which
             may be reviewed for safety and policy enforcement, including when a report is filed.
@@ -120,7 +122,7 @@ export default function Terms() {
             may result in suspension or a permanent ban.
           </p>
 
-          <h2 className="text-foreground">9. Code of Conduct</h2>
+          <h2 className="text-foreground">9. Code of conduct</h2>
           <ul className="list-disc pl-6 space-y-1">
             <li>Treat coaches, athletes, families, and staff with respect.</li>
             <li>Arrive on time and prepared for scheduled sessions.</li>
@@ -140,14 +142,14 @@ export default function Terms() {
             Terms. Coaches may post public responses.
           </p>
 
-          <h2 className="text-foreground">11. Intellectual Property</h2>
+          <h2 className="text-foreground">11. Intellectual property</h2>
           <p>
             All platform content — text, graphics, logos, and software — is the property of
             LevelCoach Training or its licensors. You may not reproduce, distribute, or create
             derivative works without prior written consent.
           </p>
 
-          <h2 className="text-foreground">12. Limitation of Liability</h2>
+          <h2 className="text-foreground">12. Limitation of liability</h2>
           <p>
             To the fullest extent permitted by law, LevelCoach Training and its affiliates shall not
             be liable for indirect, incidental, special, consequential, or punitive damages arising
@@ -169,7 +171,7 @@ export default function Terms() {
             ceases immediately.
           </p>
 
-          <h2 className="text-foreground">15. Governing Law</h2>
+          <h2 className="text-foreground">15. Governing law</h2>
           <p>
             These Terms are governed by the laws of the State of Michigan, without regard to its
             conflict of law provisions.

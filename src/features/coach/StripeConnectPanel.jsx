@@ -91,10 +91,10 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <Wallet className="w-4 h-4 text-accent" aria-hidden="true" />
-            <h2 id="stripe-connect-heading" className="font-display text-lg font-bold tracking-wider text-foreground uppercase">
+            <h2 id="stripe-connect-heading" className="text-lg font-bold tracking-[-0.01em] text-foreground">
               Stripe Connect
             </h2>
-            <Badge className={`${status.tone} border text-[10px] font-display tracking-widest uppercase`}>{status.label}</Badge>
+            <Badge className={`${status.tone} border text-xs font-semibold`}>{status.label}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
             Client card payments are collected by the platform and transferred to your Stripe payout account.
@@ -106,17 +106,17 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
             <Button
               onClick={startOnboarding}
               disabled={connecting}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               <ExternalLink className="w-4 h-4 mr-2" aria-hidden="true" />
-              {connecting ? 'Opening…' : account ? 'Continue Onboarding' : 'Set Up Payouts'}
+              {connecting ? 'Opening…' : account ? 'Continue onboarding' : 'Set up payouts'}
             </Button>
           )}
           {ready && (
             <Button
               onClick={openDashboard}
               disabled={openingDashboard}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               <ExternalLink className="w-4 h-4 mr-2" aria-hidden="true" />
               {openingDashboard ? 'Opening…' : 'View payouts in Stripe'}
@@ -126,7 +126,7 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
             variant="outline"
             onClick={refreshStatus}
             disabled={!account || refreshing}
-            className="font-display tracking-wider uppercase"
+            className="font-semibold"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
             Refresh

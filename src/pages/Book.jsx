@@ -39,6 +39,7 @@ import OnboardingModal from '@/components/OnboardingModal';
 import BookingSummaryCard from '@/components/booking/BookingSummaryCard';
 import LegalSignaturePanel from '@/components/legal/LegalSignaturePanel';
 import { legalSignerRoleForUser } from '@/lib/legal';
+import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 import { useMyAthlete } from '@/features/athlete/useMyAthlete';
 
@@ -53,10 +54,6 @@ const DURATIONS = [
 ];
 
 const AVAILABILITY_RANGE_DAYS = 30;
-
-const CANCEL_POLICY_COPY =
-  'Cancel 24 or more hours before a session starts and your credit is restored automatically. '
-  + 'Cancellations inside 24 hours forfeit the credit, unless the coach cancels.';
 
 const DATE_WINDOWS = [
   { value: 'next_7_days', label: 'Next 7 days' },
@@ -485,11 +482,11 @@ export default function Book() {
             their own account. Ask them to sign in, link your athlete profile, and book for you.
           </p>
           <div className="flex flex-col gap-3">
-            <Button asChild className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-              <Link to="/dashboard">Go to Dashboard</Link>
+            <Button asChild className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+              <Link to="/dashboard">Go to dashboard</Link>
             </Button>
-            <Button asChild variant="outline" className="font-display tracking-wider uppercase">
-              <Link to="/coaches">Keep Browsing Coaches</Link>
+            <Button asChild variant="outline" className="font-semibold">
+              <Link to="/coaches">Keep browsing coaches</Link>
             </Button>
           </div>
         </div>
@@ -613,13 +610,13 @@ export default function Book() {
               Your session has been confirmed{coach ? ` with ${coach.first_name} ${coach.last_name}` : ''}.
             </p>
             {bookedWhen && (
-              <p className="text-sm font-display tracking-wider text-foreground mb-2">{bookedWhen}</p>
+              <p className="text-sm font-semibold text-foreground mb-2">{bookedWhen}</p>
             )}
             <p className="text-sm text-muted-foreground mb-6">A confirmation email has been sent.</p>
 
             {remainingOnCredit > 0 && (
               <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-4">
-                <p className="font-display text-sm font-bold tracking-wider text-accent uppercase mb-1">
+                <p className="text-sm font-semibold text-accent mb-1">
                   {remainingOnCredit} session{remainingOnCredit !== 1 ? 's' : ''} remaining
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -633,14 +630,14 @@ export default function Book() {
             <div className="flex flex-col gap-3">
               {remainingOnCredit > 0 && (
                 <Button onClick={handleScheduleAnother}
-                  className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-                  Schedule Another Session
+                  className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+                  Schedule another session
                 </Button>
               )}
               <Button variant={remainingOnCredit > 0 ? 'outline' : 'default'}
                 onClick={() => window.location.href = '/dashboard'}
-                className={remainingOnCredit > 0 ? 'font-display tracking-wider uppercase' : 'bg-accent text-accent-foreground font-display tracking-wider uppercase'}>
-                Go to Dashboard
+                className={remainingOnCredit > 0 ? 'font-semibold' : 'bg-accent text-accent-foreground font-semibold'}>
+                Go to dashboard
               </Button>
             </div>
           </div>
@@ -684,7 +681,7 @@ export default function Book() {
 
             {familyAthletes.length > 0 && (
               <div className="mb-6 rounded-lg border border-border bg-card p-4">
-                <label htmlFor="book-athlete" className="text-xs font-display tracking-widest uppercase text-muted-foreground">
+                <label htmlFor="book-athlete" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
                   Who is this session for?
                 </label>
                 <select
@@ -711,7 +708,7 @@ export default function Book() {
                 <LegalSignaturePanel
                   signerRole={bookingSignerRole}
                   athleteId={selectedAthleteId}
-                  title="Legal Packet Required"
+                  title="Legal packet required"
                   description="Complete the current required documents before confirming a session. The server enforces this on every booking."
                   onStatusChange={(status) => {
                     if (status?.complete && !bookingLegalStatus.complete) void bookingLegalStatus.refresh();
@@ -722,7 +719,7 @@ export default function Book() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
-                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">Pick a Date</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">Pick a date</p>
                 <Calendar mode="single" selected={selectedDate}
                   onSelect={(date) => { setSelectedDate(date); setSelectedTime(''); }}
                   disabled={isDateDisabled}
@@ -733,8 +730,8 @@ export default function Book() {
               </div>
               {selectedDate && (
                 <div>
-                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-3">
-                    Pick a Time{tzAbbr ? ` (${tzAbbr})` : ''}
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">
+                    Pick a time{tzAbbr ? ` (${tzAbbr})` : ''}
                   </p>
                   {openSlots.length === 0 ? (
                     <p className="rounded-lg border border-dashed border-border bg-card p-4 text-sm text-muted-foreground">
@@ -745,7 +742,7 @@ export default function Book() {
                       {openSlots.map((time) => (
                         <button key={time} type="button" onClick={() => setSelectedTime(time)}
                           aria-pressed={selectedTime === time}
-                          className={`p-2 rounded-md border text-xs font-display tracking-wide transition-all ${selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}>
+                          className={`p-2 rounded-md border text-xs font-semibold transition-all ${selectedTime === time ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}>
                           {formatAvailabilityTime(time)}
                         </button>
                       ))}
@@ -762,12 +759,12 @@ export default function Book() {
             )}
 
             <div className="flex gap-3 mt-8">
-              <Button variant="outline" onClick={() => setScheduling(false)} className="font-display tracking-wider uppercase">
+              <Button variant="outline" onClick={() => setScheduling(false)} className="font-semibold">
                 Back
               </Button>
               <Button onClick={handleBookSession} disabled={!selectedDate || !selectedTime || submitting}
-                className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-                {submitting ? 'Booking...' : 'Confirm Session'}
+                className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+                {submitting ? 'Booking...' : 'Confirm session'}
               </Button>
             </div>
           </div>
@@ -787,7 +784,7 @@ export default function Book() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-4">Payment confirmed</h1>
           <div className="bg-card border border-border rounded-lg p-4 mb-8">
-            <p className="font-display text-lg font-bold tracking-wider mb-1">
+            <p className="text-lg font-semibold mb-1">
               {confirmedCredit?.package_name || selectedPackage?.name}
             </p>
             <p className="text-muted-foreground text-sm">
@@ -797,12 +794,12 @@ export default function Book() {
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => setScheduling(true)}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-              Schedule Now
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+              Schedule now
             </Button>
             <Button variant="outline" onClick={() => window.location.href = '/dashboard'}
-              className="font-display tracking-wider uppercase">
-              Schedule Later from Dashboard
+              className="font-semibold">
+              Schedule later from dashboard
             </Button>
           </div>
         </div>
@@ -965,12 +962,12 @@ export default function Book() {
                       }
                       setScheduling(true);
                     }}
-                    className="px-4 py-2 rounded-md border text-xs font-display tracking-wide uppercase transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
-                    Use Existing Sessions — Schedule Now
+                    className="px-4 py-2 rounded-md border text-xs font-semibold transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
+                    Use existing sessions — schedule now
                   </button>
                   <button onClick={() => setUseExistingCredit(false)}
-                    className={`px-4 py-2 rounded-md border text-xs font-display tracking-wide uppercase transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
-                    Buy New Package
+                    className={`px-4 py-2 rounded-md border text-xs font-semibold transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
+                    Buy new package
                   </button>
                 </div>
               </div>
@@ -1005,15 +1002,15 @@ export default function Book() {
                   }}
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
-                      <span className="absolute top-3 right-3 text-xs font-display tracking-wide bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
+                      <span className="absolute top-3 right-3 text-xs font-semibold bg-accent text-accent-foreground px-2 py-0.5 rounded">{pkg.badge}</span>
                     )}
                     {pkg.source === 'org' && pkg.org_name && (
-                      <span className="inline-block mb-2 text-[10px] font-display tracking-wide uppercase bg-primary/15 text-primary px-2 py-0.5 rounded">
+                      <span className="inline-block mb-2 text-xs font-bold uppercase tracking-[0.18em] bg-primary/15 text-primary px-2 py-0.5 rounded">
                         From {pkg.org_name}
                       </span>
                     )}
                     <Package className={`w-5 h-5 mb-3 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                    <p className="font-display text-xl font-bold tracking-wider">{pkg.name}</p>
+                    <p className="text-xl font-semibold">{pkg.name}</p>
                     <p className="text-2xl font-display font-bold text-accent mt-1">{totalLabel}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : '1 session'}
@@ -1048,7 +1045,7 @@ export default function Book() {
                 </p>
                 <div className="rounded-lg border border-accent bg-accent/10 p-6 max-w-sm">
                   <Timer className="w-5 h-5 text-accent mb-2" aria-hidden="true" />
-                  <p className="font-display text-lg font-bold tracking-wider">
+                  <p className="text-lg font-semibold">
                     {duration?.label || `${packageDurationMinutes(selectedPackage)} Minutes`}
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -1073,7 +1070,7 @@ export default function Book() {
                           </span>
                         )}
                         <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                        <span className="font-display text-lg font-bold tracking-wider block">{d.label}</span>
+                        <span className="text-lg font-semibold block">{d.label}</span>
                         {price !== null && (
                           <span className={`text-sm font-display font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
                         )}
@@ -1119,7 +1116,7 @@ export default function Book() {
               <div className="mt-6 rounded-lg border border-border bg-card p-5">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Date Window</span>
+                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Date window</span>
                     <select
                       value={availabilityPreference.dateWindow}
                       onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, dateWindow: event.target.value }))}
@@ -1132,7 +1129,7 @@ export default function Book() {
                   </label>
 
                   <div>
-                    <span className="text-xs font-display tracking-widest uppercase text-muted-foreground">Start Window</span>
+                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Start window</span>
                     <div className="mt-2 grid grid-cols-2 gap-3">
                       <input
                         type="time"
@@ -1153,7 +1150,7 @@ export default function Book() {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">Preferred Days</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Preferred days</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {PREFERRED_DAYS.map((day) => (
                       <button
@@ -1174,7 +1171,7 @@ export default function Book() {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">Time of Day</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Time of day</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {TIME_OF_DAY_OPTIONS.map((option) => (
                       <button
@@ -1182,7 +1179,7 @@ export default function Book() {
                         type="button"
                         onClick={() => toggleAvailabilityArray('timeOfDay', option.value)}
                         aria-pressed={availabilityPreference.timeOfDay.includes(option.value)}
-                        className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-all ${
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold transition-all ${
                           availabilityPreference.timeOfDay.includes(option.value)
                             ? 'border-accent bg-accent/10 text-accent'
                             : 'border-border text-muted-foreground hover:border-accent/30'
@@ -1208,7 +1205,7 @@ export default function Book() {
             )}
 
             <div className="mt-6">
-              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-2">Optional Notes</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-2">Optional notes</p>
               <Textarea
                 placeholder="Anything the coach should know before the first session?"
                 value={goals}
@@ -1225,9 +1222,9 @@ export default function Book() {
                 <Button
                   onClick={() => setShowProfileGate(true)}
                   size="sm"
-                  className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
                 >
-                  Set Up Profile
+                  Set up profile
                 </Button>
               </div>
             )}
@@ -1252,12 +1249,12 @@ export default function Book() {
 
             {/* Order Summary */}
             <div className="bg-card border border-border rounded-lg p-6 mb-6">
-              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Order Summary</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-4">Order summary</p>
               <div className="space-y-1">
                 {[
                   ['Package', selectedPackage?.name],
                   ['Sessions', selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions` : '1 session'],
-                  ['Session Duration', duration?.label],
+                  ['Session duration', duration?.label],
                   ['Coach', coach ? `${coach.first_name} ${coach.last_name}` : ''],
                   ['Location', bookingLocation.label
                     ? `${bookingLocation.label} (${bookingLocation.radius || 15} mi)`
@@ -1266,7 +1263,7 @@ export default function Book() {
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between py-2 border-b border-border last:border-0">
                     <span className="text-muted-foreground text-sm">{label}</span>
-                    <span className="font-display tracking-wider text-sm">{val}</span>
+                    <span className="font-semibold text-sm">{val}</span>
                   </div>
                 ))}
               </div>
@@ -1303,7 +1300,7 @@ export default function Book() {
                   signerRole={checkoutSignerRole}
                   coachId={checkoutSignerRole === 'coach' ? user?.coach_id || '' : ''}
                   organizationId={checkoutSignerRole === 'organization_admin' ? user?.primary_organization_id || '' : ''}
-                  title="Legal Packet Required"
+                  title="Legal packet required"
                   description="Complete the current required documents before paying for or scheduling training."
                   compact={checkoutLegalStatus.complete}
                   onStatusChange={(status) => {
@@ -1316,7 +1313,7 @@ export default function Book() {
             {/* Payment Options */}
             {!useExistingCredit && (
               <div className="bg-card border border-border rounded-lg p-6 mb-6">
-                <p className="text-xs font-display tracking-widest uppercase text-muted-foreground mb-4">Payment</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-4">Payment</p>
                 <p className="text-sm text-muted-foreground mb-4">
                   Pay <strong className="proof-number text-foreground">{packageTotal != null ? `$${formatMoney(packageTotal)}` : ''}</strong> securely through Stripe Checkout.
                 </p>
@@ -1324,13 +1321,13 @@ export default function Book() {
                   <div className="text-center py-4">
                     <p className="text-sm text-muted-foreground mb-4">You must be signed in to complete your purchase.</p>
                     <Button
-                      className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90"
+                      className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
                       onClick={() => {
                         saveBookingIntent();
                         auth.signIn(window.location.href);
                       }}
                     >
-                      Sign In to Pay
+                      Sign in to pay
                     </Button>
                   </div>
                 ) : (
@@ -1374,13 +1371,13 @@ export default function Book() {
 
             {useExistingCredit && (
               <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
-                <p className="text-xs text-accent font-display tracking-wide uppercase mb-1">Credit package available</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent mb-1">Credit package available</p>
                 <p className="text-xs text-muted-foreground mb-4">
                   Use your active training credits to schedule this session.
                 </p>
                 <Button onClick={handleUseExistingCredits} disabled={submitting || !existingCredit}
-                  className="w-full bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90 h-12 text-base">
-                  Use My Credits & Continue
+                  className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 h-12 text-base">
+                  Use my credits & continue
                 </Button>
               </div>
             )}
@@ -1408,19 +1405,19 @@ export default function Book() {
                 setStep(Math.max(minStep, step - 1));
               }}
               disabled={!coachLocked && step === 0}
-              className="font-display tracking-wider uppercase"
+              className="font-semibold"
             >
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
             <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}
-              className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
+              className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
               Next <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </div>
         )}
         {step === 4 && (
           <div className="flex mt-6">
-            <Button variant="outline" onClick={() => setStep(3)} className="font-display tracking-wider uppercase">
+            <Button variant="outline" onClick={() => setStep(3)} className="font-semibold">
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
           </div>
@@ -1452,11 +1449,11 @@ function CoachPickButton({ coach, selected, onSelect }) {
           : <User className="w-5 h-5 text-muted-foreground" aria-hidden="true" />}
       </div>
       <div className="min-w-0">
-        <p className="font-display text-lg font-bold tracking-wider flex items-center gap-2">
+        <p className="text-lg font-semibold flex items-center gap-2">
           <span className="truncate">{model.displayName}</span>
           {model.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Email verified" />}
         </p>
-        <p className="text-xs text-accent font-display tracking-wider uppercase truncate">{model.primarySport}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent truncate">{model.primarySport}</p>
         <p className="text-xs text-muted-foreground truncate">{model.locationLabel}</p>
       </div>
     </button>
@@ -1515,7 +1512,7 @@ function LoggedOutBookIntro({
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-blue-700 ring-1 ring-blue-100">
+              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-blue-700 ring-1 ring-blue-100">
                 <Sparkles className="h-3.5 w-3.5" />
                 Intro session preview
               </div>
@@ -1538,7 +1535,7 @@ function LoggedOutBookIntro({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-display text-2xl font-bold text-slate-950">{model.displayName}</p>
                     {model.verified && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-100">
                         <BadgeCheck className="h-3 w-3" />
                         Email verified
                       </span>
@@ -1587,7 +1584,7 @@ function LoggedOutBookIntro({
                 />
 
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                     Available times{tzAbbr ? ` (${tzAbbr})` : ''}
                   </p>
                   {selectedDate ? (
@@ -1665,7 +1662,7 @@ function LoggedOutBookIntro({
             disabled={!selectedDate || !selectedTime}
             className="mt-4 h-11 w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700"
           >
-            Create Free Account
+            Create free account
             <ArrowRight className="h-4 w-4" />
           </Button>
           <Button
@@ -1673,7 +1670,7 @@ function LoggedOutBookIntro({
             onClick={signIn}
             className="mt-2 h-11 w-full rounded-lg border-blue-200 bg-white font-bold text-blue-700 hover:bg-blue-50"
           >
-            Sign In Instead
+            Sign in instead
           </Button>
           {(!selectedDate || !selectedTime) && (
             <p className="mt-3 text-center text-xs font-semibold text-slate-500">Pick a date and time to continue.</p>
@@ -1690,7 +1687,7 @@ function IntroStat({ icon: Icon, label, value }) {
       <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
         <Icon className="h-4 w-4" />
       </div>
-      <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className="mt-1 text-sm font-bold text-slate-950">{value}</p>
     </div>
   );

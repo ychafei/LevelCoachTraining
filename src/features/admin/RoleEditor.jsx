@@ -90,7 +90,7 @@ export default function RoleEditor({ profile, onSaved }) {
         onClick={() => toggle(role)}
         disabled={disabled}
         aria-pressed={on}
-        title={implied ? 'Implied by Super Admin' : undefined}
+        title={implied ? 'Implied by Super admin' : undefined}
         className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:bg-accent/5'} ${disabled ? 'opacity-60' : ''}`}
       >
         {on ? '✓ ' : ''}{label}
@@ -102,7 +102,7 @@ export default function RoleEditor({ profile, onSaved }) {
     <div className="flex flex-wrap items-center gap-2">
       {chip('coach', 'Coach')}
       {chip('admin', 'Admin')}
-      {chip('super_admin', 'Super Admin')}
+      {chip('super_admin', 'Super admin')}
       <Button size="sm" onClick={save} disabled={saving} className="bg-accent text-accent-foreground hover:bg-accent/90">
         {saving ? 'Saving…' : 'Save roles'}
       </Button>

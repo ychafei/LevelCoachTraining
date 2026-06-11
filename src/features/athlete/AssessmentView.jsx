@@ -91,7 +91,7 @@ export function normalizeAssessmentScores(assessment, sportValue) {
       .map(([key, value]) => ({ key, label: humanize(key), description: '', score: clampScore(value) }))
       .filter((skill) => skill.score !== null && !used.has(skill.key));
     if (leftovers.length > 0) {
-      categories.push({ key: 'other', label: 'Additional Skills', skills: leftovers });
+      categories.push({ key: 'other', label: 'Additional skills', skills: leftovers });
     }
   }
 

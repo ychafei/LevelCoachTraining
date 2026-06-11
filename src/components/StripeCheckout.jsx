@@ -58,7 +58,7 @@ export default function StripeCheckout({
       <Button
         onClick={handleClick}
         disabled={loading || disabled}
-        className="w-full bg-[#635BFF] text-white font-display tracking-wider uppercase hover:bg-[#5851DB] h-12 text-sm"
+        className="w-full bg-[#635BFF] text-white font-semibold hover:bg-[#5851DB] h-12 text-sm"
       >
         <CreditCard className="w-4 h-4 mr-2" />
         {loading ? 'Redirecting...' : 'Continue to Stripe Checkout'}

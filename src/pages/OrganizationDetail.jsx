@@ -172,7 +172,7 @@ export default function OrganizationDetail() {
 
       <section className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8" aria-labelledby="roster-heading">
         <div className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Coach roster</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Coach roster</p>
           <h2 id="roster-heading" className="mt-1 font-display text-3xl font-bold tracking-normal text-slate-950">
             Work with {org.name}
           </h2>

@@ -35,19 +35,19 @@ const audiences = [
 const resourcesByAudience = {
   athletes: [
     {
-      title: 'Find a Coach',
+      title: 'Find a coach',
       description: 'Search published coaches by sport, location, level, availability, and specialty.',
       icon: Search,
       href: '/coaches',
     },
     {
-      title: 'How Booking Works',
+      title: 'How booking works',
       description: 'The full athlete journey: search, sign once, book with credits, train, and track progress.',
       icon: ClipboardList,
       href: '/how-it-works',
     },
     {
-      title: 'Training for Athletes',
+      title: 'Training for athletes',
       description: 'What you get on LevelCoach: real reviews, live availability, and skill assessments.',
       icon: Trophy,
       href: '/for-athletes',
@@ -67,25 +67,25 @@ const resourcesByAudience = {
   ],
   parents: [
     {
-      title: 'Safety for Parents',
+      title: 'Safety for parents',
       description: 'Guardian-controlled booking, signed waivers, and message visibility for minors.',
       icon: ShieldCheck,
       href: '/for-parents',
     },
     {
-      title: 'Find a Coach for Your Athlete',
+      title: 'Find a coach for your athlete',
       description: 'Compare coaches by sport, age group, location, and reviews from completed sessions.',
       icon: Search,
       href: '/coaches',
     },
     {
-      title: 'Browse Organizations',
+      title: 'Browse organizations',
       description: 'Academies and clubs with published coach rosters you can book from.',
       icon: Building2,
       href: '/organizations',
     },
     {
-      title: 'How It Works',
+      title: 'How it works',
       description: 'Step-by-step: create a parent account, sign once per child, book and follow progress.',
       icon: ClipboardList,
       href: '/how-it-works',
@@ -105,19 +105,19 @@ const resourcesByAudience = {
       href: '/for-coaches',
     },
     {
-      title: 'How Getting Paid Works',
+      title: 'How getting paid works',
       description: 'Set your own rates and get paid securely to your bank through Stripe Connect — automatically, every session.',
       icon: CreditCard,
       href: '/for-coaches#coach-pricing',
     },
     {
-      title: 'Apply to Coach',
+      title: 'Apply to coach',
       description: 'Submit your application — sports, experience, and service area. Every application is reviewed.',
       icon: ClipboardList,
       href: '/apply/private-training-coach',
     },
     {
-      title: 'The Coach Journey',
+      title: 'The coach journey',
       description: 'Apply, complete the publish checklist, go live, and get paid — explained end to end.',
       icon: CalendarDays,
       href: '/how-it-works',
@@ -137,19 +137,19 @@ const resourcesByAudience = {
       href: '/for-organizations',
     },
     {
-      title: 'Create an Organization',
+      title: 'Create an organization',
       description: 'Set up your academy or club, invite coaches, and configure payout rules.',
       icon: ClipboardList,
       href: '/apply/organization',
     },
     {
-      title: 'See Active Organizations',
+      title: 'See active organizations',
       description: 'Browse the public directory of organizations already running on the platform.',
       icon: Search,
       href: '/organizations',
     },
     {
-      title: 'Payouts Explained',
+      title: 'Payouts explained',
       description: 'How flexible, configurable payouts work and how each share is paid out securely via Stripe.',
       icon: CreditCard,
       href: '/for-organizations',
@@ -164,9 +164,9 @@ const resourcesByAudience = {
 };
 
 const quickLinks = [
-  { title: 'How LevelCoach Works', description: 'Understand the platform', icon: ClipboardList, href: '/how-it-works' },
-  { title: 'Find a Coach', description: 'Search the marketplace', icon: Search, href: '/coaches' },
-  { title: 'How Getting Paid Works', description: 'Coach payouts via Stripe', icon: CreditCard, href: '/for-coaches#coach-pricing' },
+  { title: 'How LevelCoach works', description: 'Understand the platform', icon: ClipboardList, href: '/how-it-works' },
+  { title: 'Find a coach', description: 'Search the marketplace', icon: Search, href: '/coaches' },
+  { title: 'How getting paid works', description: 'Coach payouts via Stripe', icon: CreditCard, href: '/for-coaches#coach-pricing' },
   { title: 'Blog', description: 'Articles & updates', icon: BookOpen, href: '/blog' },
   { title: 'Terms of Service', description: 'Platform rules', icon: FileText, href: '/terms' },
   { title: 'Privacy Policy', description: 'Your data rights', icon: ShieldCheck, href: '/privacy' },
@@ -303,7 +303,7 @@ export default function Resources() {
           <aside className="space-y-4">
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" aria-label="Quick links">
               <h2 className="font-display text-xl font-bold tracking-normal text-slate-950">
-                Quick Links
+                Quick links
               </h2>
               <div className="mt-4 space-y-3">
                 {quickLinks.map((link) => (
@@ -327,7 +327,7 @@ export default function Resources() {
 
             <section id="support" className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 shadow-sm" aria-label="Contact support">
               <h2 className="font-display text-xl font-bold tracking-normal text-slate-950">
-                Contact Support
+                Contact support
               </h2>
               <p className="mt-1.5 text-xs leading-5 text-slate-700">
                 Questions about bookings, accounts, payments, or safety? Email us and a member of
@@ -346,7 +346,7 @@ export default function Resources() {
                 asChild
                 className="mt-4 h-10 w-full rounded-lg bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700"
               >
-                <a href={`mailto:${SUPPORT_EMAIL}`}>Email Support</a>
+                <a href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
               </Button>
             </section>
           </aside>

@@ -18,6 +18,15 @@ const STATUS_TONES = {
   dismissed: 'bg-secondary text-muted-foreground border-border',
 };
 
+// Display-only labels for stored status values.
+const STATUS_LABELS = {
+  all: 'All',
+  open: 'Open',
+  reviewing: 'Reviewing',
+  resolved: 'Resolved',
+  dismissed: 'Dismissed',
+};
+
 const CATEGORY_LABELS = {
   harassment: 'Harassment',
   inappropriate_content: 'Inappropriate content',
@@ -84,10 +93,10 @@ export default function AdminSafety() {
             <Link to="/admin" className="mb-3 inline-flex items-center text-sm text-muted-foreground hover:text-accent">
               <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" /> Back to admin
             </Link>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">SAFETY REPORTS</h1>
+            <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground">Safety reports</h1>
             <p className="text-muted-foreground">Reports filed by members from conversations and messages.</p>
           </div>
-          <Button variant="outline" onClick={load} disabled={loading} className="font-display uppercase tracking-wider">
+          <Button variant="outline" onClick={load} disabled={loading} className="font-semibold">
             <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> Refresh
           </Button>
         </div>
@@ -109,11 +118,11 @@ export default function AdminSafety() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setStatusFilter(status)}
-                className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-xs font-display uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   active ? 'border-accent text-accent' : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {status} <span className="ml-1 text-muted-foreground">({counts[status] ?? 0})</span>
+                {STATUS_LABELS[status] || status} <span className="ml-1 text-muted-foreground">({counts[status] ?? 0})</span>
               </button>
             );
           })}
@@ -145,10 +154,10 @@ export default function AdminSafety() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge className={`border text-xs ${STATUS_TONES[report.status || 'open'] || STATUS_TONES.open}`}>
-                        {report.status || 'open'}
+                        {STATUS_LABELS[report.status || 'open'] || report.status}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
-                        {CATEGORY_LABELS[report.category] || report.category || 'uncategorized'}
+                        {CATEGORY_LABELS[report.category] || report.category || 'Uncategorized'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm text-foreground">
@@ -164,7 +173,7 @@ export default function AdminSafety() {
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <span className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {report.created_date ? formatDistanceToNow(new Date(report.created_date), { addSuffix: true }) : ''}
                     </span>
                     {report.conversation_id && (

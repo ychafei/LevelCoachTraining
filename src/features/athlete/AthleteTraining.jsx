@@ -42,6 +42,35 @@ const ITEM_BADGES = {
   skipped: 'border-border bg-secondary/40 text-muted-foreground/70',
 };
 
+// Display-only labels for raw status values — never written back.
+const HOMEWORK_LABELS = {
+  assigned: 'Assigned',
+  submitted: 'Submitted',
+  reviewed: 'Reviewed',
+  archived: 'Archived',
+};
+
+const ITEM_LABELS = {
+  planned: 'Planned',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  skipped: 'Skipped',
+};
+
+const PLAN_LABELS = {
+  draft: 'Draft',
+  active: 'Active',
+  completed: 'Completed',
+  archived: 'Archived',
+};
+
+const GOAL_LABELS = {
+  active: 'Active',
+  achieved: 'Achieved',
+  paused: 'Paused',
+  archived: 'Archived',
+};
+
 function PlansSection({ plans, planItems, loading }) {
   const visiblePlans = plans.filter((plan) => ['active', 'draft', 'completed'].includes(plan.status));
   const itemsByPlan = useMemo(() => {
@@ -87,7 +116,7 @@ function PlansSection({ plans, planItems, loading }) {
                     ? 'border-green-500/20 bg-green-500/10 text-green-500'
                     : 'border-border bg-secondary/50 text-muted-foreground'}
                   >
-                    {plan.status}
+                    {PLAN_LABELS[plan.status] || plan.status}
                   </Badge>
                 </div>
                 {plan.description && (
@@ -97,7 +126,7 @@ function PlansSection({ plans, planItems, loading }) {
                   <div className="mt-3 space-y-3">
                     {weeks.map((week) => (
                       <div key={week}>
-                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
                           Week {week}
                         </p>
                         <ul className="space-y-1.5">
@@ -110,7 +139,7 @@ function PlansSection({ plans, planItems, loading }) {
                                 )}
                               </div>
                               <Badge className={`shrink-0 ${ITEM_BADGES[item.status] || ITEM_BADGES.planned}`}>
-                                {String(item.status || 'planned').replace('_', ' ')}
+                                {ITEM_LABELS[item.status] || ITEM_LABELS.planned}
                               </Badge>
                             </li>
                           ))}
@@ -168,7 +197,9 @@ function HomeworkSection({ homework, loading, onChanged, readOnly = false }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                    <Badge className={HOMEWORK_BADGES[item.status] || HOMEWORK_BADGES.archived}>{item.status}</Badge>
+                    <Badge className={HOMEWORK_BADGES[item.status] || HOMEWORK_BADGES.archived}>
+                      {HOMEWORK_LABELS[item.status] || item.status}
+                    </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {item.due_date
@@ -263,7 +294,7 @@ function GoalsSection({ goals, loading }) {
                     ? 'border-green-500/20 bg-green-500/10 text-green-500'
                     : 'border-border bg-secondary/50 text-muted-foreground'}
                   >
-                    {goal.status}
+                    {GOAL_LABELS[goal.status] || goal.status}
                   </Badge>
                 </div>
                 {goal.description && (

@@ -79,7 +79,7 @@ export default function About() {
             <Reveal as="div" y={20}>
               <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-blue-100 backdrop-blur">
                 <ShieldCheck className="h-4 w-4 text-blue-300" aria-hidden="true" />
-                <span className="text-xs font-bold uppercase tracking-widest">About LevelCoach Training</span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em]">About LevelCoach Training</span>
               </div>
 
               <h1 className="mt-6 font-display text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
@@ -116,7 +116,7 @@ export default function About() {
         {/* Mission */}
         <section aria-labelledby="mission-heading">
           <Reveal>
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Our mission</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Our mission</p>
             <h2 id="mission-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
               One platform for everyone in training
             </h2>
@@ -139,7 +139,7 @@ export default function About() {
         {/* Principles */}
         <section className="mt-12" aria-labelledby="principles-heading">
           <Reveal>
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">What we believe</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">What we believe</p>
             <h2 id="principles-heading" className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950">
               The principles behind the product
             </h2>
@@ -193,8 +193,8 @@ export default function About() {
       <CtaBand
         title="Join LevelCoach Training"
         description="Whether you're chasing your next level or coaching others to theirs, there's a place for you here."
-        primaryCta={{ to: '/create-account', label: 'Create Free Account' }}
-        secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply to Coach' }}
+        primaryCta={{ to: '/create-account', label: 'Create free account' }}
+        secondaryCta={{ to: '/apply/private-training-coach', label: 'Apply to coach' }}
       />
     </div>
   );

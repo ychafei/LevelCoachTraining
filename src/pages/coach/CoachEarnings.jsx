@@ -121,7 +121,7 @@ export default function CoachEarnings() {
       <div className="bg-card border border-destructive/30 rounded-lg p-6 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <p className="font-display tracking-wider text-foreground uppercase text-sm">No coach profile linked</p>
+          <p className="text-sm font-semibold text-foreground">No coach profile linked</p>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
               ? 'Your admin account is not linked to a coach record, so there are no earnings to show.'
@@ -141,7 +141,7 @@ export default function CoachEarnings() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wider text-foreground uppercase">Earnings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] text-foreground">Earnings</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Computed server-side from the payment ledger and real Stripe transfers.
         </p>
@@ -151,13 +151,13 @@ export default function CoachEarnings() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           {
-            label: 'Total Earned',
+            label: 'Total earned',
             value: totals ? formatCents(totals.earned_cents) : '—',
             sub: 'ledger, all-time',
             icon: DollarSign,
           },
           {
-            label: 'Paid Out',
+            label: 'Paid out',
             value: totals ? formatCents(totals.transfers_paid_cents) : '—',
             sub: totals && Number(totals.transfers_pending_cents) > 0
               ? `${formatCents(totals.transfers_pending_cents)} pending`
@@ -165,7 +165,7 @@ export default function CoachEarnings() {
             icon: Wallet,
           },
           {
-            label: 'Sessions Completed',
+            label: 'Sessions completed',
             value: totals ? totals.sessions_completed : '—',
             sub: 'all-time',
             icon: Receipt,
@@ -180,7 +180,7 @@ export default function CoachEarnings() {
           <div key={s.label} className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <s.icon className="w-4 h-4 text-accent" aria-hidden="true" />
-              <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{s.label}</span>
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{s.label}</span>
             </div>
             <p className="font-display text-xl sm:text-2xl font-bold text-foreground truncate">{s.value}</p>
             <p className="text-[11px] text-muted-foreground mt-1 truncate">{s.sub}</p>
@@ -199,7 +199,7 @@ export default function CoachEarnings() {
 
       {/* Fee disclosure + org split */}
       <div className="bg-card border border-border rounded-lg p-5">
-        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">How You're Paid</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-3">How you're paid</h2>
         <div className="space-y-2 text-sm text-muted-foreground">
           <p>
             Platform fee: <span className="text-foreground font-semibold">{formatBps(platformFeeBps)}</span> of each
@@ -234,8 +234,8 @@ export default function CoachEarnings() {
       {/* Monthly chart */}
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase">Monthly Earnings</h2>
-          <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">from the ledger</span>
+          <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Monthly earnings</h2>
+          <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">from the ledger</span>
         </div>
         {monthly.length === 0 ? (
           <div className="py-12 text-center">
@@ -274,7 +274,7 @@ export default function CoachEarnings() {
 
       {/* Ledger breakdown by type */}
       <div className="bg-card border border-border rounded-lg p-5">
-        <h2 className="font-display text-lg font-bold tracking-wider text-foreground uppercase mb-3">Ledger Breakdown</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground mb-3">Ledger breakdown</h2>
         {byType.length === 0 ? (
           <p className="text-sm text-muted-foreground">No ledger entries yet — entries are created when clients pay.</p>
         ) : (

@@ -65,7 +65,7 @@ export default function Settings() {
   return (
     <div className="py-12">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-8">SETTINGS</h1>
+        <h1 className="text-3xl font-bold tracking-[-0.01em] text-foreground mb-8">Settings</h1>
 
         {isCoach && (
           <Link
@@ -76,7 +76,7 @@ export default function Settings() {
               <div className="flex items-start gap-3">
                 <UserCircle className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-display tracking-wider text-foreground text-sm uppercase">Coaching Profile</p>
+                  <p className="text-sm font-semibold text-foreground">Coaching profile</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Bio, quote, training area, payment handles, and email verification live in your coach portal.
                   </p>
@@ -89,23 +89,23 @@ export default function Settings() {
 
         <Tabs defaultValue="profile">
           <TabsList className="bg-card border border-border mb-8">
-            <TabsTrigger value="profile" className="font-display tracking-wider uppercase text-xs">Profile</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs font-semibold">Profile</TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
           <TabsContent value="profile" className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="settings-phone" className="font-display tracking-wider uppercase text-xs">Phone</Label>
+                <Label htmlFor="settings-phone">Phone</Label>
                 <Input id="settings-phone" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} className="bg-card border-border mt-1" />
               </div>
               <div>
-                <Label htmlFor="settings-dob" className="font-display tracking-wider uppercase text-xs">Date of Birth</Label>
+                <Label htmlFor="settings-dob">Date of birth</Label>
                 <Input id="settings-dob" type="date" value={profile.dob} onChange={e => setProfile({...profile, dob: e.target.value})} className="bg-card border-border mt-1" />
               </div>
             </div>
             <div>
-              <Label htmlFor="settings-bio" className="font-display tracking-wider uppercase text-xs">Bio</Label>
+              <Label htmlFor="settings-bio">Bio</Label>
               <Textarea id="settings-bio" value={profile.bio} onChange={e => setProfile({...profile, bio: e.target.value})} className="bg-card border-border mt-1" rows={3} />
             </div>
 
@@ -113,22 +113,22 @@ export default function Settings() {
               const age = profile.dob ? Math.floor((Date.now() - new Date(profile.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
               return age !== null && age < 18 ? (
                 <div className="border-t border-border pt-6">
-                  <h3 className="font-display text-sm tracking-widest uppercase text-muted-foreground mb-4">Parent / Guardian Info</h3>
+                  <h3 className="text-sm font-semibold text-foreground mb-4">Parent / guardian info</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="settings-parent-first" className="font-display tracking-wider uppercase text-xs">Parent First Name</Label>
+                      <Label htmlFor="settings-parent-first">Parent first name</Label>
                       <Input id="settings-parent-first" value={profile.parent_first_name} onChange={e => setProfile({...profile, parent_first_name: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label htmlFor="settings-parent-last" className="font-display tracking-wider uppercase text-xs">Parent Last Name</Label>
+                      <Label htmlFor="settings-parent-last">Parent last name</Label>
                       <Input id="settings-parent-last" value={profile.parent_last_name} onChange={e => setProfile({...profile, parent_last_name: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label htmlFor="settings-parent-email" className="font-display tracking-wider uppercase text-xs">Parent Email</Label>
+                      <Label htmlFor="settings-parent-email">Parent email</Label>
                       <Input id="settings-parent-email" type="email" value={profile.parent_email} onChange={e => setProfile({...profile, parent_email: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                     <div>
-                      <Label htmlFor="settings-parent-phone" className="font-display tracking-wider uppercase text-xs">Parent Phone</Label>
+                      <Label htmlFor="settings-parent-phone">Parent phone</Label>
                       <Input id="settings-parent-phone" value={profile.parent_phone} onChange={e => setProfile({...profile, parent_phone: e.target.value})} className="bg-card border-border mt-1" />
                     </div>
                   </div>
@@ -136,8 +136,8 @@ export default function Settings() {
               ) : null;
             })()}
 
-            <Button onClick={saveProfile} disabled={saving} className="bg-accent text-accent-foreground font-display tracking-wider uppercase hover:bg-accent/90">
-              {saving ? 'Saving...' : 'Save Profile'}
+            <Button onClick={saveProfile} disabled={saving} className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+              {saving ? 'Saving...' : 'Save profile'}
             </Button>
           </TabsContent>
         </Tabs>

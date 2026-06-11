@@ -12,9 +12,11 @@ import { cn } from '@/lib/utils';
 const ORG_INVITE_TYPES = new Set(['org_invite', 'org_member_invite']);
 const ORG_INVITE_LINK = '/coach#org-invites';
 
-// Real notifications bell for the coach topbar. Reads the caller's own
+// Real notifications bell, role-agnostic: reads the signed-in caller's own
 // notifications rows (per-document grants scope listMine to the recipient),
 // shows a real unread badge, and marks unread rows read when the panel opens.
+// Used in the coach topbar (dark, default styles) and the platform Navbar
+// (light — pass buttonClassName overrides; cn/twMerge resolves conflicts).
 export default function NotificationsBell({ buttonClassName = '' }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -97,7 +99,7 @@ export default function NotificationsBell({ buttonClassName = '' }) {
           aria-label="Notifications"
           className="absolute right-0 top-full z-50 mt-3 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 text-foreground shadow-xl"
         >
-          <p className="px-2 pb-2 text-sm font-bold font-display tracking-wider uppercase">Notifications</p>
+          <p className="px-2 pb-2 text-sm font-semibold">Notifications</p>
           {loading ? (
             <div className="space-y-2 px-2 pb-2" aria-hidden="true">
               {[0, 1, 2].map((i) => (

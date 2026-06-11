@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/AuthContext';
+import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 import { useMyAthlete } from '@/features/athlete/useMyAthlete';
 import {
@@ -101,7 +102,7 @@ export default function AthletePortal() {
               <SectionCard
                 title="Your sessions"
                 icon={CalendarDays}
-                description="Cancel at least 24 hours ahead to get your credit back automatically. Later cancellations forfeit the credit unless the coach cancels."
+                description={CANCEL_POLICY_COPY}
               >
                 <SessionsPanel
                   sessions={sessionsData.sessions}

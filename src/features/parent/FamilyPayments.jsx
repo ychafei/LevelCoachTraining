@@ -18,6 +18,17 @@ const PAYMENT_BADGES = {
   cancelled: 'border-border bg-secondary/50 text-muted-foreground',
 };
 
+// Display-only labels for raw payment states — never written back.
+const PAYMENT_LABELS = {
+  paid: 'Paid',
+  created: 'Created',
+  refunded: 'Refunded',
+  partially_refunded: 'Partially refunded',
+  disputed: 'Disputed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+
 function CreditsCard({ user }) {
   const query = useQuery({
     queryKey: ['portal', 'credits', user?.id],
@@ -54,7 +65,7 @@ function CreditsCard({ user }) {
         />
       ) : (
         <div>
-          <p className="font-display text-2xl font-bold text-foreground">
+          <p className="text-2xl font-bold tabular-nums text-foreground">
             {remaining}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               session{remaining === 1 ? '' : 's'} remaining across {credits.length} package{credits.length === 1 ? '' : 's'}
@@ -128,7 +139,7 @@ function PaymentHistoryCard({ user }) {
                   </p>
                 </div>
                 <Badge className={PAYMENT_BADGES[state] || PAYMENT_BADGES.created}>
-                  {String(state).replace(/_/g, ' ')}
+                  {PAYMENT_LABELS[state] || String(state).replace(/_/g, ' ')}
                 </Badge>
               </li>
             );

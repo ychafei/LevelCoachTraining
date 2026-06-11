@@ -14,6 +14,15 @@ const STATUS_TONES = {
   no_show: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
 };
 
+// Display-only labels for session statuses — stored values never change.
+const STATUS_LABELS = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  no_show: 'No show',
+};
+
 function monthLabel(month) {
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) return month || '—';
   const [year, m] = month.split('-').map(Number);
@@ -98,7 +107,7 @@ export default function OrgBookingsTab({ organizationId, isOrgAdmin }) {
                 </p>
               </div>
               <Badge className={`border text-xs ${STATUS_TONES[session.status] || 'bg-secondary text-muted-foreground border-border'}`}>
-                {session.status}
+                {STATUS_LABELS[session.status] || session.status}
               </Badge>
             </li>
           ))}

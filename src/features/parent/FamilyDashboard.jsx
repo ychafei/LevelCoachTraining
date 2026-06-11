@@ -62,7 +62,7 @@ function StatTile({ icon: Icon, label, value, sub, tone = 'accent', delay = 0 })
           <p className="text-xs font-semibold leading-tight text-muted-foreground">{label}</p>
         </div>
         <div className="mt-3">
-          <p className="font-display text-2xl font-extrabold tracking-tight text-foreground">{value}</p>
+          <p className="text-2xl font-extrabold tracking-tight tabular-nums text-foreground">{value}</p>
           {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
         </div>
       </div>
@@ -98,7 +98,7 @@ function ChildCard({ child, link, nextSession, coachesById, onView, onEdit }) {
           onClick={() => onView(child)}
           className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
         >
-          <h3 className="truncate font-display text-base font-bold tracking-tight text-foreground">
+          <h3 className="truncate text-base font-bold tracking-[-0.01em] text-foreground">
             {[child.first_name, child.last_name].filter(Boolean).join(' ') || 'Athlete'}
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -133,7 +133,7 @@ function ChildCard({ child, link, nextSession, coachesById, onView, onEdit }) {
       </div>
 
       <div className="mt-3 rounded-lg border border-border bg-background/40 p-2.5">
-        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
           <CalendarDays className="h-3 w-3 text-accent" aria-hidden="true" /> Next session
         </p>
         {nextSession ? (

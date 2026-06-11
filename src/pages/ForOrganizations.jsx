@@ -96,8 +96,8 @@ export default function ForOrganizations() {
         title="Your academy,"
         highlight="running on autopilot"
         description="Bring your coach roster to LevelCoach: branded public pages, automated payouts on every session, and compliance gates that protect your club and your athletes."
-        primaryCta={{ to: '/apply/organization', label: 'Create an Organization' }}
-        secondaryCta={{ to: '/organizations', label: 'See Active Organizations' }}
+        primaryCta={{ to: '/apply/organization', label: 'Create an organization' }}
+        secondaryCta={{ to: '/organizations', label: 'See active organizations' }}
         image={{
           ...MARKETING_IMAGES.organizationsHero,
           badge: {
@@ -125,7 +125,7 @@ export default function ForOrganizations() {
       {/* Qualitative payout controls — no figures, real mechanics. */}
       <section className="mx-auto max-w-[1240px] px-4 pb-10 sm:px-6 lg:px-8" aria-labelledby="payout-controls-heading">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Payout controls you configure</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Payout controls you configure</p>
           <h2 id="payout-controls-heading" className="mt-2 font-display text-2xl font-bold tracking-normal text-slate-950">
             You decide how each session is paid out
           </h2>
@@ -142,7 +142,7 @@ export default function ForOrganizations() {
             ].map(({ label, body, tone, icon: Icon }) => (
               <div key={label} className={`rounded-lg p-4 ring-1 ${tone}`}>
                 <Icon className="h-5 w-5" aria-hidden="true" />
-                <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em]">{label}</p>
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em]">{label}</p>
                 <p className="mt-1.5 text-sm leading-6 text-slate-600">{body}</p>
               </div>
             ))}
@@ -155,8 +155,8 @@ export default function ForOrganizations() {
       <CtaBand
         title="Bring your organization to LevelCoach"
         description="Create your organization, invite your coaches, and let the platform handle scheduling, payments, and splits."
-        primaryCta={{ to: '/apply/organization', label: 'Create an Organization' }}
-        secondaryCta={{ to: '/for-coaches', label: 'Coaching Solo Instead?' }}
+        primaryCta={{ to: '/apply/organization', label: 'Create an organization' }}
+        secondaryCta={{ to: '/for-coaches', label: 'Coaching solo instead?' }}
       />
     </div>
   );

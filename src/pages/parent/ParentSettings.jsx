@@ -60,7 +60,7 @@ function Card({ title, icon: Icon, blurb, children, action }) {
         <div>
           <div className="flex items-center gap-2">
             {Icon && <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />}
-            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">{title}</h2>
+            <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
           </div>
           {blurb && <p className="mt-1 text-sm text-muted-foreground">{blurb}</p>}
         </div>
@@ -158,7 +158,7 @@ function AccountSection({ user, refetchUser }) {
           {user?.photo_url ? (
             <img src={user.photo_url} alt="Your profile" className="h-full w-full object-cover" />
           ) : (
-            <span className="font-display text-xl text-muted-foreground/60">{initialsOf(user)}</span>
+            <span className="text-xl font-semibold text-muted-foreground/60">{initialsOf(user)}</span>
           )}
         </div>
         <div>
@@ -445,7 +445,7 @@ function LegalSection({ user, family }) {
           key={selected.id}
           signerRole="guardian"
           athleteId={selected.id}
-          title={`Guardian Legal Packet — ${[selected.first_name, selected.last_name].filter(Boolean).join(' ') || 'Athlete'}`}
+          title={`Guardian legal packet — ${[selected.first_name, selected.last_name].filter(Boolean).join(' ') || 'Athlete'}`}
           description="Guardian authority, minor participation, medical, media, and safety documents for this athlete. A complete packet is required before booking for them."
         />
       )}
@@ -481,8 +481,8 @@ export default function ParentSettings() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to family
         </Link>
         <header className="mt-3">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Parent Settings</p>
-          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Parent settings</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-[-0.01em] text-foreground">
             {fullName(user)}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

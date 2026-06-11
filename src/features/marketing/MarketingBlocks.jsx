@@ -115,7 +115,7 @@ export function BenefitGrid({ eyebrow, title, description, items, columns = 3 })
   return (
     <section className="mx-auto max-w-[1240px] px-4 py-12 sm:px-6 lg:px-8">
       <Reveal className="max-w-3xl">
-        {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">{eyebrow}</p>}
+        {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">{eyebrow}</p>}
         {title && <h2 className="mt-2 font-display text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">{title}</h2>}
         {description && <p className="mt-3 text-base leading-7 text-slate-600">{description}</p>}
       </Reveal>
@@ -143,7 +143,7 @@ export function StepStrip({ title, steps }) {
     <section className="mx-auto max-w-[1240px] px-4 pb-12 sm:px-6 lg:px-8">
       <Reveal>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          {title && <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">{title}</p>}
+          {title && <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">{title}</p>}
           <div className="mt-5 grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
             {steps.map((step, index) => (
               <div key={step.title} className="py-5 first:pt-0 last:pb-0 md:px-6 md:py-0 md:first:pl-0 md:last:pr-0">

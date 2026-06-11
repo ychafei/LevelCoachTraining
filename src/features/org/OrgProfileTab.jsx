@@ -141,7 +141,7 @@ export default function OrgProfileTab({ organization, isOrgAdmin, onSaved }) {
             <p className="mt-2 text-xs text-muted-foreground">PNG or JPG. Stored in the public org-logos bucket.</p>
           </div>
           <div className="min-w-44">
-            <Label htmlFor="org-brand-color" className="text-xs uppercase tracking-wider text-muted-foreground">Brand color</Label>
+            <Label htmlFor="org-brand-color" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Brand color</Label>
             <div className="mt-1 flex items-center gap-2">
               <input
                 id="org-brand-color"
@@ -169,31 +169,31 @@ export default function OrgProfileTab({ organization, isOrgAdmin, onSaved }) {
         <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Organization details</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="org-name" className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
+            <Label htmlFor="org-name" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Name</Label>
             <Input id="org-name" value={form.name} onChange={(event) => set('name', event.target.value)} required minLength={2} disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div>
-            <Label htmlFor="org-type" className="text-xs uppercase tracking-wider text-muted-foreground">Type</Label>
+            <Label htmlFor="org-type" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Type</Label>
             <Input id="org-type" value={form.type} onChange={(event) => set('type', event.target.value)} placeholder="Club, academy, training facility..." disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div>
-            <Label htmlFor="org-email" className="text-xs uppercase tracking-wider text-muted-foreground">Contact email</Label>
+            <Label htmlFor="org-email" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Contact email</Label>
             <Input id="org-email" type="email" value={form.contact_email} onChange={(event) => set('contact_email', event.target.value)} disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div>
-            <Label htmlFor="org-phone" className="text-xs uppercase tracking-wider text-muted-foreground">Contact phone</Label>
+            <Label htmlFor="org-phone" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Contact phone</Label>
             <Input id="org-phone" type="tel" value={form.contact_phone} onChange={(event) => set('contact_phone', event.target.value)} disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div>
-            <Label htmlFor="org-website" className="text-xs uppercase tracking-wider text-muted-foreground">Website</Label>
+            <Label htmlFor="org-website" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Website</Label>
             <Input id="org-website" type="url" value={form.website_url} onChange={(event) => set('website_url', event.target.value)} placeholder="https://" disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div>
-            <Label htmlFor="org-area" className="text-xs uppercase tracking-wider text-muted-foreground">Service area</Label>
+            <Label htmlFor="org-area" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Service area</Label>
             <Input id="org-area" value={form.service_area_label} onChange={(event) => set('service_area_label', event.target.value)} placeholder="Metro Detroit, Oakland County..." disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" />
           </div>
           <div className="sm:col-span-2">
-            <Label htmlFor="org-description" className="text-xs uppercase tracking-wider text-muted-foreground">Description</Label>
+            <Label htmlFor="org-description" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Description</Label>
             <Textarea id="org-description" value={form.description} onChange={(event) => set('description', event.target.value)} rows={4} disabled={!isOrgAdmin} className="mt-1 bg-secondary border-border" placeholder="What your organization offers athletes and families." />
           </div>
         </div>
@@ -229,7 +229,7 @@ export default function OrgProfileTab({ organization, isOrgAdmin, onSaved }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!isOrgAdmin || saving} className="bg-accent text-accent-foreground hover:bg-accent/90 font-display tracking-wider uppercase">
+        <Button type="submit" disabled={!isOrgAdmin || saving} className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold">
           {saving ? 'Saving...' : 'Save profile'}
         </Button>
         {!isOrgAdmin && (

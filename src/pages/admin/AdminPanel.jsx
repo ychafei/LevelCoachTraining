@@ -21,7 +21,7 @@ const adminLinks = [
   { label: 'Content', path: '/admin/content', icon: FileText, desc: 'Edit site content' },
   { label: 'Pricing', path: '/admin/pricing', icon: DollarSign, desc: 'Manage packages' },
   { label: 'Applications', path: '/admin/applications', icon: Briefcase, desc: 'Review applications' },
-  { label: 'Legal Vault', path: '/admin/legal-documents', icon: FileText, desc: 'Templates, signatures, PDFs, and notes' },
+  { label: 'Legal vault', path: '/admin/legal-documents', icon: FileText, desc: 'Templates, signatures, PDFs, and notes' },
   { label: 'Blog', path: '/admin/blog', icon: PenTool, desc: 'Create & edit posts' },
   { label: 'Users', path: '/admin/users', icon: Shield, desc: 'Manage users & roles' },
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare, desc: 'View conversations' },
@@ -97,7 +97,7 @@ function StatTile({ label, value, icon: Icon, hint, to }) {
     <div className="bg-card border border-border rounded-lg p-4 hover:border-accent/30 transition-colors h-full">
       <div className="flex items-center gap-2 mb-2">
         <Icon className="w-4 h-4 text-accent" />
-        <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">{label}</span>
+        <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
       </div>
       <p className="font-display text-2xl font-bold text-foreground">{value}</p>
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
@@ -206,14 +206,14 @@ export default function AdminPanel() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-end justify-between flex-wrap gap-3 mb-2">
           <div>
-            <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">ADMIN PANEL</h1>
+            <h1 className="text-4xl font-bold tracking-[-0.01em] text-foreground">Admin panel</h1>
             <p className="text-muted-foreground">Operations overview for LevelCoach Training.</p>
           </div>
           <div className="flex items-center gap-3">
             <ViewAsMenu />
             {user?.email && (
-              <p className="text-xs font-display tracking-widest uppercase text-muted-foreground">
-                Signed in as <span className="text-foreground">{user.email}</span>
+              <p className="text-xs text-muted-foreground">
+                Signed in as <span className="font-semibold text-foreground">{user.email}</span>
               </p>
             )}
           </div>
@@ -221,7 +221,7 @@ export default function AdminPanel() {
 
         {/* Metrics grid */}
         <div className="mt-8">
-          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
+          <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3 flex items-center gap-2">
             <TrendingUp className="w-3.5 h-3.5" /> Snapshot
           </h2>
           {loading ? (
@@ -233,56 +233,56 @@ export default function AdminPanel() {
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <StatTile
-                label="Upcoming Sessions"
+                label="Upcoming sessions"
                 value={stats.upcomingSessions}
                 icon={CalendarClock}
                 hint="pending + confirmed, today onward"
                 to="/admin/bookings"
               />
               <StatTile
-                label="Completed / Month"
+                label="Completed / month"
                 value={stats.completedThisMonth}
                 icon={CheckCircle2}
                 hint="this calendar month"
                 to="/admin/bookings"
               />
               <StatTile
-                label="Stripe Paid"
+                label="Stripe paid"
                 value={formatCents(stats.stripePaid)}
                 icon={DollarSign}
                 hint="verified checkout payments"
                 to="/admin/payments"
               />
               <StatTile
-                label="Active Coaches"
+                label="Active coaches"
                 value={`${stats.activeCoaches}${stats.totalCoaches !== stats.activeCoaches ? ` / ${stats.totalCoaches}` : ''}`}
                 icon={UserCheck}
                 hint="visible to clients"
                 to="/admin/coaches"
               />
               <StatTile
-                label="Active Clients 30d"
+                label="Active clients 30d"
                 value={stats.activeClients}
                 icon={Users}
                 hint="had a session in last 30 days"
                 to="/admin/users"
               />
               <StatTile
-                label="Pending Applications"
+                label="Pending applications"
                 value={stats.pendingApps}
                 icon={Briefcase}
                 hint="awaiting review"
                 to="/admin/applications"
               />
               <StatTile
-                label="Outstanding Credits"
+                label="Outstanding credits"
                 value={stats.outstandingCredits}
                 icon={Zap}
                 hint="unredeemed sessions across all clients"
                 to="/admin/credits"
               />
               <StatTile
-                label="Total Bookings"
+                label="Total bookings"
                 value={data.sessions.length}
                 icon={Calendar}
                 hint="all-time"
@@ -294,8 +294,8 @@ export default function AdminPanel() {
 
         {/* Recent admin activity */}
         <div className="mt-10">
-          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
-            <History className="w-3.5 h-3.5" /> Recent Admin Activity
+          <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3 flex items-center gap-2">
+            <History className="w-3.5 h-3.5" /> Recent admin activity
           </h2>
           <div className="bg-card border border-border rounded-lg divide-y divide-border">
             {!auditLogAvailable && !loading && (
@@ -322,7 +322,7 @@ export default function AdminPanel() {
                 <div key={entry.id} className="p-3 flex items-start justify-between gap-3 text-sm">
                   <div className="min-w-0 flex-1">
                     <p className="text-foreground">
-                      <span className="font-display tracking-wider text-accent">{actor}</span>
+                      <span className="font-semibold text-accent">{actor}</span>
                       <span className="text-muted-foreground"> {verb}</span>
                       {target && <span className="text-muted-foreground"> · {target}</span>}
                       {reason && <span className="text-muted-foreground italic">{reason}</span>}
@@ -333,7 +333,7 @@ export default function AdminPanel() {
                       </p>
                     )}
                   </div>
-                  <span className="text-[10px] font-display tracking-widest uppercase text-muted-foreground flex-shrink-0">
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
                     {when}
                   </span>
                 </div>
@@ -344,7 +344,7 @@ export default function AdminPanel() {
 
         {/* Navigation tiles (existing) */}
         <div className="mt-10">
-          <h2 className="font-display text-xs font-bold tracking-[0.25em] uppercase text-muted-foreground mb-3">
+          <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-3">
             Manage
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -355,7 +355,7 @@ export default function AdminPanel() {
                 className="bg-card border border-border rounded-lg p-6 hover:border-accent/30 transition-all group"
               >
                 <Icon className="w-6 h-6 text-accent mb-3 group-hover:scale-110 transition-transform" />
-                <h3 className="font-display text-lg tracking-wider text-foreground">{label.toUpperCase()}</h3>
+                <h3 className="text-lg font-semibold text-foreground">{label}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{desc}</p>
               </Link>
             ))}

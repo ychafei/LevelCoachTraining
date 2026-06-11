@@ -50,7 +50,7 @@ export default function VerifyEmail() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md bg-[#FFFFFF] text-[#0F172A] rounded-2xl shadow-2xl p-8 sm:p-10 space-y-5 text-center">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em]">
           Email verification
         </h1>
 
