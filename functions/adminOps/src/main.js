@@ -343,7 +343,14 @@ async function setCoachFee(ctx, payload) {
   const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
   if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
 
-  await databases.updateDocument(DB_ID, 'coaches', coachId, { platform_fee_bps: feeBps });
+  try {
+    await databases.updateDocument(DB_ID, 'coaches', coachId, { platform_fee_bps: feeBps });
+  } catch (err) {
+    if (/Unknown attribute/.test(String(err?.message || ''))) {
+      return { status: 409, body: { error: 'Per-coach fee overrides are not available on this collection. The global platform fee applies.' } };
+    }
+    throw err;
+  }
   await writeAudit(databases, {
     actor_email: actor.email,
     actor_role: 'super_admin',

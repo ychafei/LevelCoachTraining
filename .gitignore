@@ -32,3 +32,4 @@ output
 .env
 .vite
 .vercel
+backups/
