@@ -232,45 +232,59 @@ function KineticUnderline() {
   );
 }
 
-// Signature 3D moment (React Three Fiber, lazy): an abstract globe of
-// points with amber active nodes and arcing connections — the marketplace as
-// a living network. It mounts AFTER first paint, only on capable pointer
-// devices, over a static poster: never part of LCP, removable with zero
-// layout shift, and skipped entirely for reduced-motion / save-data / weak
-// hardware.
-const HeroOrb = React.lazy(() => import('@/features/marketing/HeroOrb'));
+// Signature 3D moment (React Three Fiber, lazy): "The Ascent" — an athlete's
+// progress path climbing through the platform's real 1–10 level scale, with
+// an amber athlete-dot traveling it and session milestones igniting as it
+// passes. It mounts AFTER first paint, only on capable pointer devices, over
+// a static poster: never part of LCP, removable with zero layout shift, and
+// skipped entirely for reduced-motion / save-data / weak hardware.
+const HeroAscent = React.lazy(() => import('@/features/marketing/HeroAscent'));
 
-// Static poster: concentric dotted rings echoing the orb. This is what
-// reduced-motion users, weak devices, crawlers, and the pre-mount frame see.
-function OrbPoster() {
+// Static poster: the same rising journey, frozen — level terraces, a dotted
+// climb with one honest dip, lit milestones, and the amber athlete-dot. This
+// is what reduced-motion users, weak devices, crawlers, and the pre-mount
+// frame see.
+function AscentPoster() {
+  const path = 'M 38 320 C 80 296, 104 272, 134 250 C 158 232, 166 268, 188 258 C 224 240, 240 196, 272 168 C 304 140, 330 116, 362 88';
   return (
     <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
-        <radialGradient id="orb-glow" cx="50%" cy="46%" r="55%">
-          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.28" />
-          <stop offset="55%" stopColor="#13357a" stopOpacity="0.12" />
+        <radialGradient id="ascent-glow" cx="58%" cy="42%" r="60%">
+          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.24" />
+          <stop offset="55%" stopColor="#13357a" stopOpacity="0.1" />
           <stop offset="100%" stopColor="#0b2350" stopOpacity="0" />
         </radialGradient>
+        <linearGradient id="ascent-line" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#3b5a96" />
+          <stop offset="100%" stopColor="#9db8e8" />
+        </linearGradient>
       </defs>
-      <circle cx="200" cy="196" r="170" fill="url(#orb-glow)" />
-      {[150, 118, 84].map((r, ring) => (
-        <circle
-          key={r}
-          cx="200"
-          cy="196"
-          r={r}
-          fill="none"
+      <circle cx="210" cy="190" r="180" fill="url(#ascent-glow)" />
+      {/* Level terraces: the 1–10 assessment scale as faint rungs */}
+      {Array.from({ length: 10 }, (_, i) => 344 - i * 30).map((y, i) => (
+        <line
+          key={y}
+          x1="30"
+          y1={y}
+          x2="370"
+          y2={y}
           stroke="#9db8e8"
-          strokeOpacity={0.32 - ring * 0.07}
-          strokeWidth="1.6"
-          strokeDasharray="1.5 9"
-          strokeLinecap="round"
+          strokeOpacity={0.08 + i * 0.012}
+          strokeWidth="1"
         />
       ))}
-      <ellipse cx="200" cy="196" rx="150" ry="52" fill="none" stroke="#3b82f6" strokeOpacity="0.3" strokeWidth="1.4" strokeDasharray="1.5 8" />
-      {[[200, 46], [328, 144], [96, 260], [252, 320], [120, 110]].map(([cx, cy]) => (
-        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="5" fill="#f5a623" />
+      {/* The climb — dotted, with a believable mid-journey dip */}
+      <path d={path} fill="none" stroke="url(#ascent-line)" strokeOpacity="0.75" strokeWidth="2" strokeDasharray="1.5 7" strokeLinecap="round" />
+      {/* Milestones already reached glow amber; the ones ahead wait in navy */}
+      {[[38, 320], [134, 250], [188, 258], [272, 168]].map(([cx, cy]) => (
+        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="4.5" fill="#f5a623" fillOpacity="0.9" />
       ))}
+      {[[362, 88]].map(([cx, cy]) => (
+        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="6" fill="none" stroke="#9db8e8" strokeOpacity="0.7" strokeWidth="1.6" />
+      ))}
+      {/* The athlete-dot, mid-climb */}
+      <circle cx="272" cy="168" r="11" fill="#f5a623" fillOpacity="0.22" />
+      <circle cx="272" cy="168" r="5.5" fill="#f5a623" />
     </svg>
   );
 }
@@ -305,11 +319,11 @@ function HeroVisual() {
 
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[520px]">
-      <OrbPoster />
+      <AscentPoster />
       {ready && (
         <div className="absolute inset-0 animate-[rise-fade_0.8s_ease-out]">
           <React.Suspense fallback={null}>
-            <HeroOrb />
+            <HeroAscent />
           </React.Suspense>
         </div>
       )}

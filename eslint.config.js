@@ -80,7 +80,7 @@ export default [
   {
     // React Three Fiber renders three.js primitives as JSX — eslint's DOM
     // property check doesn't know that vocabulary.
-    files: ["src/features/marketing/HeroOrb.jsx"],
+    files: ["src/features/marketing/HeroAscent.jsx"],
     rules: { "react/no-unknown-property": "off" },
   },
 ];

@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import PayoutFlow from '@/features/marketing/PayoutFlow';
 
 // Qualitative "how getting paid works" + trust section. Intentionally carries
 // no rates, fees, or percentages — those live in the booking/checkout funnel,
@@ -65,6 +66,8 @@ export default function CoachPricingSection() {
           moves your earnings straight to your bank — automatically, every session.
         </p>
       </div>
+
+      <PayoutFlow />
 
       <div className="mx-auto mt-7 grid max-w-[1080px] grid-cols-1 gap-5 md:grid-cols-3">
         {PAYOUT_POINTS.map(({ title, body, icon: Icon }) => (

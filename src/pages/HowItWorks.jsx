@@ -18,6 +18,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { CtaBand } from '@/features/marketing/MarketingBlocks';
@@ -108,6 +109,25 @@ const ACCENTS = {
   violet: { chip: 'bg-violet-50 text-violet-700 ring-violet-100', step: 'bg-violet-600' },
 };
 
+// The line between step numbers draws itself top-down as the card scrolls
+// into view — the journey literally traces forward. Static for reduced motion.
+function StepConnector({ delay }) {
+  const reduce = useReducedMotion();
+  if (reduce) {
+    return <span className="mt-1 w-px flex-1 bg-slate-200" aria-hidden="true" />;
+  }
+  return (
+    <motion.span
+      className="mt-1 w-px flex-1 origin-top bg-slate-300"
+      aria-hidden="true"
+      initial={{ scaleY: 0 }}
+      whileInView={{ scaleY: 1 }}
+      viewport={{ once: true, amount: 0.6 }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+    />
+  );
+}
+
 function JourneyCard({ journey }) {
   const accent = ACCENTS[journey.accent] || ACCENTS.blue;
   const Icon = journey.icon;
@@ -130,7 +150,7 @@ function JourneyCard({ journey }) {
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold text-white ${accent.step}`}>
                 {index + 1}
               </span>
-              {index < journey.steps.length - 1 && <span className="mt-1 w-px flex-1 bg-slate-200" aria-hidden="true" />}
+              {index < journey.steps.length - 1 && <StepConnector delay={0.15 + index * 0.25} />}
             </div>
             <div className="pb-1">
               <div className="flex items-center gap-2">
