@@ -119,16 +119,39 @@ export const auth = {
     return auth.getCurrentUser();
   },
 
-  // Kick off an OAuth round-trip. Appwrite redirects the browser to the
-  // provider; on success the provider redirects back to `successUrl` with an
-  // active session cookie. `provider` is one of 'google' | 'microsoft' |
-  // 'facebook' | 'apple' (matches the OAuthProvider enum).
+  // Kick off an OAuth round-trip using Appwrite's TOKEN flow (not the cookie
+  // flow): on success Appwrite redirects back to /login with userId+secret
+  // query params and the app finishes via completeTokenSession below. The
+  // cookie flow sets the session cookie during a cross-site redirect, which
+  // Safari ITP / Chrome Incognito / hardened Firefox block (third-party
+  // cookie) — the user bounces back to /login signed out. The token flow
+  // creates the session through an SDK call, so the SDK persists its
+  // localStorage cookieFallback and works without third-party cookies.
+  // `provider` is one of 'google' | 'microsoft' | 'facebook' | 'apple'
+  // (matches the OAuthProvider enum).
   createOAuthSession: (provider, next) => {
     const success = `${window.location.origin}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
     const failure = `${window.location.origin}/login?oauth_error=1`;
     const key = String(provider).toLowerCase();
     const resolved = OAuthProvider[key.charAt(0).toUpperCase() + key.slice(1)] || key;
-    return account.createOAuth2Session(resolved, success, failure);
+    return account.createOAuth2Token({ provider: resolved, success, failure });
+  },
+
+  // Finish any token-based sign-in (OAuth token flow + magic links): both
+  // land on /login with userId+secret and complete through the same
+  // sessions/token endpoint. Create-first, delete-on-conflict: a stale or
+  // already-used token must fail WITHOUT destroying a live session (clicking
+  // an expired link while signed in must not log the user out).
+  completeTokenSession: async (userId, secret) => {
+    try {
+      await account.createSession({ userId, secret });
+    } catch (err) {
+      if (err?.type !== 'user_session_already_exists') throw err;
+      // A live session blocks token sign-in — replace it and retry once.
+      try { await account.deleteSession('current'); } catch { /* already gone */ }
+      await account.createSession({ userId, secret });
+    }
+    return auth.getCurrentUser();
   },
 
   // Send a password-recovery email. Appwrite renders the link using its
@@ -144,17 +167,15 @@ export const auth = {
   },
 
   // Send a magic-URL email; the link returns to `${location.origin}/login`
-  // by default and `account.updateMagicURLSession` finishes the session.
+  // by default and `completeTokenSession` finishes the session.
   sendMagicLink: async (email, returnUrl) => {
     const url = returnUrl || `${window.location.origin}/login`;
     return account.createMagicURLToken({ userId: 'unique()', email, url });
   },
 
-  // Used by the magic-URL return route to finalise the session.
-  completeMagicLink: async (userId, secret) => {
-    await account.updateMagicURLSession({ userId, secret });
-    return auth.getCurrentUser();
-  },
+  // Used by the magic-URL return route to finalise the session. Same
+  // endpoint as the OAuth token flow — kept as a named alias for clarity.
+  completeMagicLink: (userId, secret) => auth.completeTokenSession(userId, secret),
 
   // Drop the current Appwrite session. `returnUrl` is accepted for API
   // compatibility with the old legacy wrapper but isn't needed — callers

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronDown,
@@ -17,13 +17,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
 
 // auth.js throws { type: 'account_banned' } after dropping the session of a
-// suspended account — surface that distinctly from bad credentials.
+// suspended account — surface that distinctly from bad credentials. Token
+// failures (expired magic link / OAuth return) are also 401s but must not
+// read as a password problem on a passwordless flow.
 function loginErrorMessage(err, fallback) {
   if (err?.type === 'account_banned') {
     return `This account has been suspended and can no longer sign in. If you believe this is a mistake, contact ${SUPPORT_EMAIL}.`;
   }
-  if (err?.code === 401) return 'Invalid email or password.';
+  if (err?.type === 'user_invalid_token' || err?.type === 'user_session_already_exists') {
+    return 'Sign-in could not be completed — the link or sign-in attempt is invalid or expired. Please try again.';
+  }
   if (err?.code === 429) return 'Too many attempts. Wait a minute, then try again.';
+  if (err?.code === 401) return 'Invalid email or password.';
   return err?.message || fallback;
 }
 
@@ -44,7 +49,14 @@ export default function Login() {
   const explicitNext = params.get('next');
   const safeNext = getSafeNextPath(explicitNext);
 
+  // While a token sign-in (OAuth return / magic link) is being completed, the
+  // already-authenticated redirect must hold off — AuthContext's concurrent
+  // session check could otherwise navigate away and unmount this page
+  // mid-completion. Token completion navigates explicitly when it finishes.
+  const completingToken = useRef(false);
+
   useEffect(() => {
+    if (completingToken.current) return;
     if (!isLoadingAuth && isAuthenticated && user) {
       navigate(postAuthRedirectPath(user, safeNext), { replace: true });
     }
@@ -58,18 +70,31 @@ export default function Login() {
       setFormError('Sign-in with that provider failed. Try another method.');
     }
 
+    // OAuth (token flow) and magic links both return here with userId+secret.
     const userId = params.get('userId');
     const secret = params.get('secret');
     if (userId && secret) {
+      completingToken.current = true;
+      // Scrub the one-time secret from the address bar / history immediately.
+      const scrubbed = new URLSearchParams(window.location.search);
+      scrubbed.delete('userId');
+      scrubbed.delete('secret');
+      const qs = scrubbed.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
       (async () => {
         try {
           setSubmitting(true);
-          await auth.completeMagicLink(userId, secret);
-          const fresh = await refetchUser();
+          const fresh = await auth.completeTokenSession(userId, secret).then(() => refetchUser());
+          completingToken.current = false;
           navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
         } catch (err) {
-          setFormError(loginErrorMessage(err, 'Sign-in link is invalid or expired.'));
+          completingToken.current = false;
+          setFormError(loginErrorMessage(err, 'Sign-in could not be completed — the link or sign-in attempt is invalid or expired. Please try again.'));
           setSubmitting(false);
+          // Re-sync auth state: an existing session survives a stale token
+          // (create-first semantics), and the redirect effect may then route
+          // the still-signed-in user onward.
+          refetchUser().catch(() => null);
         }
       })();
     }
