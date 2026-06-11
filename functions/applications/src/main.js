@@ -251,6 +251,21 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
   // Approve: create the coach record (unpublished, inactive until onboarding).
   // Email/phone are PII and live in coach_private now — not on the coach doc.
   const profile = await linkableProfile(databases, users, application.email);
+  if (profile) {
+    // Same invariants as adminOps linkCoachAccount/createCoach: one coach
+    // record per profile, one per account (coachSelf/training resolve by
+    // user_id with limit 1 — a duplicate makes resolution nondeterministic).
+    if (profile.coach_id) {
+      return { status: 409, body: { error: 'This applicant is already linked to a coach record.' } };
+    }
+    const owned = await databases.listDocuments(DB_ID, 'coaches', [
+      Query.equal('user_id', profile.account_id),
+      Query.limit(1),
+    ]);
+    if (owned.documents[0]) {
+      return { status: 409, body: { error: 'This account already owns a coach record.' } };
+    }
+  }
   const coach = await createCoachResilient(databases, {
     first_name: application.first_name,
     last_name: application.last_name,
@@ -271,11 +286,19 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
   });
 
   if (profile) {
+    // Roles stack: approving an admin's coach application must not demote
+    // their profile.role — the coach grant rides on the label + coach_id.
+    // Labels are the authority; profiles.role is the drift-prone fallback.
+    const account = await users.get(profile.account_id).catch(() => null);
+    const labels = account?.labels || [];
+    const approvedRole = labels.includes('superadmin') ? 'super_admin'
+      : labels.includes('admin') ? 'admin'
+      : (!account && ['admin', 'super_admin'].includes(profile.role)) ? profile.role
+      : 'coach';
     await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
-      role: 'coach',
+      role: approvedRole,
       coach_id: coach.$id,
     });
-    const account = await users.get(profile.account_id).catch(() => null);
     if (account) {
       await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
     }

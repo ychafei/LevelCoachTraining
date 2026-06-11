@@ -44,6 +44,10 @@ mustInclude('functions/stripeConnectWebhook/src/main.js', 'account.updated', 'Co
 mustNotMatch('functions/accountProfile/src/main.js', /payload\.role\b/, 'clients must never set their own role');
 mustInclude('functions/refundStripePayment/src/main.js', 'labels', 'refund authority comes from account labels, not client-writable profile.role');
 mustInclude('functions/grantAdminRole/src/main.js', 'superadmin', 'role grants require the superadmin label');
+mustInclude('functions/coachSelf/src/main.js', "includes('coach')", 'the coach label is the sole coach-surface gate — revoking it must revoke access');
+mustInclude('functions/training/src/main.js', "includes('coach')", 'training coach authority requires the coach label (same revocable bit as coachSelf)');
+mustInclude('functions/coachSelf/src/main.js', 'No coach record is linked', 'coachSelf actions stay scoped to the caller\'s own linked coach record');
+mustInclude('functions/grantAdminRole/src/main.js', "roleSet.add('coach')", 'legacy single-role grants must preserve an existing coach label');
 mustNotMatch('functions/bootstrapMasterAdmin/src/main.js', /@gmail\.com/, 'no hardcoded owner email — MASTER_ADMIN_EMAIL env only');
 mustNotMatch('src/components/guards/RouteGuards.jsx', /@gmail\.com/, 'no hardcoded owner email in the client bundle');
 mustNotMatch('src/lib/auth.js', /createDocument\(/, 'profiles are created server-side via accountProfile.ensure');

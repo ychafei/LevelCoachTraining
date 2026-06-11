@@ -715,6 +715,10 @@ export default async ({ req, res, error }) => {
 
     const { databases, users } = services();
     const account = await users.get(accountId).catch(() => null);
+    // The coach LABEL is the coach-surface capability bit. It stacks alongside
+    // admin/superadmin (all link paths grant it without demoting the role), and
+    // it must stay the sole gate here so that revoking it (role editor /
+    // unlink) actually turns coach access off — admins do not bypass this.
     if (!account?.labels?.includes('coach')) {
       return res.json({ error: 'Coach access required.' }, 403);
     }

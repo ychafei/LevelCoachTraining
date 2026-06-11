@@ -85,13 +85,21 @@ async function revokeOpenAssignments(databases, assignments, now) {
 }
 
 // Normalize incoming roles: accept either `roles: [...]` (stacked) or the legacy
-// single `role`. Returns a Set of grantable roles ('user'/empty => demote).
+// single `role`. Returns a Set of grantable roles ('user'/empty array => demote),
+// or null for a missing/unrecognized shape — callers must 400, never demote, on
+// a payload that doesn't clearly express intent.
 function parseRoles(payload) {
   let input;
   if (Array.isArray(payload.roles)) input = payload.roles;
   else if (payload.role !== undefined) input = [payload.role];
-  else input = [];
-  return new Set(input.filter((r) => GRANTABLE.has(r)));
+  else return null;
+  const set = new Set();
+  for (const r of input) {
+    if (r === 'user') continue;
+    if (!GRANTABLE.has(r)) return null;
+    set.add(r);
+  }
+  return set;
 }
 
 export default async ({ req, res, error }) => {
@@ -133,7 +141,19 @@ export default async ({ req, res, error }) => {
     }
 
     const roleSet = parseRoles(payload);
+    if (roleSet === null) {
+      return res.json({ error: 'Provide roles (array subset of coach/admin/super_admin) or role (coach|admin|super_admin|user).' }, 400);
+    }
     if (target.master_admin_locked && isSelf) roleSet.add('super_admin');
+
+    // The legacy single-`role` shape can't express a stacked set, so it must
+    // not silently strip an existing coach label. Demotion to plain user
+    // (role: 'user') stays a full reset; the stacked `roles: []` shape stays
+    // exact-set (callers send the complete set).
+    if (!Array.isArray(payload.roles) && payload.role !== undefined && payload.role !== 'user') {
+      const targetAccount = await users.get(target.account_id).catch(() => null);
+      if (targetAccount?.labels?.includes('coach')) roleSet.add('coach');
+    }
 
     // Minting a super admin for someone else stays a deliberate, explicit act.
     if (roleSet.has('super_admin') && !isSelf && payload.allow_super_admin !== true) {

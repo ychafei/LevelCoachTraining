@@ -1,7 +1,7 @@
 # LevelCoach Training — Target Architecture & Contracts
 
 This document is the source of truth for the production cutover. Every implementation
-change must conform to the contracts below. Last updated: 2026-06-10.
+change must conform to the contracts below. Last updated: 2026-06-11.
 
 ## 1. Identity & Authorization Model
 
@@ -20,6 +20,18 @@ change must conform to the contracts below. Last updated: 2026-06-10.
 - **Master admin**: bootstrap requires verified email matching `MASTER_ADMIN_EMAIL`
   (server env, not client constant); grants `superadmin` label + locked profile flag.
   `grantAdminRole` requires caller label `superadmin` AND locked master profile.
+- **Roles stack**: an account may hold `coach` alongside `admin`/`superadmin`.
+  `grantAdminRole` accepts the stacked `roles: []` shape (written as the exact
+  set; `getRoles` reads the current set for the role editors) and the legacy
+  single `role` shape, which preserves an existing `coach` label rather than
+  wiping it (`role: 'user'` stays a full demotion). `profiles.role` keeps the
+  single highest role for display; label checks are the authority. The `coach`
+  label is also granted by `applications.review` approve, `adminOps.linkCoachAccount`,
+  and `adminOps.createCoach` with `profile_id` (full link) — all admin-gated.
+  Linking, unlinking, or deleting a coach record never demotes an admin's
+  `profiles.role` (roles derive from labels, not the drift-prone profile
+  field); unlink and delete also remove the `coach` label and demote a plain
+  coach to `user`.
 - Client route guards remain as UX, but are never the security boundary.
 
 ## 2. Permission Matrix (provisioner v2)
@@ -92,10 +104,10 @@ Multi-action functions take `{ action, ...payload }`.
 | `messaging` | users | `start`, `send` (sender bound server-side, participant check, per-doc perms incl. guardian read for minors), `report`, `block`. |
 | `training` | users | CRUD for goals, training plans/items, homework, assessments, check-ins, session notes visibility. Validates coach↔athlete relationship (existing session or active client link). |
 | `family` | users | Parent/guardian: `addChild`, `updateChild`, `linkAthlete`, `setPermissions` (can_book/can_pay/can_message), `approveBooking`. Creates guardian_athletes rows + per-doc grants. |
-| `coachSelf` | users | Coach (label `coach`): `updateProfile` (whitelist — never fee/verified/stripe/active fields), `setAvailability`, `setBlocks`, `setSportProfiles`, `requestEmailCode`/`confirmEmailCode` (server-generated, hashed, 10-min expiry, attempt-limited), `publish` (gated: legal packet + Connect ready + verified email + complete profile). |
+| `coachSelf` | users | Coach surface (label `coach` only — the label stacks with `admin`/`superadmin` and is the revocable capability bit; the caller must also own a linked coach record (`coaches.user_id`) and actions are always scoped to that record): `updateProfile` (whitelist — never fee/verified/stripe/active fields), `setAvailability`, `setBlocks`, `setSportProfiles`, `requestEmailCode`/`confirmEmailCode` (server-generated, hashed, 10-min expiry, attempt-limited), `publish` (gated: legal packet + Connect ready + verified email + complete profile). |
 | `orgAdmin` | users | `create` (creator becomes org_owner), `update`, `inviteCoach`, `acceptInvite`, `removeCoach`, `suspendCoach`, `setPayoutRule` (bps split, validated), `inviteMember`, `setMemberRole`, `publish` (gated: org legal packet + Connect ready). |
 | `applications` | any (create) / users | `submit` (coach application; validates; rate-limited per email), `review` (admin label: approve⇒creates coach doc + sets `coach` label + links profile, reject/notes). |
-| `adminOps` | users (admin label) | `inviteUser` (implemented at last), `grantCredits`, `revokeCredits`, `banUser`/`unbanUser` (enforced at login via `accountProfile.ensure` returning banned state + functions reject banned callers), `linkCoachAccount`, `setCoachFee`, `setCoachActive`, `publishBlogPost`. |
+| `adminOps` | users (admin label) | `inviteUser` (implemented at last), `grantCredits`, `revokeCredits`, `banUser`/`unbanUser` (enforced at login via `accountProfile.ensure` returning banned state + functions reject banned callers), `linkCoachAccount` (guards: one account per coach record, one record per account), `createCoach` (optional `profile_id` ⇒ full link, same semantics as `linkCoachAccount`), `updateCoach`, `deleteCoach`/`unlinkCoachAccount` (clear the link, remove the `coach` label, demote only a plain coach to `user`), `setCoachFee`, `setCoachActive`, `publishBlogPost`. |
 | `reviews` | users | `submit` (only by clients with a completed session with that coach; one per session), `respond` (coach), `moderate` (admin). Aggregates `rating_avg`/`review_count` onto coaches. |
 | `reports` | users | `coachEarnings`, `orgRevenue`, `adminReconciliation` — read from ledger + Stripe records, scoped to caller's authority. |
 | `emailDispatch` | any | `unsubscribe` (signed-out OK, token-based), internal template sends for other functions (no arbitrary HTML, suppression-list enforced, per-recipient rate limit). Direct arbitrary email sending is **removed**. |
@@ -109,7 +121,7 @@ Multi-action functions take `{ action, ...payload }`.
 | `refundStripePayment` | users (admin label) | Full/partial refunds; **reverses transfers proportionally**; accumulates `refunded_amount`; sets `partially_refunded`/`refunded`; adjusts credits; ledger entries; audit log. |
 | `signLegalAgreement` | users | Verifies caller's actual server-side role; guardian signings must reference a linked `athlete_id`; minors cannot self-sign athlete waivers (guardian must). |
 | `generateLegalAgreementPdf` | users | unchanged role-hardening as above. |
-| `bootstrapMasterAdmin` / `grantAdminRole` | users | label-verified as described in §1. |
+| `bootstrapMasterAdmin` / `grantAdminRole` | users | label-verified as described in §1; `grantAdminRole` actions: set stacked roles (`roles: []`, exact set), `getRoles` (read current labels for the role editors), legacy single `role` (coach-label-preserving); writes `admin_assignments` + audit log. |
 
 Removed functions: `send-email` (open relay), `sendBookingEmails`, `sendCoachLinkEmail`,
 `sendCoachEmailVerification` (folded into `emailDispatch`/`booking`/`adminOps`/`coachSelf`),

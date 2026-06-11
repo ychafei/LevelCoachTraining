@@ -178,6 +178,30 @@ function splitPrivateFields(source) {
   return { priv, rest };
 }
 
+// Role to keep on a profile when linking/unlinking a coach record. Account
+// labels are the authority (profiles.role can drift); only when the account is
+// unreadable do we trust an elevated profiles.role rather than demote on stale
+// info. `fallback` is 'coach' on link, 'user' on unlink/delete.
+function preservedRole(account, profile, fallback) {
+  const labels = account?.labels || [];
+  if (labels.includes('superadmin')) return 'super_admin';
+  if (labels.includes('admin')) return 'admin';
+  if (!account && ['admin', 'super_admin'].includes(profile?.role)) return profile.role;
+  return fallback;
+}
+
+// An account may own at most one coaches row (coachSelf/training resolve by
+// user_id with limit 1 — a second row makes resolution nondeterministic).
+// Fail-closed: a query error propagates (500) rather than letting a duplicate
+// link through; limit(2) so the excepted record can't mask a real duplicate.
+async function accountOwnsOtherCoach(databases, accountId, exceptCoachId) {
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(2),
+  ]);
+  return rows.documents.find((doc) => doc.$id !== exceptCoachId) || null;
+}
+
 // --- Action handlers ----------------------------------------------------------
 
 async function inviteUser(ctx, payload) {
@@ -402,9 +426,23 @@ async function linkCoachAccount(ctx, payload) {
   if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
   if (!profile?.account_id) return { status: 404, body: { error: 'Profile not found or has no account.' } };
 
-  await databases.updateDocument(DB_ID, 'coaches', coachId, { user_id: profile.account_id });
-  await databases.updateDocument(DB_ID, 'profiles', profileId, { role: 'coach', coach_id: coachId });
+  // Guards: one account per coach record, one coach record per account.
+  if (coach.user_id && coach.user_id !== profile.account_id) {
+    return { status: 409, body: { error: 'This coach record is already linked to another account.' } };
+  }
+  if (profile.coach_id && profile.coach_id !== coachId) {
+    return { status: 409, body: { error: 'This profile is already linked to a different coach record.' } };
+  }
+  if (await accountOwnsOtherCoach(databases, profile.account_id, coachId)) {
+    return { status: 409, body: { error: 'This account already owns a different coach record.' } };
+  }
+
   const account = await users.get(profile.account_id).catch(() => null);
+  await databases.updateDocument(DB_ID, 'coaches', coachId, { user_id: profile.account_id });
+  // Roles stack: linking a coach record must not demote a platform admin's
+  // profile.role (the highest role wins for display; the coach grant lives in
+  // the account label + coach_id link).
+  await databases.updateDocument(DB_ID, 'profiles', profileId, { role: preservedRole(account, profile, 'coach'), coach_id: coachId });
   if (account) {
     await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
   }
@@ -433,15 +471,19 @@ async function unlinkCoachAccount(ctx, payload) {
   // the linked profile (coach_id + coach role), and remove the coach label.
   const profile = await profileForCoach(databases, coachId);
   const accountId = profile?.account_id || coach.user_id || '';
+  const account = accountId ? await users.get(accountId).catch(() => null) : null;
 
   await databases.updateDocument(DB_ID, 'coaches', coachId, { user_id: '' }).catch(() => {});
   if (profile) {
-    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { role: 'user', coach_id: '' }).catch(() => {});
+    // Keep a stacked admin's role intact — only a plain coach demotes to user.
+    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { role: preservedRole(account, profile, 'user'), coach_id: '' }).catch(() => {});
   }
-  if (accountId) {
-    const account = await users.get(accountId).catch(() => null);
-    if (account) {
-      await users.updateLabels(accountId, (account.labels || []).filter((l) => l !== 'coach')).catch(() => {});
+  // Strip the coach label from every account that was tied to this record
+  // (profile link and user_id link can diverge).
+  for (const id of new Set([profile?.account_id, coach.user_id].filter(Boolean))) {
+    const acc = id === accountId ? account : await users.get(id).catch(() => null);
+    if (acc) {
+      await users.updateLabels(id, (acc.labels || []).filter((l) => l !== 'coach')).catch(() => {});
     }
   }
 
@@ -459,7 +501,7 @@ async function unlinkCoachAccount(ctx, payload) {
 }
 
 async function createCoach(ctx, payload) {
-  const { databases, actor } = ctx;
+  const { databases, users, actor } = ctx;
   const fields = payload.fields;
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
     return { status: 400, body: { error: 'fields must be an object (coach document body).' } };
@@ -468,6 +510,21 @@ async function createCoach(ctx, payload) {
   // PII (email / phone / email_verified_at) lives in coach_private now — strip
   // it from the coach document body and write it to the private row instead.
   const { priv, rest } = splitPrivateFields(fields);
+
+  // Resolve and validate the optional profile link BEFORE creating anything:
+  // a profile links to at most one coach, an account owns at most one record.
+  const profileId = str(payload.profile_id ?? '', 0, 64);
+  let profile = null;
+  if (profileId) {
+    profile = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
+    if (!profile) return { status: 404, body: { error: 'Profile not found.' } };
+    if (profile.coach_id) {
+      return { status: 409, body: { error: 'This profile is already linked to a coach record.' } };
+    }
+    if (profile.account_id && await accountOwnsOtherCoach(databases, profile.account_id, '')) {
+      return { status: 409, body: { error: 'This account already owns a coach record.' } };
+    }
+  }
 
   let coach;
   try {
@@ -483,9 +540,22 @@ async function createCoach(ctx, payload) {
     });
   }
 
-  // Optionally link the new coach to an existing profile.
-  const profileId = str(payload.profile_id ?? '', 0, 64);
-  if (profileId) {
+  // Optionally link the new coach to the validated profile. This is a FULL
+  // link (same semantics as linkCoachAccount): reverse user_id link, coach
+  // label, and role — a half-link (coach_id only) leaves the person unable to
+  // pass any server-side coach gate.
+  if (profile?.account_id) {
+    const account = await users.get(profile.account_id).catch(() => null);
+    await databases.updateDocument(DB_ID, 'coaches', coach.$id, { user_id: profile.account_id }).catch((err) => {
+      ctx.error?.(`createCoach: failed to set coach.user_id: ${err?.message || err}`);
+    });
+    await databases.updateDocument(DB_ID, 'profiles', profileId, { coach_id: coach.$id, role: preservedRole(account, profile, 'coach') }).catch((err) => {
+      ctx.error?.(`createCoach: failed to set profile.coach_id: ${err?.message || err}`);
+    });
+    if (account) {
+      await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
+    }
+  } else if (profile) {
     await databases.updateDocument(DB_ID, 'profiles', profileId, { coach_id: coach.$id }).catch((err) => {
       ctx.error?.(`createCoach: failed to set profile.coach_id: ${err?.message || err}`);
     });
@@ -591,10 +661,20 @@ async function deleteCoach(ctx, payload) {
   }
 
   const profile = await profileForCoach(databases, coachId);
+  const linkedAccountId = profile?.account_id || coach.user_id || '';
+  const linkedAccount = linkedAccountId ? await ctx.users.get(linkedAccountId).catch(() => null) : null;
   if (profile) {
-    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { coach_id: '' }).catch((err) => {
+    // Same cleanup as unlinkCoachAccount: drop the link, demote a plain coach
+    // to user (never an admin), and remove the now-orphaned coach label.
+    await databases.updateDocument(DB_ID, 'profiles', profile.$id, { coach_id: '', role: preservedRole(linkedAccount, profile, 'user') }).catch((err) => {
       ctx.error?.(`deleteCoach: failed to clear profile.coach_id: ${err?.message || err}`);
     });
+  }
+  for (const id of new Set([profile?.account_id, coach.user_id].filter(Boolean))) {
+    const acc = id === linkedAccountId ? linkedAccount : await ctx.users.get(id).catch(() => null);
+    if (acc) {
+      await ctx.users.updateLabels(id, (acc.labels || []).filter((l) => l !== 'coach')).catch(() => {});
+    }
   }
 
   await writeAudit(databases, {

@@ -7,85 +7,11 @@ import { Input } from '@/components/ui/input';
 import { adminAssignmentRepo, auditLogRepo, coachRepo, profileRepo } from '@/api/repo';
 import { AlertTriangle, FileText, History, Lock, MailCheck, Percent, Shield, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import RoleEditor from '@/features/admin/RoleEditor';
 
 const DEFAULT_PLATFORM_FEE_BPS = 1500; // mirrors server env PLATFORM_FEE_BPS default
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
-
-// Stacked role editor: toggle coach / admin / super_admin independently and
-// save the full set at once. Loads the target's current roles on mount. The
-// locked master admin always keeps super_admin (no self-lockout).
-function RoleEditor({ profile, onSaved }) {
-  const locked = !!profile.master_admin_locked;
-  const [roles, setRoles] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    setRoles(null);
-    auth.getUserRoles(profile.id)
-      .then((r) => { if (!cancelled) setRoles(new Set(r?.roles || [])); })
-      .catch(() => { if (!cancelled) setRoles(new Set()); });
-    return () => { cancelled = true; };
-  }, [profile.id]);
-
-  const toggle = (role) => {
-    if (saving) return;
-    if (locked && role === 'super_admin') return; // master keeps super_admin
-    setRoles((prev) => {
-      const next = new Set(prev);
-      if (next.has(role)) next.delete(role); else next.add(role);
-      return next;
-    });
-  };
-
-  const save = async () => {
-    if (!roles) return;
-    setSaving(true);
-    setError('');
-    try {
-      const list = [...roles];
-      await auth.setUserRoles({ profileId: profile.id, roles: list, allowSuperAdmin: list.includes('super_admin') });
-      toast.success(`Roles updated for ${profile.email || 'user'}`);
-      await onSaved?.();
-    } catch (err) {
-      setError(err?.message || 'Could not save roles.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (roles === null) return <span className="text-xs text-muted-foreground">Loading roles…</span>;
-
-  const chip = (role, label) => {
-    const on = roles.has(role);
-    const disabled = saving || (locked && role === 'super_admin');
-    return (
-      <button
-        type="button"
-        onClick={() => toggle(role)}
-        disabled={disabled}
-        aria-pressed={on}
-        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:bg-accent/5'} ${disabled ? 'opacity-60' : ''}`}
-      >
-        {on ? '✓ ' : ''}{label}
-      </button>
-    );
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {chip('coach', 'Coach')}
-      {chip('admin', 'Admin')}
-      {chip('super_admin', 'Super Admin')}
-      <Button size="sm" onClick={save} disabled={saving} className="bg-accent text-accent-foreground hover:bg-accent/90">
-        {saving ? 'Saving…' : 'Save roles'}
-      </Button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
-    </div>
-  );
-}
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -236,6 +162,11 @@ export default function MasterAdminPortal() {
   const masterEmailVerified = user?.email_verified === true || user?.emailVerification === true;
   const masterAdminLocked = user?.master_admin_locked === true || bootstrapComplete;
 
+  // Bumped on every data reload so any RoleEditor that stays mounted across a
+  // save (the search-panel one) remounts and refetches — a stale editor would
+  // otherwise re-apply its old exact set on Save.
+  const [rolesVersion, setRolesVersion] = useState(0);
+
   const loadAdminData = async () => {
     setLoading(true);
     try {
@@ -247,6 +178,7 @@ export default function MasterAdminPortal() {
       setProfiles(profileRows);
       setAssignments(assignmentRows);
       setAuditRows(audit);
+      setRolesVersion((v) => v + 1);
     } finally {
       setLoading(false);
     }
@@ -475,7 +407,11 @@ export default function MasterAdminPortal() {
               <p className="mb-3 mt-1 text-xs text-muted-foreground">
                 Toggle any combination, then Save. “Coach” adds the coach label only — a coach record is still created via Admin → Applications/Coaches.
               </p>
-              <RoleEditor profile={selectedTarget} onSaved={onRolesSaved} />
+              {masterAdminLocked ? (
+                <RoleEditor key={`${selectedTarget.id}:${rolesVersion}`} profile={selectedTarget} onSaved={onRolesSaved} />
+              ) : (
+                <p className="text-xs text-muted-foreground">Only the locked master admin can change roles.</p>
+              )}
             </div>
           )}
 
@@ -504,7 +440,11 @@ export default function MasterAdminPortal() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{profile.email || 'No email'} · current role: {profile.role || 'user'}</p>
                   </div>
-                  <RoleEditor profile={profile} onSaved={loadAdminData} />
+                  {masterAdminLocked ? (
+                    <RoleEditor profile={profile} onSaved={loadAdminData} />
+                  ) : (
+                    <span className="text-xs uppercase text-muted-foreground">{profile.role || 'user'}</span>
+                  )}
                 </div>
               );
             }) : (

@@ -9,11 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Ban, UserPlus, AlertTriangle, Zap, Lock, Eye } from 'lucide-react';
+import { Ban, UserPlus, AlertTriangle, Zap, Lock, Eye, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/ui/data-table';
 import { logAdminAction } from '@/lib/audit';
 import UserDetailDialog from '@/features/admin/UserDetailDialog';
+import RoleEditor from '@/features/admin/RoleEditor';
 
 function displayName(profile) {
   return [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
@@ -42,6 +43,7 @@ export default function AdminUsers() {
   const [creditPackageName, setCreditPackageName] = useState('Admin Grant');
   const [creditSaving, setCreditSaving] = useState(false);
   const [detailUser, setDetailUser] = useState(null);
+  const [roleDialog, setRoleDialog] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -69,35 +71,22 @@ export default function AdminUsers() {
     return () => { cancelled = true; };
   }, [isAdmin]);
 
-  // Platform admin grants/demotions must come from the locked master admin.
-  // The Appwrite Function enforces this server-side; these checks keep the UI
-  // aligned with that contract.
+  // Moderation actions (ban/warn/credits) stay off your own row and off
+  // super-admin targets unless you are the locked master admin. Role edits go
+  // through the stacked RoleEditor (server-enforced: master admin only) and
+  // ARE allowed on your own row — roles stack, and the server prevents the
+  // locked master from dropping their own super_admin.
   const canEditUser = (target) => {
     if (!target) return false;
-    if (target.email === me?.email) return false; // cannot self-edit
-    if ((target.role === 'super_admin' || target.is_super_admin) && !isMasterAdmin) return false;
+    if (target.email === me?.email) return false; // no self-moderation
+    if ((target.role === 'super_admin' || target.is_super_admin || target.master_admin_locked) && !isMasterAdmin) return false;
     return true;
   };
 
-  // Admin role changes only — non-admin user/coach roles are server-derived
-  // (coach label via application approval / coach linking) and are no longer
-  // editable from this panel.
-  const updateAdminRole = async (targetUser, role) => {
-    if (!isMasterAdmin) {
-      toast.error('Only the locked master admin can change platform admin roles.');
-      return;
-    }
-    try {
-      const result = await auth.grantAdminRole({
-        profileId: targetUser.id,
-        role,
-        allowSuperAdmin: role === 'super_admin',
-      });
-      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: result?.role || role } : u));
-      toast.success('Role updated');
-    } catch (err) {
-      toast.error(err?.message || 'Could not update role.');
-    }
+  const onRolesSaved = async () => {
+    setRoleDialog(null);
+    const u = await profileRepo.list().catch(() => users);
+    setUsers(u);
   };
 
   // Bans route through adminOps.banUser — the server records the ban, flags
@@ -236,10 +225,18 @@ export default function AdminUsers() {
             <Eye className="w-3 h-3 mr-1" aria-hidden="true" /> View
           </Button>
         );
+        // Stacked role editing (coach + admin + super_admin) — master admin
+        // only, available on every row including your own.
+        const rolesBtn = isMasterAdmin && (
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setRoleDialog(row)}>
+            <Shield className="w-3 h-3 mr-1" aria-hidden="true" /> Roles
+          </Button>
+        );
         if (!editable) {
           return (
             <div className="flex items-center gap-2 justify-end">
               {viewBtn}
+              {rolesBtn}
               {isSelf && <span className="text-xs font-display tracking-wider text-muted-foreground px-2 py-1 bg-secondary/50 border border-border rounded">Your account</span>}
               {(row.role === 'super_admin' || row.is_super_admin) && (
                 <span className="text-xs font-display tracking-wider text-accent px-2 py-1 bg-accent/10 border border-accent/20 rounded flex items-center gap-1">
@@ -249,25 +246,10 @@ export default function AdminUsers() {
             </div>
           );
         }
-        const isPlatformAdmin = row.role === 'admin' || row.role === 'super_admin';
         return (
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {viewBtn}
-            {isMasterAdmin && (
-              <Select
-                value={isPlatformAdmin ? row.role : 'user'}
-                onValueChange={v => updateAdminRole(row, v)}
-              >
-                <SelectTrigger className="w-32 h-7 text-xs bg-secondary border-border" aria-label={`Admin role for ${row.email}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">Not admin</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            {rolesBtn}
             <Button size="sm" variant="ghost" className="text-accent h-7 text-xs" onClick={() => { setCreditDialog(row); setCreditSessions(''); setCreditDuration('60'); setCreditPackageName('Admin Grant'); }}>
               <Zap className="w-3 h-3 mr-1" aria-hidden="true" /> Credits
             </Button>
@@ -326,6 +308,22 @@ export default function AdminUsers() {
       </div>
 
       {detailUser && <UserDetailDialog profile={detailUser} onClose={() => setDetailUser(null)} />}
+
+      {/* Stacked roles dialog — backed by grantAdminRole (master admin only). */}
+      <Dialog open={!!roleDialog} onOpenChange={() => setRoleDialog(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-display tracking-wider">STACKED ROLES</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{displayName(roleDialog)} ({roleDialog?.email})</p>
+          <p className="text-xs text-muted-foreground">
+            Roles stack — someone can be Coach and Super Admin at once. &ldquo;Coach&rdquo; grants the
+            coach label; the coach record itself is created/linked from Admin → Coaches or
+            application approval. Saving applies the exact set selected below.
+          </p>
+          <div className="mt-2">
+            {roleDialog && <RoleEditor profile={roleDialog} onSaved={onRolesSaved} />}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!banDialog} onOpenChange={() => setBanDialog(null)}>
         <DialogContent className="bg-card border-border">

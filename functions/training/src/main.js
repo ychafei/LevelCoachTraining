@@ -120,7 +120,9 @@ async function resolveAthlete(db, athleteId) {
   return null;
 }
 
-// Coach authority: coach label + owning coaches row.
+// Coach authority: coach label + owning coaches row. The label stacks with
+// admin/superadmin and is the revocable capability bit — admins without it do
+// not get coach authority here (revoking the label must revoke access).
 async function coachContext(db, users, accountId) {
   const account = await users.get(accountId).catch(() => null);
   if (!(account?.labels || []).includes('coach')) return null;

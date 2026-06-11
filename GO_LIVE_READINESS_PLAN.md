@@ -1,6 +1,6 @@
 # LevelCoach Training — Go-Live Readiness Plan
 
-Last updated: 2026-06-10 (production cutover).
+Last updated: 2026-06-11 (production cutover; stacked roles + coach-link hardening).
 
 LevelCoach Training is a multi-sport coaching marketplace: athletes and
 parents/guardians find coaches, book and pay for sessions, message safely, and
@@ -50,7 +50,9 @@ admins operate everything with a locked master-admin root of trust.
 
 ### C. Master admin & roles
 - [ ] Create + verify the `MASTER_ADMIN_EMAIL` account → `/master-admin` → Bootstrap
-- [ ] Grant admin roles only through the master-admin UI
+- [ ] Grant admin roles only through the `grantAdminRole`-backed role editors
+      (master-admin portal or AdminUsers); roles stack — coach + admin +
+      super_admin can coexist on one account
 
 ### D. End-to-end verification (test mode)
 - [ ] Coach: apply → admin approval → coach label → profile → availability →

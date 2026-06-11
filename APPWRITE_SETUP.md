@@ -106,8 +106,12 @@ proportionally. Every movement lands in `payment_ledger_entries`.
 2. Create an account with that email and **verify the email address**.
 3. Visit `/master-admin` and run Bootstrap. This grants the `superadmin`
    label and locks the profile (`master_admin_locked`).
-4. All further role grants flow through the master admin UI
-   (`grantAdminRole` requires the superadmin label + locked profile).
+4. All further admin/super_admin grants flow through the `grantAdminRole`
+   function — reachable from the master-admin portal and the AdminUsers role
+   editor (`grantAdminRole` requires the superadmin label + locked profile).
+   The coach role/label is also granted by admin-gated flows (application
+   approval, coach-account linking/creation). Roles stack: coach + admin +
+   super_admin can coexist on one account.
 
 ## 8. Verify
 
