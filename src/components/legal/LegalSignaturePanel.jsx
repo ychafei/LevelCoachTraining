@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import SelectMenu from '@/components/forms/SelectMenu';
 import {
   Dialog,
   DialogContent,
@@ -330,17 +331,19 @@ export default function LegalSignaturePanel({
               </Button>
             </div>
           ) : (
-            <select
-              id="legal-athlete-picker"
-              value={pickedAthleteId}
-              onChange={(event) => setPickedAthleteId(event.target.value)}
-              className="mt-2 h-9 w-full max-w-sm rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="">Select an athlete…</option>
-              {familyAthletes.map((athlete) => (
-                <option key={athlete.$id} value={athlete.$id}>{athleteDisplayName(athlete)}</option>
-              ))}
-            </select>
+            <div className="mt-2 max-w-sm">
+              <SelectMenu
+                id="legal-athlete-picker"
+                value={pickedAthleteId}
+                onChange={setPickedAthleteId}
+                ariaLabel="Select an athlete"
+                options={[
+                  { value: '', label: 'Select an athlete…' },
+                  ...familyAthletes.map((athlete) => ({ value: athlete.$id, label: athleteDisplayName(athlete) })),
+                ]}
+                triggerClassName="h-9 text-sm font-normal"
+              />
+            </div>
           )}
         </div>
       )}

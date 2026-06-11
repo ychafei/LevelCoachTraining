@@ -1,5 +1,6 @@
 import React from 'react';
 import { HeartPulse, ShieldCheck } from 'lucide-react';
+import SelectMenu from '@/components/forms/SelectMenu';
 import {
   AVAILABILITY_OPTIONS,
   RELATIONSHIP_OPTIONS,
@@ -38,19 +39,30 @@ const inputClass = (error) =>
       : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
   }`;
 
+// Renders the styled dropdown panel (SelectMenu) while keeping the legacy
+// children-as-<option> API, so existing call sites don't change: options are
+// extracted from the <option> elements.
 export function SelectInput({ id, label, required, error, hint, value, onChange, disabled, children }) {
+  const options = [];
+  React.Children.forEach(children, (child) => {
+    if (!child || child.type !== 'option') return;
+    options.push({
+      value: child.props.value ?? '',
+      label: child.props.children,
+      disabled: child.props.disabled,
+    });
+  });
   return (
     <FieldShell id={id} label={label} required={required} error={error} hint={hint}>
-      <select
+      <SelectMenu
         id={id}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={onChange}
         disabled={disabled}
-        aria-invalid={error ? 'true' : undefined}
-        className={`${inputClass(error)} appearance-none pr-8`}
-      >
-        {children}
-      </select>
+        ariaLabel={label}
+        options={options}
+        triggerClassName={`${inputClass(error)} justify-between font-normal shadow-none`}
+      />
     </FieldShell>
   );
 }

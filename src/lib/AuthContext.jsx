@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     void checkUserAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const checkUserAuth = async () => {

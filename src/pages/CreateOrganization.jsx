@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Building2,
   CheckCircle2,
-  ChevronDown,
   Eye,
   EyeOff,
   Globe,
@@ -19,6 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { auth } from '@/lib/auth';
 import { callFn } from '@/lib/rpc';
@@ -848,6 +848,8 @@ function AuthField({
   );
 }
 
+// Styled dropdown panel with the legacy children-as-<option> + event-shaped
+// onChange API preserved, so call sites stay untouched.
 function SelectField({
   id,
   label,
@@ -855,29 +857,34 @@ function SelectField({
   error,
   children,
   onChange,
-  ...selectProps
+  value,
+  disabled,
 }) {
+  const options = [];
+  React.Children.forEach(children, (child) => {
+    if (!child || child.type !== 'option') return;
+    options.push({ value: child.props.value ?? '', label: child.props.children, disabled: child.props.disabled });
+  });
   return (
     <div>
       <label htmlFor={id} className="mb-2 block text-sm font-bold text-slate-950">
         {label}
       </label>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <select
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <SelectMenu
           id={id}
-          onChange={onChange}
-          className={`h-9 w-full appearance-none rounded-md border bg-white pl-10 pr-10 text-sm text-slate-950 transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${
+          value={value}
+          disabled={disabled}
+          onChange={(next) => onChange({ target: { value: next } })}
+          ariaLabel={label}
+          options={options}
+          triggerClassName={`h-9 w-full rounded-md border bg-white pl-10 text-sm font-normal text-slate-950 shadow-none ${
             error
               ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
               : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
           }`}
-          aria-invalid={error ? 'true' : undefined}
-          {...selectProps}
-        >
-          {children}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        />
       </div>
       {error && <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>}
     </div>

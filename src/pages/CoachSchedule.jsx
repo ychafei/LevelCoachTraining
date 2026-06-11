@@ -12,6 +12,7 @@ import {
 } from '@/lib/scheduleET';
 import { formatAvailabilityTime } from '@/lib/publicCoach';
 import { Button } from '@/components/ui/button';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -357,22 +358,24 @@ export default function CoachSchedule() {
                             className="mt-1 bg-white"
                           />
                         </label>
-                        <label className="block">
+                        <div className="block">
                           <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                             New time{tzAbbr ? ` (${tzAbbr})` : ''}
                           </span>
-                          <select
-                            value={rescheduleTime}
-                            onChange={(event) => setRescheduleTime(event.target.value)}
-                            disabled={!rescheduleDate}
-                            className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-blue-500"
-                          >
-                            <option value="">Select a time</option>
-                            {rescheduleSlots.map((time) => (
-                              <option key={time} value={time}>{formatAvailabilityTime(time)}</option>
-                            ))}
-                          </select>
-                        </label>
+                          <div className="mt-1">
+                            <SelectMenu
+                              value={rescheduleTime}
+                              onChange={setRescheduleTime}
+                              disabled={!rescheduleDate}
+                              ariaLabel="New time"
+                              options={[
+                                { value: '', label: 'Select a time' },
+                                ...rescheduleSlots.map((time) => ({ value: time, label: formatAvailabilityTime(time) })),
+                              ]}
+                              triggerClassName="h-10 border-slate-200 bg-white text-sm font-semibold"
+                            />
+                          </div>
+                        </div>
                       </div>
                       {rescheduleDate && rescheduleSlots.length === 0 && (
                         <p className="mt-2 text-xs font-semibold text-slate-500">No open times on that date.</p>

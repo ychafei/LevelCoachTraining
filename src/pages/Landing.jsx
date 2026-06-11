@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import { sportIcon } from '@/features/marketing/sportIcons';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
@@ -132,17 +133,16 @@ function HeroSearch() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Sport</span>
-            <select
+            <SelectMenu
               value={sport}
-              onChange={(event) => setSport(event.target.value)}
-              className="mt-1 w-full bg-transparent text-sm font-bold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-              aria-label="Sport"
-            >
-              <option value="">All sports</option>
-              {SPORTS_CATALOG.map((item) => (
-                <option key={item.sport_key} value={item.sport_key}>{item.display_name}</option>
-              ))}
-            </select>
+              onChange={setSport}
+              ariaLabel="Sport"
+              options={[
+                { value: '', label: 'All sports' },
+                ...SPORTS_CATALOG.map((item) => ({ value: item.sport_key, label: item.display_name })),
+              ]}
+              triggerClassName="mt-0.5 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 text-sm font-bold text-slate-950 shadow-none hover:border-0 focus:ring-0 focus:border-0"
+            />
           </span>
         </label>
 

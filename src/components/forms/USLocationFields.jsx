@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin, Loader2, ChevronDown } from 'lucide-react';
+import { MapPin, Loader2 } from 'lucide-react';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { US_STATES, toStateCode, stateName } from '@/lib/usStates';
 
 // Reusable US location entry used across every role for consistency:
@@ -199,19 +200,19 @@ export default function USLocationFields({
     state: (
       <div key="state">
         {labelEl('state', 'State')}
-        <div className="relative">
-          <select
-            id={`${idPrefix}-state`}
-            value={state}
-            disabled={disabled}
-            onChange={(e) => onChange({ state: e.target.value })}
-            className={`${inputClass(errors.state)} appearance-none pr-9`}
-          >
-            <option value="">Select a state</option>
-            {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        </div>
+        <SelectMenu
+          id={`${idPrefix}-state`}
+          value={state}
+          disabled={disabled}
+          onChange={(next) => onChange({ state: next })}
+          ariaLabel="State"
+          placeholder="Select a state"
+          options={[
+            { value: '', label: 'Select a state' },
+            ...US_STATES.map((s) => ({ value: s.code, label: s.name })),
+          ]}
+          triggerClassName={`${inputClass(errors.state)} justify-between font-normal shadow-none`}
+        />
         {errors.state && <p className="mt-1 text-xs text-destructive">{errors.state}</p>}
       </div>
     ),

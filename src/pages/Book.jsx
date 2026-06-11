@@ -14,6 +14,7 @@ import {
   timezoneAbbreviation,
 } from '@/lib/scheduleET';
 import { Button } from '@/components/ui/button';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
@@ -684,17 +685,19 @@ export default function Book() {
                 <label htmlFor="book-athlete" className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
                   Who is this session for?
                 </label>
-                <select
-                  id="book-athlete"
-                  value={selectedAthleteId}
-                  onChange={(event) => setSelectedAthleteId(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
-                >
-                  <option value="">Myself</option>
-                  {familyAthletes.map((athlete) => (
-                    <option key={athlete.id} value={athlete.id}>{athlete.name}</option>
-                  ))}
-                </select>
+                <div className="mt-2">
+                  <SelectMenu
+                    id="book-athlete"
+                    value={selectedAthleteId}
+                    onChange={setSelectedAthleteId}
+                    ariaLabel="Who is this session for?"
+                    options={[
+                      { value: '', label: 'Myself' },
+                      ...familyAthletes.map((athlete) => ({ value: athlete.id, label: athlete.name })),
+                    ]}
+                    triggerClassName="h-11 text-sm font-semibold"
+                  />
+                </div>
                 {selectedAthleteId && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Booking for a linked athlete uses your parent/guardian legal packet.
@@ -1115,18 +1118,18 @@ export default function Book() {
             {availabilityMode === 'flexible' && (
               <div className="mt-6 rounded-lg border border-border bg-card p-5">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <label className="block">
+                  <div className="block">
                     <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Date window</span>
-                    <select
-                      value={availabilityPreference.dateWindow}
-                      onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, dateWindow: event.target.value }))}
-                      className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
-                    >
-                      {DATE_WINDOWS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </label>
+                    <div className="mt-2">
+                      <SelectMenu
+                        value={availabilityPreference.dateWindow}
+                        onChange={(dateWindow) => setAvailabilityPreference((prev) => ({ ...prev, dateWindow }))}
+                        ariaLabel="Date window"
+                        options={DATE_WINDOWS}
+                        triggerClassName="h-11 text-sm font-semibold"
+                      />
+                    </div>
+                  </div>
 
                   <div>
                     <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Start window</span>

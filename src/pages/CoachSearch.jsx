@@ -30,6 +30,7 @@ import {
 } from '@/lib/metroDetroitPlaces';
 import { callFn } from '@/lib/rpc';
 import { pricingPackageRepo } from '@/api/repo';
+import SelectMenu from '@/components/forms/SelectMenu';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 
@@ -494,22 +495,19 @@ export default function CoachSearch() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
               <span>Sort</span>
-              <select
+              <SelectMenu
                 value={filters.sort}
-                onChange={(event) => {
-                  const sort = event.target.value;
+                onChange={(sort) => {
                   setFilters((prev) => ({ ...prev, sort }));
                   writeParams({ ...filters, sort }, 1);
                 }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-              >
-                {SORT_OPTIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
+                ariaLabel="Sort coaches"
+                options={SORT_OPTIONS}
+                triggerClassName="w-auto min-w-[150px] border-slate-200 bg-white text-sm font-bold text-slate-950"
+              />
+            </div>
             <Link to="/for-coaches" className="hidden items-center gap-1 text-sm font-bold text-blue-700 hover:underline sm:inline-flex">
               Are you a coach?
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -628,24 +626,21 @@ export default function CoachSearch() {
 
 function FilterSelect({ label, icon: Icon, value, options, onChange, compact = false }) {
   return (
-    <label className={`flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 ${compact ? 'py-1.5' : 'py-2'}`}>
+    <div className={`flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 ${compact ? 'py-1.5' : 'py-2'}`}>
       <span className={`grid shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 ${compact ? 'h-8 w-8' : 'h-9 w-9'}`}>
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</span>
-        <select
+        <SelectMenu
           value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="mt-1 w-full bg-transparent text-sm font-bold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-          aria-label={label}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={onChange}
+          ariaLabel={label}
+          options={options}
+          triggerClassName="mt-0.5 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 text-sm font-bold text-slate-950 shadow-none hover:border-0 focus:ring-0 focus:border-0"
+        />
       </span>
-    </label>
+    </div>
   );
 }
 
