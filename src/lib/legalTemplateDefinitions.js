@@ -1,18 +1,18 @@
-const PLACEHOLDER_HEADER = 'OPERATIONAL PLACEHOLDER — ATTORNEY REVIEW REQUIRED BEFORE PRODUCTION USE.';
+// ATTORNEY REVIEW REQUIRED — these templates were authored in-house as
+// complete operational documents. They are live and signable, but a licensed
+// Michigan attorney should review them; record the review here when done.
 
-const GOVERNING_LAW = 'This document is governed by the laws of the State of Michigan, United States, without regard to conflict-of-law principles. [PLACEHOLDER: Counsel to confirm governing law, venue, and dispute-resolution mechanism before production use.] If any provision is held unenforceable, the remaining provisions continue in full force, and the unenforceable provision is reformed to the minimum extent necessary to make it enforceable.';
+const GOVERNING_LAW = 'This document is governed by the laws of the State of Michigan, United States, without regard to conflict-of-law principles. The state and federal courts located in Michigan have exclusive jurisdiction over any dispute arising out of or relating to this document, and each party consents to venue in those courts; either party may instead bring a qualifying claim in small claims court. If any provision is held unenforceable, the remaining provisions continue in full force, and the unenforceable provision is reformed to the minimum extent necessary to make it enforceable.';
 
 export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'platform_terms_privacy_ack',
     role: 'athlete',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Platform Terms, Privacy, and Electronic Records Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. ACCEPTANCE OF TERMS. By creating an account, signing this acknowledgement, or using any LevelCoach Training service, I agree to be bound by the then-current LevelCoach Training Terms of Service and Privacy Policy, each of which is incorporated into this acknowledgement by reference. If I do not agree, I must not use the services. I confirm that the information I provide during registration and at all times thereafter is accurate, current, and complete, and that I will promptly update it when it changes.',
       '',
       '2. DESCRIPTION OF SERVICES. LevelCoach Training is a multi-sport training marketplace and operations platform that connects athletes, parents and guardians, independent coaches, and training organizations across team sports, individual sports, and athletic performance disciplines, including but not limited to soccer, basketball, football, baseball, softball, volleyball, tennis, lacrosse, hockey, golf, track and field, swimming, and speed, agility, strength, and general performance training. LevelCoach provides scheduling, booking, messaging, payment processing, training records, and related tools. LevelCoach is not itself a provider of coaching services and does not employ the coaches listed on the platform.',
@@ -37,13 +37,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'athlete_participation_waiver',
     role: 'athlete',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Athlete Participation, Assumption of Risk, Waiver, Release, and Indemnification',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. ACKNOWLEDGEMENT OF INHERENT RISK. I understand that participation in athletic training of any kind — including team sports such as soccer, basketball, football, baseball, softball, volleyball, lacrosse, and hockey; individual sports such as tennis, golf, track and field, and swimming; and performance disciplines such as speed, agility, strength, and conditioning training — involves inherent and unavoidable risks. These risks include, without limitation, physical exertion, collisions with other participants, contact with balls, sticks, bats, racquets, pucks, weights, and other equipment, contact with playing surfaces, water-related risks, weather and environmental conditions, travel to and from training locations, and the risk of minor injury, serious injury, permanent disability, or death.',
       '',
       '2. VOLUNTARY PARTICIPATION. My participation in training sessions booked through LevelCoach Training is entirely voluntary. I have had the opportunity to ask questions about the nature of the activities, and I choose to participate with full knowledge of the risks involved.',
@@ -52,7 +50,7 @@ export const LEGAL_TEMPLATE_SEED = [
       '',
       '4. ASSUMPTION OF RISK. I knowingly and freely assume all risks of participation, both known and unknown, including risks arising from the actions or inactions of coaches, other participants, facility operators, and equipment, to the fullest extent permitted by applicable law.',
       '',
-      '5. WAIVER AND RELEASE. To the fullest extent permitted by Michigan law, I release, waive, and discharge LevelCoach Training, its owners, officers, employees, contractors, and agents, and the coaches and organizations providing services through the platform, from any and all claims, demands, causes of action, and liabilities arising out of or related to my participation in training activities, including claims based on ordinary negligence. This release does not extend to gross negligence, willful misconduct, or any liability that cannot be waived under applicable law. [PLACEHOLDER: Counsel to confirm scope of release and enforceability under Michigan law.]',
+      '5. WAIVER AND RELEASE. To the fullest extent permitted by Michigan law, I release, waive, and discharge LevelCoach Training, its owners, officers, employees, contractors, and agents, and the coaches and organizations providing services through the platform, from any and all claims, demands, causes of action, and liabilities arising out of or related to my participation in training activities, including claims based on ordinary negligence. This release does not extend to gross negligence, willful misconduct, or any liability that cannot be waived under applicable law.',
       '',
       '6. INDEMNIFICATION. I agree to indemnify and hold harmless the released parties from claims brought by third parties arising out of my own negligent or intentional acts or omissions during training activities, to the extent permitted by law.',
       '',
@@ -72,13 +70,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'athlete_medical_emergency',
     role: 'athlete',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Medical Authorization and Emergency Contact Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. PURPOSE. This document records my emergency contact information obligations and my authorization for emergency medical care in connection with training sessions booked through LevelCoach Training across all sports and performance disciplines offered on the platform.',
       '',
       '2. EMERGENCY CONTACT INFORMATION. I agree to provide and maintain accurate, current emergency contact information in my LevelCoach profile, including at least one reachable emergency contact with name, relationship, and phone number. I understand that coaches rely on this information in an emergency and that out-of-date information may delay care.',
@@ -105,13 +101,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'athlete_media_release',
     role: 'athlete',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Photo, Video, and Media Release',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. PURPOSE AND SCOPE. This release governs the capture and use of photographs, video recordings, audio recordings, and other media depicting me ("Media") in connection with training sessions and platform activities across all sports and performance disciplines offered through LevelCoach Training.',
       '',
       '2. TRAINING MEDIA. I consent to my coach capturing Media of me during sessions for instructional purposes, including technique analysis, progress documentation, homework feedback, and session summaries shared with me (and, where applicable, my guardian) through the platform. Training Media is part of my training record and is shared only with me, my linked guardians, my coach, and platform administrators as needed for support and safety.',
@@ -138,13 +132,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'athlete_communication_safety',
     role: 'athlete',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Communication Policy and Athlete Code of Conduct',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. ON-PLATFORM COMMUNICATION. I agree that all communication with coaches and training organizations regarding scheduling, payments, training plans, and feedback will occur through LevelCoach Training\'s built-in messaging and booking tools. Keeping communication on-platform protects all parties, creates a reviewable record, and is a condition of using the services.',
       '',
       '2. MONITORING AND RETENTION. I understand and consent that platform communications are not private as between me and LevelCoach: messages may be retained, reviewed for safety and policy compliance, and disclosed to guardians of minor participants, to platform safety staff, and to law enforcement where required by law or necessary to address a safety threat.',
@@ -171,13 +163,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'athlete_payment_terms',
     role: 'athlete',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Payment, Refund, and Cancellation Terms',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. PRICING AND PAYMENT PROCESSING. All prices are stated in United States dollars and are presented before checkout. Payments are processed by Stripe, Inc.; LevelCoach Training does not store full payment card numbers. By completing a purchase I authorize the charge to my selected payment method for the displayed amount, plus any applicable taxes.',
       '',
       '2. SESSION CREDITS. Purchases of training packages are delivered as session credits on my account. Credits are redeemable for sessions with the coach or organization associated with the purchased package, subject to availability, and have no cash value except where required by law. Credits may not be transferred or resold except through platform-supported guardian/athlete relationships.',
@@ -206,20 +196,18 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'guardian_authority_minor_packet',
     role: 'guardian',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Parent/Guardian Authority and Minor Athlete Participation Consent',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. CERTIFICATION OF AUTHORITY. I certify under penalty of law that I am the parent, legal guardian, or otherwise legally authorized adult representative of each minor athlete profile I manage on LevelCoach Training, and that I have full legal authority to sign waivers, releases, medical authorizations, media consents, safety acknowledgements, and booking and payment documents on each such minor athlete\'s behalf. I agree to notify LevelCoach promptly if my authority over any linked athlete changes, including through custody changes or court order.',
       '',
       '2. SCOPE AND BINDING TO SPECIFIC ATHLETES. Each consent and signature I provide applies to the specific linked athlete identified in the signing record. Where I manage multiple minor athletes, I understand that required documents are recorded per athlete and that I must complete them for each athlete who will participate.',
       '',
       '3. CONSENT TO PARTICIPATION. I consent to my minor athlete\'s participation in training activities booked through the platform across all applicable sports and performance disciplines — including, without limitation, soccer, basketball, football, baseball, softball, volleyball, tennis, lacrosse, hockey, golf, track and field, swimming, and speed, agility, strength, and general athletic performance training — with coaches and organizations I select.',
       '',
-      '4. ASSUMPTION OF RISK, WAIVER, AND RELEASE ON BEHALF OF A MINOR. I understand that athletic training involves inherent risks, including the risk of serious injury, permanent disability, or death. On my own behalf and, to the fullest extent permitted by Michigan law, on behalf of the minor athlete, I assume these risks and release LevelCoach Training, its owners, officers, employees, contractors, and agents, and the coaches and organizations providing services through the platform, from claims arising out of the minor\'s participation, including claims based on ordinary negligence. This release does not extend to gross negligence, willful misconduct, or liability that cannot be waived. [PLACEHOLDER: Counsel to confirm enforceability of pre-injury parental waivers under current Michigan law, including MCL 700.5109 scope.]',
+      '4. ASSUMPTION OF RISK, WAIVER, AND RELEASE ON BEHALF OF A MINOR. I understand that athletic training involves inherent risks, including the risk of serious injury, permanent disability, or death. On my own behalf and, to the fullest extent permitted by Michigan law, on behalf of the minor athlete, I assume these risks and release LevelCoach Training, its owners, officers, employees, contractors, and agents, and the coaches and organizations providing services through the platform, from claims arising out of the minor\'s participation, including claims based on ordinary negligence. This release does not extend to gross negligence, willful misconduct, or liability that cannot be waived. I acknowledge that the enforceability of a pre-injury parental waiver may be limited by Michigan law, and I agree that any portion found unenforceable is severable and that the remainder of this consent, including the assumption of risk, remains in effect.',
       '',
       '5. COPPA AND CHILDREN\'S PRIVACY CONSENT. I understand that the minor athlete does not hold their own platform account; the athlete is represented through my guardian account. I provide verifiable parental consent, consistent with the Children\'s Online Privacy Protection Act (COPPA), to the collection and use of the minor\'s personal information — including name, date of birth, sport and skill information, health and emergency information I choose to provide, and training-progress records — solely for the purposes described in the Privacy Policy. I may review the minor\'s information, request deletion, and withdraw consent, in which case the minor\'s participation will end.',
       '',
@@ -239,13 +227,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'guardian_medical_media_safety',
     role: 'guardian',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Minor Athlete Medical Authorization, Media Consent, and Safety Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. PURPOSE. This document records my medical, emergency, media, and safety consents for each minor athlete I manage on LevelCoach Training, across all sports and performance disciplines offered on the platform. Each consent applies to the specific linked athlete identified in the signing record.',
       '',
       '2. EMERGENCY CONTACT INFORMATION. I agree to provide and keep current accurate emergency contact information for each minor athlete, including at least one reachable contact with name, relationship, and phone number. I understand that coaches rely on this information in an emergency.',
@@ -274,13 +260,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'guardian_payment_booking_consent',
     role: 'guardian',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Guardian Payment Authority and Booking Approval Consent',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. GUARDIAN AS PAYING PARTY. I acknowledge that, as the parent or legal guardian, I am the contracting and paying party for all purchases and bookings made for minor athletes linked to my account on LevelCoach Training. Minor athletes cannot make purchases or enter payment obligations on the platform.',
       '',
       '2. PAYMENT AUTHORIZATION. I authorize charges to my selected payment method for purchases I complete through the platform at the prices displayed at checkout, in United States dollars, processed by Stripe, Inc. I represent that I am authorized to use the payment methods I provide.',
@@ -309,13 +293,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'coach_independent_contractor_packet',
     role: 'coach',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Coach Independent Contractor Agreement and Payout Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. INDEPENDENT CONTRACTOR STATUS. I acknowledge and agree that my relationship with LevelCoach Training is that of an independent contractor using a marketplace platform, and not employment, partnership, joint venture, or agency. I control the manner and means of delivering my coaching services, set my availability, and may decline bookings, subject to platform policies. Nothing in this agreement entitles me to wages, benefits, workers\' compensation, or unemployment insurance from LevelCoach.',
       '',
       '2. TAXES. I am solely responsible for all federal, state, and local taxes on amounts I earn through the platform, including self-employment taxes. I agree to provide accurate taxpayer information through Stripe as required for tax reporting (including IRS Form 1099 series where applicable), and I understand payouts may be suspended if required tax information is missing or inaccurate.',
@@ -346,16 +328,14 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'coach_safeguarding_boundaries_packet',
     role: 'coach',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Coach Safeguarding, Youth Protection, Background Check Consent, and Code of Conduct',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. COMMITMENT TO ATHLETE SAFETY. As a coach on LevelCoach Training, I accept personal responsibility for the physical and emotional safety of every athlete I train, in every sport and performance discipline I offer, and I agree to the safeguarding standards in this document as a condition of listing and remaining on the platform.',
       '',
-      '2. BACKGROUND CHECK CONSENT. I consent to LevelCoach, directly or through a consumer reporting agency, obtaining and periodically refreshing background screening about me — which may include criminal history, sex-offender registry checks, and verification of identity and credentials — where enabled by the platform and permitted by law. I understand I will receive any disclosures and authorization forms required by the Fair Credit Reporting Act (FCRA) and applicable state law before such screening, and that adverse findings may result in denial, suspension, or removal, subject to any legally required pre-adverse-action process. [PLACEHOLDER: Counsel to finalize FCRA disclosure/authorization flow before production use.]',
+      '2. BACKGROUND CHECK CONSENT. I consent to LevelCoach, directly or through a consumer reporting agency, obtaining and periodically refreshing background screening about me — which may include criminal history, sex-offender registry checks, and verification of identity and credentials — where enabled by the platform and permitted by law. I understand I will receive any disclosures and authorization forms required by the Fair Credit Reporting Act (FCRA) and applicable state law before such screening, and that adverse findings may result in denial, suspension, or removal, subject to any legally required pre-adverse-action process.',
       '',
       '3. YOUTH PROTECTION STANDARDS. I agree to the platform\'s minor-athlete protections: training environments for minors must be observable and interruptible; I will not be alone with a minor athlete in a private, unobservable setting; sessions occur at appropriate facilities, never at private residences without a guardian present; and a linked parent or legal guardian must be able to attend and observe any session with a minor.',
       '',
@@ -381,13 +361,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'coach_communication_policy',
     role: 'coach',
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Coach Communication Policy Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. ON-PLATFORM REQUIREMENT. I agree to conduct all communication with platform clients — athletes, parents, and guardians — through LevelCoach Training\'s built-in messaging and booking tools for all matters relating to scheduling, payments, training plans, assessments, homework, and feedback. On-platform communication protects athletes, families, and me by creating a consistent, reviewable record.',
       '',
       '2. MONITORING AND RETENTION. I understand and consent that platform communications are retained and may be reviewed by platform safety and support staff for policy compliance, safety, and dispute resolution, and may be disclosed to guardians of minor participants and, where required by law or necessary to address a safety threat, to law enforcement.',
@@ -416,13 +394,11 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'organization_service_authority_packet',
     role: 'organization',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Organization Service Agreement, Signing Authority, and Payout Split Acknowledgement',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. SIGNING AUTHORITY. I certify that I am an owner, officer, or duly authorized representative of the organization identified in this signing record, with full legal authority to bind the organization to LevelCoach Training\'s platform terms, marketplace rules, payment and payout policies, data-handling obligations, and the commitments in this packet. The organization will promptly notify LevelCoach if my authority changes.',
       '',
       '2. ORGANIZATION SERVICES. The organization may use the platform to maintain an organization profile, manage a roster of affiliated coaches across any sports and performance disciplines it offers, receive bookings and payments for organization-affiliated training, configure payout arrangements with its coaches, and administer organization members with role-based access. The organization is responsible for all actions taken by its authorized members within the organization portal.',
@@ -451,20 +427,18 @@ export const LEGAL_TEMPLATE_SEED = [
   {
     template_key: 'organization_roster_privacy_safety_packet',
     role: 'organization',
-    version: '2.0.0',
+    version: '2.1.0',
     title: 'Organization Roster Responsibility, Privacy, Facility, and Safety Obligations',
     jurisdiction: 'Michigan, United States',
     required: true,
     body: [
-      PLACEHOLDER_HEADER,
-      '',
       '1. ROSTER ACCURACY AND AUTHORITY. The organization certifies that every coach listed on its platform roster has agreed to the affiliation, that public titles, credentials, and sport offerings attributed to its coaches are accurate, and that the organization has authority to manage the bookings and payout arrangements it configures for its roster. The organization will keep its roster current, removing coaches promptly when affiliations end.',
       '',
       '2. COACH COMPLIANCE. The organization will verify that each affiliated coach maintains the certifications, licenses, and insurance the organization represents to clients; has completed the platform\'s required coach legal documents; and complies with the platform safeguarding, youth protection, communication, and conduct policies. The organization will not knowingly retain on its roster any coach who presents a safety risk to athletes.',
       '',
       '3. FACILITY SAFETY. For sessions conducted at facilities the organization owns, leases, or controls, the organization is responsible for maintaining the facility in reasonably safe condition, complying with applicable building, fire, and safety codes, maintaining appropriate emergency equipment and procedures, and ensuring playing surfaces and equipment are suitable for the sports and performance disciplines offered.',
       '',
-      '4. INSURANCE ATTESTATION. The organization represents that it maintains commercially reasonable general liability insurance appropriate to its operations and facilities, and any coverage required by law, and will provide evidence of coverage to LevelCoach upon reasonable request. [PLACEHOLDER: Counsel and insurer to confirm required coverage types and limits before production use.]',
+      '4. INSURANCE ATTESTATION. The organization represents that it maintains commercially reasonable general liability insurance appropriate to its operations and facilities, and any coverage required by law, and will provide evidence of coverage to LevelCoach upon reasonable request.',
       '',
       '5. YOUTH PROTECTION OBLIGATIONS. The organization adopts the platform\'s youth protection standards for all organization-affiliated activity: observable and interruptible training environments for minors; no private, unmonitored coach-minor contact; no private transportation of athletes by coaches; guardian access to observe sessions involving their minor athletes; and immediate removal from activity and guardian notification for suspected head injuries, with written medical clearance before return to training.',
       '',
