@@ -1,18 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ExternalLink, RefreshCw, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { createAccount, onboardingLink, refresh, dashboardLink } from '@/lib/stripeConnect';
 
-export function connectStatusLabel(account) {
-  if (!account) return { label: 'Not connected', tone: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
-  if (account.charges_enabled && account.payouts_enabled) {
-    return { label: 'Ready', tone: 'bg-green-500/10 text-green-600 border-green-500/20' };
-  }
-  if (account.details_submitted) return { label: 'In review', tone: 'bg-blue-500/10 text-blue-600 border-blue-500/20' };
-  return { label: 'Onboarding needed', tone: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
+// Canonical onboarding state. Prefers the server-synced onboarding_status
+// (written by stripeConnect/stripeConnectWebhook); derives the same value for
+// rows written before that field existed.
+export function connectStatus(account) {
+  if (!account) return 'not_started';
+  if (account.onboarding_status) return account.onboarding_status;
+  if (account.charges_enabled && account.payouts_enabled) return 'active';
+  if (!account.details_submitted) return 'incomplete';
+  let due = [];
+  try { due = JSON.parse(account.requirements_due || '[]'); } catch { due = []; }
+  return (Array.isArray(due) && due.length > 0) || account.disabled_reason ? 'restricted' : 'in_review';
 }
+
+const STATUS_BADGES = {
+  not_started: { label: 'Not connected', tone: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
+  incomplete: { label: 'Onboarding incomplete', tone: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
+  in_review: { label: 'In review', tone: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+  restricted: { label: 'Action required', tone: 'bg-red-500/10 text-red-600 border-red-500/20' },
+  active: { label: 'Payouts active', tone: 'bg-green-500/10 text-green-600 border-green-500/20' },
+};
+
+export function connectStatusLabel(account) {
+  return STATUS_BADGES[connectStatus(account)] || STATUS_BADGES.not_started;
+}
+
+// What the primary button should say for each non-active state.
+export const ONBOARD_CTA = {
+  not_started: 'Connect with Stripe',
+  incomplete: 'Finish Stripe setup',
+  in_review: 'Finish Stripe setup',
+  restricted: 'Update Stripe account',
+};
 
 function requirementsList(account) {
   try {
@@ -30,10 +55,13 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
   const [connecting, setConnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [openingDashboard, setOpeningDashboard] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledStripeParams = useRef(false);
 
-  const status = connectStatusLabel(account);
+  const state = connectStatus(account);
+  const status = STATUS_BADGES[state];
   const due = requirementsList(account);
-  const ready = !!account?.charges_enabled && !!account?.payouts_enabled;
+  const ready = state === 'active';
 
   const startOnboarding = async () => {
     if (!coachId) return;
@@ -53,7 +81,7 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
     }
   };
 
-  const refreshStatus = async () => {
+  const refreshStatus = async (silent = false) => {
     if (!coachId) return;
     setRefreshing(true);
     try {
@@ -63,13 +91,36 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
         stripe_account_id: account?.stripe_account_id,
       });
       await onChanged?.();
-      toast.success('Stripe status refreshed');
+      if (!silent) toast.success('Stripe status refreshed');
     } catch (err) {
-      toast.error(err?.message || 'Could not refresh Stripe status.');
+      if (!silent) toast.error(err?.message || 'Could not refresh Stripe status.');
     } finally {
       setRefreshing(false);
     }
   };
+
+  // Returning from Stripe-hosted onboarding:
+  //   stripe_return=1  — the user finished (or exited) onboarding; pull fresh
+  //                      status from Stripe instead of showing a stale panel.
+  //   stripe_refresh=1 — Stripe sends users here when the onboarding link
+  //                      expired; mint a fresh link and send them straight back.
+  useEffect(() => {
+    if (handledStripeParams.current) return;
+    const returned = searchParams.get('stripe_return');
+    const expired = searchParams.get('stripe_refresh');
+    if (!returned && !expired) return;
+    if (!coachId) return; // wait until the owner record has loaded
+    handledStripeParams.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete('stripe_return');
+    next.delete('stripe_refresh');
+    setSearchParams(next, { replace: true });
+    if (returned) void refreshStatus(true);
+    else void startOnboarding();
+    // refreshStatus/startOnboarding are stable for a given coachId; the ref
+    // guarantees this runs at most once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachId, searchParams, setSearchParams]);
 
   const openDashboard = async () => {
     if (!coachId) return;
@@ -109,7 +160,7 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
               className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               <ExternalLink className="w-4 h-4 mr-2" aria-hidden="true" />
-              {connecting ? 'Opening…' : account ? 'Continue onboarding' : 'Set up payouts'}
+              {connecting ? 'Opening…' : ONBOARD_CTA[state]}
             </Button>
           )}
           {ready && (
@@ -119,12 +170,12 @@ export default function StripeConnectPanel({ coachId, account, onChanged }) {
               className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
             >
               <ExternalLink className="w-4 h-4 mr-2" aria-hidden="true" />
-              {openingDashboard ? 'Opening…' : 'View payouts in Stripe'}
+              {openingDashboard ? 'Opening…' : 'Open Stripe dashboard'}
             </Button>
           )}
           <Button
             variant="outline"
-            onClick={refreshStatus}
+            onClick={() => refreshStatus()}
             disabled={!account || refreshing}
             className="font-semibold"
           >

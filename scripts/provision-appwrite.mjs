@@ -977,6 +977,10 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'bool', key: 'details_submitted', def: false },
       { type: 'string', key: 'requirements_due', size: 20000 },
       { type: 'string', key: 'disabled_reason', size: 500 },
+      // Derived rollup of the Stripe flags (incomplete | in_review |
+      // restricted | active). Free-form string, not enum — enums cannot be
+      // extended in place if the state set grows.
+      { type: 'string', key: 'onboarding_status', size: 40 },
       { type: 'datetime', key: 'last_synced_at' },
     ],
     indexes: [

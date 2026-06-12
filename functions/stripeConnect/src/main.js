@@ -133,6 +133,18 @@ async function ownerEmail(databases, ownerType, ownerId, profile) {
   return org?.contact_email || profile?.email || '';
 }
 
+// Derived rollup of the Stripe flags, stored for UI/state checks:
+//   incomplete — onboarding not finished (details not submitted)
+//   in_review  — submitted; Stripe is verifying, nothing currently due
+//   restricted — submitted but blocked with action required from the owner
+//   active     — charges and payouts both enabled
+function onboardingStatus(account) {
+  if (account.charges_enabled && account.payouts_enabled) return 'active';
+  if (!account.details_submitted) return 'incomplete';
+  const due = account.requirements?.currently_due || [];
+  return due.length > 0 || account.requirements?.disabled_reason ? 'restricted' : 'in_review';
+}
+
 function syncFields(account) {
   return {
     charges_enabled: !!account.charges_enabled,
@@ -140,8 +152,24 @@ function syncFields(account) {
     details_submitted: !!account.details_submitted,
     requirements_due: JSON.stringify(account.requirements?.currently_due || []),
     disabled_reason: account.requirements?.disabled_reason || '',
+    onboarding_status: onboardingStatus(account),
     last_synced_at: new Date().toISOString(),
   };
+}
+
+// Rollout-safe write: if the live schema predates onboarding_status (the
+// provision script has not run yet), retry without it instead of failing.
+async function writeAccountDoc(write, data) {
+  try {
+    return await write(data);
+  } catch (err) {
+    if (/unknown attribute/i.test(err?.message || '') && 'onboarding_status' in data) {
+      const rest = { ...data };
+      delete rest.onboarding_status;
+      return write(rest);
+    }
+    throw err;
+  }
 }
 
 async function syncOwnerAccountId(databases, ownerType, ownerId, stripeAccountId) {
@@ -190,7 +218,10 @@ async function createAccount({ databases, users, stripe, accountId, profile, own
   };
   let row;
   try {
-    row = await databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), data, permissions);
+    row = await writeAccountDoc(
+      (doc) => databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), doc, permissions),
+      data,
+    );
   } catch (err) {
     if (err?.code === 409) {
       // A concurrent createAccount won the unique (owner_type, owner_id) race.
@@ -210,7 +241,10 @@ async function createAccount({ databases, users, stripe, accountId, profile, own
       }
       throw err;
     }
-    row = await databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), data);
+    row = await writeAccountDoc(
+      (doc) => databases.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), doc),
+      data,
+    );
   }
   await syncOwnerAccountId(databases, ownerType, ownerId, account.id);
 
@@ -231,11 +265,13 @@ async function onboardingLink({ databases, stripe, ownerType, ownerId }) {
   const base = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
   if (!base) return { status: 500, error: 'Service configuration error.', log: 'APP_BASE_URL is not configured.' };
 
-  const path = ownerType === 'org' ? '/organization' : '/coach/earnings';
+  // Org returns land on the revenue tab, where the Connect card lives.
+  const path = ownerType === 'org' ? '/organization?tab=revenue' : '/coach/earnings';
+  const sep = path.includes('?') ? '&' : '?';
   const link = await stripe.accountLinks.create({
     account: record.stripe_account_id,
-    refresh_url: `${base}${path}?stripe_refresh=1`,
-    return_url: `${base}${path}?stripe_return=1`,
+    refresh_url: `${base}${path}${sep}stripe_refresh=1`,
+    return_url: `${base}${path}${sep}stripe_return=1`,
     type: 'account_onboarding',
   });
   return { url: link.url };
@@ -246,7 +282,10 @@ async function refresh({ databases, stripe, ownerType, ownerId, stripeAccountId 
   if (!record?.stripe_account_id) return { status: 404, error: 'Stripe connected account record not found.' };
 
   const account = await stripe.accounts.retrieve(record.stripe_account_id);
-  const updated = await databases.updateDocument(DB_ID, 'stripe_connected_accounts', record.$id, syncFields(account));
+  const updated = await writeAccountDoc(
+    (doc) => databases.updateDocument(DB_ID, 'stripe_connected_accounts', record.$id, doc),
+    syncFields(account),
+  );
   await syncOwnerAccountId(databases, record.owner_type, record.owner_id, record.stripe_account_id);
   return {
     record_id: updated.$id,
@@ -256,6 +295,7 @@ async function refresh({ databases, stripe, ownerType, ownerId, stripeAccountId 
     details_submitted: updated.details_submitted,
     requirements_due: updated.requirements_due,
     disabled_reason: updated.disabled_reason,
+    onboarding_status: updated.onboarding_status || onboardingStatus(account),
   };
 }
 

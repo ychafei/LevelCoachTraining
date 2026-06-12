@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { coachRepo, ledgerRepo, reportsRepo, stripeConnectedAccountRepo } from '@/api/repo';
 import { createAccount, dashboardLink, onboardingLink, refresh as refreshConnect } from '@/lib/stripeConnect';
+import { connectStatus, connectStatusLabel, ONBOARD_CTA } from '@/features/coach/StripeConnectPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -69,7 +71,9 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
 
   useEffect(() => { void load(); }, [load]);
 
-  const stripeReady = !!connectAccount?.charges_enabled && !!connectAccount?.payouts_enabled;
+  const connectState = connectStatus(connectAccount);
+  const connectBadge = connectStatusLabel(connectAccount);
+  const stripeReady = connectState === 'active';
 
   const startOnboarding = async () => {
     setBusy('onboard');
@@ -87,7 +91,7 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
     }
   };
 
-  const refreshStatus = async () => {
+  const refreshStatus = async (silent = false) => {
     setBusy('refresh');
     try {
       await refreshConnect({
@@ -96,13 +100,37 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
         stripe_account_id: connectAccount?.stripe_account_id,
       });
       await load();
-      toast.success('Stripe status refreshed');
+      if (!silent) toast.success('Stripe status refreshed');
     } catch (err) {
-      toast.error(err?.message || 'Could not refresh the Stripe status.');
+      if (!silent) toast.error(err?.message || 'Could not refresh the Stripe status.');
     } finally {
       setBusy('');
     }
   };
+
+  // Returning from Stripe-hosted onboarding (the onboarding link lands on
+  // /organization?tab=revenue, so this tab is mounted): stripe_return pulls
+  // fresh status from Stripe; stripe_refresh means the link expired — mint a
+  // fresh one and send the admin straight back.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledStripeParams = useRef(false);
+  useEffect(() => {
+    if (handledStripeParams.current || loading) return;
+    const returned = searchParams.get('stripe_return');
+    const expired = searchParams.get('stripe_refresh');
+    if (!returned && !expired) return;
+    if (!organizationId || !isOrgAdmin) return;
+    handledStripeParams.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete('stripe_return');
+    next.delete('stripe_refresh');
+    setSearchParams(next, { replace: true });
+    if (returned) void refreshStatus(true);
+    else void startOnboarding();
+    // refreshStatus/startOnboarding are stable for a given org; the ref
+    // guarantees this runs at most once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizationId, isOrgAdmin, loading, searchParams, setSearchParams]);
 
   const openDashboard = async () => {
     setBusy('dashboard');
@@ -146,7 +174,10 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Stripe Connect</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Stripe Connect</h2>
+              <Badge className={`${connectBadge.tone} border text-xs font-semibold`}>{connectBadge.label}</Badge>
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Organization payouts require a ready Stripe Connect account before any organization share can transfer.
             </p>
@@ -155,16 +186,16 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
             {!stripeReady && (
               <Button onClick={startOnboarding} disabled={!!busy || !isOrgAdmin} className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
-                {busy === 'onboard' ? 'Opening...' : connectAccount ? 'Continue onboarding' : 'Set up payouts'}
+                {busy === 'onboard' ? 'Opening...' : ONBOARD_CTA[connectState]}
               </Button>
             )}
             {stripeReady && (
               <Button onClick={openDashboard} disabled={!!busy} variant="outline">
                 <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
-                {busy === 'dashboard' ? 'Opening...' : 'Stripe dashboard'}
+                {busy === 'dashboard' ? 'Opening...' : 'Open Stripe dashboard'}
               </Button>
             )}
-            <Button variant="outline" onClick={refreshStatus} disabled={!connectAccount || !!busy}>
+            <Button variant="outline" onClick={() => refreshStatus()} disabled={!connectAccount || !!busy}>
               <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
               {busy === 'refresh' ? 'Refreshing...' : 'Refresh'}
             </Button>
@@ -184,6 +215,18 @@ export default function OrgRevenueTab({ organizationId, organization, isOrgAdmin
             </div>
           ))}
         </div>
+        {(() => {
+          let due = [];
+          try { due = JSON.parse(connectAccount?.requirements_due || '[]'); } catch { due = []; }
+          if (!Array.isArray(due)) due = [];
+          if (due.length === 0 && !connectAccount?.disabled_reason) return null;
+          return (
+            <div className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-700">
+              {connectAccount?.disabled_reason && <p className="font-medium">Stripe status: {connectAccount.disabled_reason}</p>}
+              {due.length > 0 && <p className="mt-1">Outstanding requirements: {due.slice(0, 6).join(', ')}{due.length > 6 ? '…' : ''}</p>}
+            </div>
+          );
+        })()}
       </div>
 
       {reportError && (

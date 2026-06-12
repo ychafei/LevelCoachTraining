@@ -32,6 +32,19 @@ async function createWebhookEvent(db, event) {
   }
 }
 
+// Derived rollup of the Stripe flags, stored for UI/state checks. Must stay
+// in lockstep with the same function in stripeConnect/src/main.js:
+//   incomplete — onboarding not finished (details not submitted)
+//   in_review  — submitted; Stripe is verifying, nothing currently due
+//   restricted — submitted but blocked with action required from the owner
+//   active     — charges and payouts both enabled
+function onboardingStatus(account) {
+  if (account.charges_enabled && account.payouts_enabled) return 'active';
+  if (!account.details_submitted) return 'incomplete';
+  const due = account.requirements?.currently_due || [];
+  return due.length > 0 || account.requirements?.disabled_reason ? 'restricted' : 'in_review';
+}
+
 function syncFields(account) {
   return {
     charges_enabled: !!account.charges_enabled,
@@ -39,8 +52,31 @@ function syncFields(account) {
     details_submitted: !!account.details_submitted,
     requirements_due: JSON.stringify(account.requirements?.currently_due || []),
     disabled_reason: account.requirements?.disabled_reason || '',
+    onboarding_status: onboardingStatus(account),
     last_synced_at: new Date().toISOString(),
   };
+}
+
+// Rollout-safe write: if the live schema predates onboarding_status (the
+// provision script has not run yet), retry without it instead of failing.
+async function writeAccountDoc(write, data) {
+  try {
+    return await write(data);
+  } catch (err) {
+    if (/unknown attribute/i.test(err?.message || '') && 'onboarding_status' in data) {
+      const rest = { ...data };
+      delete rest.onboarding_status;
+      return write(rest);
+    }
+    throw err;
+  }
+}
+
+// Mirror the account id onto the owning coach/org document (parity with
+// stripeConnect.syncOwnerAccountId). Best-effort: the sync row is canonical.
+async function syncOwnerAccountId(db, ownerType, ownerId, stripeAccountId) {
+  const collection = ownerType === 'coach' ? 'coaches' : 'organizations';
+  await db.updateDocument(DB_ID, collection, ownerId, { stripe_account_id: stripeAccountId }).catch(() => {});
 }
 
 // Upsert keyed by stripe_account_id. New rows can only be created when the
@@ -54,20 +90,27 @@ async function handleAccountUpdated(db, account) {
   const existing = rows.documents[0] || null;
 
   if (existing) {
-    await db.updateDocument(DB_ID, 'stripe_connected_accounts', existing.$id, syncFields(account));
+    await writeAccountDoc(
+      (doc) => db.updateDocument(DB_ID, 'stripe_connected_accounts', existing.$id, doc),
+      syncFields(account),
+    );
     return true;
   }
 
   const ownerType = account.metadata?.owner_type;
   const ownerId = account.metadata?.owner_id;
   if ((ownerType !== 'coach' && ownerType !== 'org') || !ownerId) return false;
-  await db.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), {
-    owner_type: ownerType,
-    owner_id: String(ownerId).slice(0, 64),
-    stripe_account_id: account.id,
-    account_mode: 'controller_express',
-    ...syncFields(account),
-  });
+  await writeAccountDoc(
+    (doc) => db.createDocument(DB_ID, 'stripe_connected_accounts', ID.unique(), doc),
+    {
+      owner_type: ownerType,
+      owner_id: String(ownerId).slice(0, 64),
+      stripe_account_id: account.id,
+      account_mode: 'controller_express',
+      ...syncFields(account),
+    },
+  );
+  await syncOwnerAccountId(db, ownerType, String(ownerId).slice(0, 64), account.id);
   return true;
 }
 
