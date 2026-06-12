@@ -71,7 +71,12 @@ function signerRoleForProfile(profile) {
   return 'athlete';
 }
 
-function activeRequired(template, now = Date.now()) {
+function activeRequired(template) {
+  // NOTE: no second parameter — this is used as .filter(activeRequired), and
+  // Array.filter passes the element INDEX as arg 2. A `now = Date.now()`
+  // default param silently became now=0/1/2..., rejecting every template as
+  // "not yet effective" (compared against 1970). Keep `now` internal.
+  const now = Date.now();
   if (!template.required) return false;
   if (template.retired_at && new Date(template.retired_at).getTime() <= now) return false;
   if (template.effective_at && new Date(template.effective_at).getTime() > now) return false;

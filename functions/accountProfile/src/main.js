@@ -168,7 +168,8 @@ function buildUpdates(payload, profile) {
   if (payload.skill_level !== undefined) {
     const value = String(payload.skill_level || '').trim();
     if (value && !SKILL_LEVELS.includes(value)) return fail('skill_level is invalid.');
-    updates.skill_level = value;
+    // Enum attributes accept null but reject '' — clearing must be null.
+    updates.skill_level = value || null;
   }
 
   if (payload.sports !== undefined) {
@@ -186,7 +187,8 @@ function buildUpdates(payload, profile) {
   if (payload.parent_email !== undefined) {
     const value = String(payload.parent_email || '').trim().toLowerCase();
     if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return fail('parent_email must be a valid email address.');
-    updates.parent_email = value;
+    // Appwrite email attributes accept null but reject '' — clearing must be null.
+    updates.parent_email = value || null;
   }
 
   if (payload.photo_url !== undefined) {
