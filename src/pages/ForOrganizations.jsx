@@ -62,7 +62,7 @@ const STEPS = [
 const FAQ = [
   {
     q: 'How are payouts handled?',
-    a: 'You configure how each paid session is divided between your coaches and your organization. When a client pays, Stripe transfers each share to the right account from that charge — there is no manual settlement.',
+    a: 'You configure how each earned session is divided between your coaches and your organization. Client checkout creates prepaid LevelCoach credit first; Stripe transfers each share after the session is completed, no-showed, or late-cancelled under policy — there is no manual settlement.',
   },
   {
     q: 'Can we configure payouts per coach?',

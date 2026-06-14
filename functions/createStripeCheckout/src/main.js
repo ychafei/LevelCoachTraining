@@ -186,68 +186,6 @@ function isSelfContained(pkg) {
   return Number.isInteger(Number(pkg.price_cents)) && Number(pkg.price_cents) > 0;
 }
 
-function bpsInt(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 0 && n <= 10000 ? n : null;
-}
-
-// Admin-set fees (coach/org overrides + the global setting) are capped at 50%.
-function feeBpsInt(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 0 && n <= 5000 ? n : null;
-}
-
-// Global platform fee from the site_content collection (key 'platform_fee_bps').
-// Read fresh on every checkout (one cheap listDocuments) so an admin change in
-// /admin/settings reflects immediately — no module-level cache that could go
-// stale across warm-container invocations.
-async function globalPlatformBps(db) {
-  try {
-    const rows = await db.listDocuments(DB_ID, 'site_content', [
-      Query.equal('key', 'platform_fee_bps'),
-      Query.limit(1),
-    ]);
-    const raw = rows.documents[0]?.value;
-    if (raw !== undefined && raw !== null) {
-      return feeBpsInt(Number.parseInt(String(raw), 10));
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-// Resolution order for the platform's cut (basis points):
-//   (a) coach.platform_fee_bps (admin-set, 0-5000)
-//   (b) org.platform_fee_bps when routed through an active org (admin-set, 0-5000)
-//   (c) global site_content 'platform_fee_bps' (0-5000)
-//   (d) env PLATFORM_FEE_BPS
-//   (e) 1500 (15%)
-// `org` is the active organization the booking routes through, or null.
-async function resolvePlatformBps(db, coach, org) {
-  const fromCoach = feeBpsInt(coach.platform_fee_bps);
-  if (fromCoach !== null) return fromCoach;
-  if (org) {
-    const fromOrg = feeBpsInt(org.platform_fee_bps);
-    if (fromOrg !== null) return fromOrg;
-  }
-  const fromGlobal = await globalPlatformBps(db);
-  if (fromGlobal !== null) return fromGlobal;
-  const fromEnv = bpsInt(Number.parseInt(process.env.PLATFORM_FEE_BPS || '', 10));
-  if (fromEnv !== null) return fromEnv;
-  return 1500;
-}
-
-async function readyConnectedAccount(db, ownerType, ownerId) {
-  if (!ownerId) return null;
-  const rows = await db.listDocuments(DB_ID, 'stripe_connected_accounts', [
-    Query.equal('owner_type', ownerType),
-    Query.equal('owner_id', ownerId),
-    Query.limit(10),
-  ]).catch(() => ({ documents: [] }));
-  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || null;
-}
-
 // True when the coach has an ACTIVE organization_coaches link to this org —
 // the gate for purchasing an org-bound package for that coach.
 async function activeOrgCoachLink(db, organizationId, coachId) {
@@ -259,69 +197,6 @@ async function activeOrgCoachLink(db, organizationId, coachId) {
     Query.limit(1),
   ]).catch(() => ({ documents: [] }));
   return rows.documents.length > 0;
-}
-
-async function activeOrganizationForCoach(db, coachId) {
-  const links = await db.listDocuments(DB_ID, 'organization_coaches', [
-    Query.equal('coach_id', coachId),
-    Query.equal('status', 'active'),
-    Query.limit(10),
-  ]).catch(() => ({ documents: [] }));
-  for (const link of links.documents) {
-    const org = await db.getDocument(DB_ID, 'organizations', link.organization_id).catch(() => null);
-    if (org && org.status === 'active') return org;
-  }
-  return null;
-}
-
-async function activePayoutRule(db, organizationId, coachId) {
-  const rows = await db.listDocuments(DB_ID, 'payout_rules', [
-    Query.equal('organization_id', organizationId),
-    Query.equal('coach_id', coachId),
-    Query.equal('active', true),
-    Query.limit(1),
-  ]).catch(() => ({ documents: [] }));
-  return rows.documents[0] || null;
-}
-
-// Resolves the split (basis points) for a payment to this coach. All shares are
-// integers summing to 10000; never floats. The platform's cut follows the
-// coach → org → global → env → 1500 resolution order; a `payout_rules` row,
-// when present, is authoritative (it carries its own platform_share_bps).
-async function resolvePayoutPlan(db, coach) {
-  const org = await activeOrganizationForCoach(db, coach.$id);
-  // Thread the org's fee into the platform default for org-routed plans, so an
-  // org override applies to bookings that route through that org.
-  const platformDefault = await resolvePlatformBps(db, coach, org);
-  if (org) {
-    const rule = await activePayoutRule(db, org.$id, coach.$id);
-    if (rule) {
-      const coachBps = bpsInt(rule.coach_share_bps);
-      const orgBps = bpsInt(rule.org_share_bps);
-      const platformBps = bpsInt(rule.platform_share_bps);
-      if (coachBps === null || orgBps === null || platformBps === null
-        || coachBps + orgBps + platformBps !== 10000) {
-        return { error: `invalid payout_rules row ${rule.$id}` };
-      }
-      return { platform_bps: platformBps, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id };
-    }
-    if (org.payout_model === 'split' || org.payout_model === 'split_future') {
-      // Coach keeps 6000; the platform takes its resolved cut and the org keeps
-      // the remainder. Shares always sum to 10000.
-      const coachBps = 6000;
-      const orgBps = 10000 - platformDefault - coachBps;
-      if (orgBps < 0) {
-        return { error: `platform fee ${platformDefault}bps leaves no org share for org ${org.$id}` };
-      }
-      return { platform_bps: platformDefault, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id };
-    }
-    if (org.payout_model === 'organization') {
-      return { platform_bps: platformDefault, coach_bps: 0, org_bps: 10000 - platformDefault, organization_id: org.$id };
-    }
-    // payout_model 'coach': the coach is paid directly even while org-affiliated.
-    return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: org.$id };
-  }
-  return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: '' };
 }
 
 function finiteNumber(value) {
@@ -509,10 +384,9 @@ export default async ({ req, res, error }) => {
       return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
     }
 
-    // Publish gate: published coaches only. Fallback for rollout: documents that
-    // predate the published flag are treated as published unless inactive.
-    const published = typeof coach.published === 'boolean' ? coach.published : coach.is_active !== false;
-    if (!published || coach.is_active === false) return res.json({ error: COACH_NOT_READY }, 400);
+    // Publish gate: the public marketplace only allows active, explicitly
+    // published coaches. No rollout fallback to is_active.
+    if (coach.published !== true || coach.is_active !== true) return res.json({ error: COACH_NOT_READY }, 400);
     if (!(await coachLegalPacketComplete(db, coach))) return res.json({ error: COACH_NOT_READY }, 400);
 
     const bookingLocation = validateBookingLocation(coach, payload);
@@ -522,29 +396,6 @@ export default async ({ req, res, error }) => {
 
     const amount = calculateAmountCents(pkg, durationMinutes);
     if (!amount || amount < 50) return res.json({ error: 'A valid package amount is required.' }, 400);
-
-    const plan = await resolvePayoutPlan(db, coach);
-    if (plan.error) {
-      error?.(`[createStripeCheckout] payout resolution failed for coach ${coach.$id}: ${plan.error}`);
-      return res.json({ error: COACH_NOT_READY }, 400);
-    }
-
-    // Every payee leg with a positive share must have a ready Connect account
-    // (charges + payouts enabled). Otherwise funds would be trapped — refuse.
-    const coachAccount = plan.coach_bps > 0 ? await readyConnectedAccount(db, 'coach', coach.$id) : null;
-    if (plan.coach_bps > 0 && !coachAccount) return res.json({ error: COACH_NOT_READY }, 400);
-    const orgAccount = plan.org_bps > 0 ? await readyConnectedAccount(db, 'org', plan.organization_id) : null;
-    if (plan.org_bps > 0 && !orgAccount) return res.json({ error: COACH_NOT_READY }, 400);
-
-    const payoutPlan = {
-      platform_bps: plan.platform_bps,
-      coach_bps: plan.coach_bps,
-      org_bps: plan.org_bps,
-      coach_id: coach.$id,
-      organization_id: plan.organization_id || '',
-      coach_account_id: coachAccount?.stripe_account_id || '',
-      org_account_id: orgAccount?.stripe_account_id || '',
-    };
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
     const bookingReference = payload.bookingId || `checkout_${profile.$id}_${Date.now()}`;
@@ -560,7 +411,8 @@ export default async ({ req, res, error }) => {
       booking_id: bookingReference,
       coach_id: coach.$id,
       coach_name: [coach.first_name, coach.last_name].filter(Boolean).join(' '),
-      payout_plan: JSON.stringify(payoutPlan),
+      originating_organization_id: pkgOrgId || '',
+      purpose: 'prepaid_credit',
       booking_location_status: bookingLocation.status,
       booking_location_label: bookingLocation.label || '',
       booking_location_lat: bookingLocation.lat !== null && bookingLocation.lat !== undefined ? String(bookingLocation.lat) : '',
@@ -579,8 +431,9 @@ export default async ({ req, res, error }) => {
       client_notes: truncateMetadata(payload.client_notes || payload.notes || ''),
     };
 
-    // Platform is merchant of record: no transfer_data / application_fee_amount.
-    // Transfers are created by the webhook after the charge succeeds.
+    // Platform is merchant of record: no Connect destination or fee fields.
+    // No coach/org transfer happens at checkout; value is released only after
+    // a session is completed, no-showed, or chargeably late-cancelled.
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       // Card only: a delayed-notification method (ACH/SEPA) could mint a credit
@@ -603,18 +456,20 @@ export default async ({ req, res, error }) => {
       allow_promotion_codes: false,
     });
 
-    // Platform share in cents, rounded down — payees get floor(amount*bps/10000),
-    // the platform keeps the rounding remainder.
-    const applicationFee = Math.floor((amount * plan.platform_bps) / 10000);
-
     await db.createDocument(DB_ID, 'stripe_payment_records', ID.unique(), {
       booking_id: bookingReference,
       checkout_session_id: session.id,
       amount,
-      application_fee: applicationFee,
+      application_fee: 0,
       currency: 'usd',
       transfer_destination: '',
       status: 'created',
+      state: 'created',
+      purpose: 'prepaid_credit',
+      merchant_of_record: 'levelcoach_platform',
+      athlete_id: athleteId || '',
+      available_for_refund_cents: amount,
+      disputed_amount_cents: 0,
       metadata: JSON.stringify(metadata),
     });
 

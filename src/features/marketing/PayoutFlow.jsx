@@ -2,26 +2,25 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CreditCard, Landmark, ShieldCheck } from 'lucide-react';
 
-// Animated payout-flow diagram for the For Coaches page: a payment travels
-// booking → Stripe → the coach's bank as a small amber dot, on loop. The
-// point is to make "you get paid automatically" legible at a glance.
+// Animated payout-flow diagram for the For Coaches page: prepaid value becomes
+// earned session value, then travels through Stripe to the coach's bank.
 // Qualitative only — no amounts, fees, or percentages (those live in the
 // checkout funnel). Reduced-motion users get the same diagram, static.
 
 const STOPS = [
   {
-    title: 'Client books & pays',
-    body: 'Checkout happens on-platform — the client sees the exact amount first.',
+    title: 'Client prepays',
+    body: 'Checkout creates LevelCoach credit before a coach is paid.',
     icon: CreditCard,
   },
   {
-    title: 'Stripe processes',
-    body: 'Stripe Connect handles the charge and splits your earnings from it.',
+    title: 'Session is earned',
+    body: 'Completed, no-show, and chargeable late-cancel sessions release payout.',
     icon: ShieldCheck,
   },
   {
     title: 'Your bank',
-    body: 'Your share lands in your own connected account. No invoicing.',
+    body: 'Stripe Connect sends your earned share to your account. No invoicing.',
     icon: Landmark,
   },
 ];

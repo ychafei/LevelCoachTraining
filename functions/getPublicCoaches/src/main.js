@@ -1,5 +1,6 @@
-// Public marketplace cards. Only published coaches; PII (email/phone/user_id)
-// and platform fee fields are never returned.
+// Public marketplace cards. Only active published coaches; PII
+// (email/phone/user_id), Stripe IDs, verification notes, and platform fee
+// fields are never returned.
 import { Client, Databases, Query } from 'node-appwrite';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
@@ -47,6 +48,7 @@ function publicCard(doc, organization) {
     availability: parseAvailability(doc.availability),
     is_head_coach: doc.is_head_coach === true,
     display_order: doc.display_order ?? 0,
+    public_verified: true,
     organization: organization || null,
   };
 }
@@ -101,25 +103,80 @@ async function orgAffiliations(databases, coachIds) {
   return byCoach;
 }
 
-// Lowest per-session price (cents) across a coach's active packages. This makes
-// the "From $X / session" hint on cards reflect the coach's real pricing.
-async function packagePriceHints(databases, coachIds) {
+function perSessionPriceCents(pkg) {
+  const cents = Number(pkg.price_cents);
+  const sessions = Math.max(1, Number(pkg.sessions) || 1);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  return Math.round(cents / sessions);
+}
+
+function setLowestHint(hints, coachId, perSession) {
+  if (!coachId || !Number.isInteger(perSession) || perSession <= 0) return;
+  const current = hints.get(coachId);
+  if (current == null || perSession < current) hints.set(coachId, perSession);
+}
+
+// Lowest per-session price (cents) across active visible packages the coach can
+// actually offer: direct coach packages, active organization packages, then
+// platform defaults only when no coach/org package applies.
+async function packagePriceHints(databases, coachIds, orgsByCoach) {
   const hints = new Map();
   for (let i = 0; i < coachIds.length; i += 100) {
     const page = await databases.listDocuments(DB_ID, 'pricing_packages', [
       Query.equal('coach_id', coachIds.slice(i, i + 100)),
       Query.equal('is_active', true),
+      Query.equal('is_visible', true),
       Query.limit(500),
     ]).catch(() => ({ documents: [] }));
     for (const pkg of page.documents) {
-      const cents = Number(pkg.price_cents);
-      const sessions = Math.max(1, Number(pkg.sessions) || 1);
-      if (!Number.isInteger(cents) || cents <= 0) continue;
-      const perSession = Math.round(cents / sessions);
-      const current = hints.get(pkg.coach_id);
-      if (current == null || perSession < current) hints.set(pkg.coach_id, perSession);
+      setLowestHint(hints, pkg.coach_id, perSessionPriceCents(pkg));
     }
   }
+
+  const coachesByOrg = new Map();
+  for (const coachId of coachIds) {
+    const org = orgsByCoach.get(coachId);
+    if (!org?.id) continue;
+    if (!coachesByOrg.has(org.id)) coachesByOrg.set(org.id, []);
+    coachesByOrg.get(org.id).push(coachId);
+  }
+
+  const orgIds = [...coachesByOrg.keys()];
+  for (let i = 0; i < orgIds.length; i += 100) {
+    const page = await databases.listDocuments(DB_ID, 'pricing_packages', [
+      Query.equal('organization_id', orgIds.slice(i, i + 100)),
+      Query.equal('is_active', true),
+      Query.equal('is_visible', true),
+      Query.limit(500),
+    ]).catch(() => ({ documents: [] }));
+    for (const pkg of page.documents) {
+      const eligibleCoachIds = coachesByOrg.get(pkg.organization_id) || [];
+      for (const coachId of eligibleCoachIds) {
+        if (pkg.coach_id && pkg.coach_id !== coachId) continue;
+        setLowestHint(hints, coachId, perSessionPriceCents(pkg));
+      }
+    }
+  }
+
+  const defaults = await databases.listDocuments(DB_ID, 'pricing_packages', [
+    Query.equal('coach_id', ''),
+    Query.equal('organization_id', ''),
+    Query.equal('is_active', true),
+    Query.equal('is_visible', true),
+    Query.limit(100),
+  ]).catch(() => ({ documents: [] }));
+  let defaultHint = null;
+  for (const pkg of defaults.documents) {
+    const perSession = perSessionPriceCents(pkg);
+    if (perSession == null) continue;
+    if (defaultHint == null || perSession < defaultHint) defaultHint = perSession;
+  }
+  if (defaultHint != null) {
+    for (const coachId of coachIds) {
+      if (!hints.has(coachId)) hints.set(coachId, defaultHint);
+    }
+  }
+
   return hints;
 }
 
@@ -128,16 +185,11 @@ export default async ({ res, error }) => {
     const databases = db();
     const all = await listCoaches(databases);
 
-    // Publish gate: prefer the published flag; until any coach document carries
-    // the attribute (pre-cutover data), fall back to is_active.
-    const hasPublished = all.some((doc) => typeof doc.published === 'boolean');
-    const visible = hasPublished
-      ? all.filter((doc) => doc.published === true)
-      : all.filter((doc) => doc.is_active === true);
+    const visible = all.filter((doc) => doc.published === true && doc.is_active === true);
 
     const visibleIds = visible.map((doc) => doc.$id);
     const orgs = await orgAffiliations(databases, visibleIds);
-    const priceHints = await packagePriceHints(databases, visibleIds);
+    const priceHints = await packagePriceHints(databases, visibleIds, orgs);
     return res.json({
       coaches: visible.map((doc) => {
         const card = publicCard(doc, orgs.get(doc.$id));

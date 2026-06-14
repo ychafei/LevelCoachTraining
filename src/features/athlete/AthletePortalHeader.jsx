@@ -11,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { greetingName } from '@/lib/displayName';
 import { positionLabelFor, sportDisplayName, sportIconFor } from '@/features/athlete/sportMeta';
-import { Reveal, StatTile, isUpcomingSession } from '@/features/athlete/portalShared';
+import { Reveal, StatTile, isUpcomingSession, usd } from '@/features/athlete/portalShared';
 
 // Sport pills with icon + (optional) position/level, rendered from real athlete
 // profile data. Falls back gracefully while the profile is still loading.
@@ -141,8 +141,8 @@ export default function AthletePortalHeader({
         />
         <StatTile
           icon={CreditCard}
-          label="Session credits"
-          value={creditsData.remaining}
+          label="Credit balance"
+          value={usd(creditsData.remaining)}
           sub={creditsData.remaining === 0 ? 'Buy a package to book' : 'Ready to use'}
           loading={creditsData.loading}
           tone={creditsData.remaining === 0 ? 'amber' : 'green'}

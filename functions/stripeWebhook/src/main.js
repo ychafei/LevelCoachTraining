@@ -100,6 +100,51 @@ function parsePayoutPlan(metadata) {
   };
 }
 
+function cents(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : fallback;
+}
+
+function payoutPlanSnapshot(metadata) {
+  const legacyPlan = parsePayoutPlan(metadata);
+  if (legacyPlan) {
+    return {
+      ...legacyPlan,
+      release_trigger: 'session_outcome',
+      source: 'checkout_metadata',
+    };
+  }
+  return {
+    release_trigger: 'session_outcome',
+    source: 'deferred_booking_snapshot',
+    status: 'deferred',
+    original_coach_id: String(metadata.coach_id || ''),
+    original_organization_id: String(metadata.originating_organization_id || metadata.organization_id || ''),
+    note: 'Transferable credit: final payout split is server-validated when the credit is reserved for a session.',
+  };
+}
+
+function paymentMetadataSnapshot(session, paymentIntent = null, paymentRecord = null) {
+  const metadata = {
+    ...parseJson(paymentRecord?.metadata),
+    ...parseJson(paymentIntent?.metadata),
+    ...parseJson(session?.metadata),
+  };
+  metadata.payout_plan = payoutPlanSnapshot(metadata);
+  return metadata;
+}
+
+function ownerReadGrant(metadata) {
+  return metadata.client_account_id
+    ? [Permission.read(Role.user(metadata.client_account_id))]
+    : [];
+}
+
+function deterministicCreditId(paymentRecord) {
+  const base = String(paymentRecord?.$id || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 28);
+  return base ? `credit_${base}` : ID.unique();
+}
+
 // Creates a document with per-document grants; retries without grants if the
 // grant target is invalid (e.g. deleted account) so webhooks stay processable.
 async function createDocumentSafe(db, collection, data, permissions = []) {
@@ -114,11 +159,23 @@ async function createDocumentSafe(db, collection, data, permissions = []) {
   return db.createDocument(DB_ID, collection, ID.unique(), data);
 }
 
+async function createDocumentWithIdSafe(db, collection, id, data, permissions = []) {
+  if (permissions.length > 0) {
+    try {
+      return await db.createDocument(DB_ID, collection, id, data, permissions);
+    } catch (err) {
+      if (err?.code === 409) throw err;
+      return db.createDocument(DB_ID, collection, id, data);
+    }
+  }
+  return db.createDocument(DB_ID, collection, id, data);
+}
+
 async function ensurePaymentRecord(db, session, paymentIntent) {
-  const metadata = session.metadata || {};
   const paymentIntentId = typeof session.payment_intent === 'string'
     ? session.payment_intent
     : session.payment_intent?.id || '';
+  const metadata = paymentMetadataSnapshot(session, paymentIntent);
   let paymentRecord = await findPaymentRecord(db, {
     checkoutSessionId: session.id,
     paymentIntentId,
@@ -126,25 +183,36 @@ async function ensurePaymentRecord(db, session, paymentIntent) {
   if (paymentRecord) return paymentRecord;
 
   const amount = Number(session.amount_total || paymentIntent?.amount || 0);
-  const plan = parsePayoutPlan(metadata);
   return db.createDocument(DB_ID, 'stripe_payment_records', ID.unique(), {
     booking_id: metadata.booking_id || session.client_reference_id || '',
     checkout_session_id: session.id,
     payment_intent_id: paymentIntentId,
     charge_id: typeof paymentIntent?.latest_charge === 'string' ? paymentIntent.latest_charge : paymentIntent?.latest_charge?.id || '',
     amount,
-    application_fee: plan ? Math.floor((amount * plan.platform_bps) / 10000) : 0,
+    application_fee: 0,
     transfer_destination: '',
     status: 'created',
+    state: 'created',
+    purpose: metadata.purpose || 'prepaid_credit',
+    merchant_of_record: 'levelcoach_platform',
+    athlete_id: metadata.athlete_id || '',
+    available_for_refund_cents: amount,
+    disputed_amount_cents: 0,
     metadata: JSON.stringify(metadata),
     currency: session.currency || paymentIntent?.currency || 'usd',
   });
 }
 
-async function createCreditIfMissing(db, paymentRecord, session) {
-  if (paymentRecord.credit_id) return paymentRecord.credit_id;
-  const metadata = session.metadata || {};
+async function createCreditIfMissing(db, paymentRecord, session, metadata) {
+  if (paymentRecord.credit_lot_id || paymentRecord.credit_id) return paymentRecord.credit_lot_id || paymentRecord.credit_id;
   if (!metadata.package_id) return '';
+  const creditDocId = deterministicCreditId(paymentRecord);
+  const existingById = await db.getDocument(DB_ID, 'session_credits', creditDocId).catch(() => null);
+  if (existingById) return existingById.$id;
+  const existingBySource = await firstDocument(db, 'session_credits', [
+    Query.equal('source_payment_record_id', paymentRecord.$id),
+  ]).catch(() => null);
+  if (existingBySource) return existingBySource.$id;
 
   const sessions = Number.parseInt(metadata.package_sessions || '1', 10) || 1;
   const duration = Number.parseInt(metadata.session_duration_minutes || '60', 10) || 60;
@@ -153,10 +221,8 @@ async function createCreditIfMissing(db, paymentRecord, session) {
   const customerEmail = session.customer_details?.email || session.customer_email || metadata.client_email || '';
 
   // Buyer gets a per-document read grant on their credit.
-  const permissions = metadata.client_account_id
-    ? [Permission.read(Role.user(metadata.client_account_id))]
-    : [];
-  const credit = await createDocumentSafe(db, 'session_credits', {
+  const permissions = ownerReadGrant(metadata);
+  const creditData = {
     client_email: customerEmail,
     client_name: customerName,
     client_profile_id: metadata.client_profile_id || '',
@@ -170,11 +236,40 @@ async function createCreditIfMissing(db, paymentRecord, session) {
     per_session_base_price_cents: Math.floor(amountCents / sessions),
     per_session_base_price: Math.round((amountCents / 100) / sessions),
     payment_processor: 'stripe',
-  }, permissions);
+    owner_profile_id: metadata.client_profile_id || '',
+    owner_account_id: metadata.client_account_id || '',
+    athlete_id: metadata.athlete_id || '',
+    currency: session.currency || paymentRecord.currency || 'usd',
+    original_amount_cents: amountCents,
+    remaining_amount_cents: amountCents,
+    available_amount_cents: amountCents,
+    reserved_amount_cents: 0,
+    spent_amount_cents: 0,
+    refunded_amount_cents: 0,
+    earned_amount_cents: 0,
+    original_coach_id: metadata.coach_id || '',
+    original_organization_id: metadata.originating_organization_id || '',
+    originating_coach_id: metadata.coach_id || '',
+    originating_organization_id: metadata.originating_organization_id || '',
+    source_payment_record_id: paymentRecord.$id,
+    transferable: true,
+    status: 'active',
+  };
+  const credit = await createDocumentWithIdSafe(db, 'session_credits', creditDocId, creditData, permissions)
+    .catch(async (err) => {
+      if (err?.code !== 409) throw err;
+      return db.getDocument(DB_ID, 'session_credits', creditDocId);
+    });
   return credit.$id;
 }
 
-async function ledgerEntryExists(db, paymentRecordId, type, stripeRef = '') {
+async function ledgerEntryExists(db, paymentRecordId, type, stripeRef = '', idempotencyKey = '') {
+  if (idempotencyKey) {
+    const row = await firstDocument(db, 'payment_ledger_entries', [
+      Query.equal('idempotency_key', idempotencyKey),
+    ]).catch(() => null);
+    if (row) return true;
+  }
   const queries = [
     Query.equal('payment_record_id', paymentRecordId),
     Query.equal('type', type),
@@ -185,64 +280,27 @@ async function ledgerEntryExists(db, paymentRecordId, type, stripeRef = '') {
 }
 
 async function writeLedgerEntry(db, entry, permissions = []) {
-  if (await ledgerEntryExists(db, entry.payment_record_id, entry.type, entry.stripe_ref || '')) return;
+  if (await ledgerEntryExists(db, entry.payment_record_id, entry.type, entry.stripe_ref || '', entry.idempotency_key || '')) return;
   await createDocumentSafe(db, 'payment_ledger_entries', entry, permissions);
 }
 
-// Separate charges & transfers: real Stripe transfers against the charge, one
-// per payee leg. legCents = floor(amount*bps/10000); the platform keeps the
-// rounding remainder. Idempotent per destination via stripe_transfer_records.
-async function createTransfersForPayment(db, stripe, paymentRecord, plan, chargeId) {
-  const amount = Number(paymentRecord.amount || 0);
-  const currency = paymentRecord.currency || 'usd';
-  if (!plan || !chargeId || amount <= 0) return [];
+async function creditLedgerEntryExists(db, idempotencyKey) {
+  if (!idempotencyKey) return false;
+  const row = await firstDocument(db, 'credit_ledger_entries', [
+    Query.equal('idempotency_key', idempotencyKey),
+  ]).catch(() => null);
+  return !!row;
+}
 
-  const existingRows = await db.listDocuments(DB_ID, 'stripe_transfer_records', [
-    Query.equal('payment_record_id', paymentRecord.$id),
-    Query.limit(25),
-  ]).catch(() => ({ documents: [] }));
+async function writeCreditLedgerEntry(db, entry, permissions = []) {
+  if (await creditLedgerEntryExists(db, entry.idempotency_key || '')) return;
+  await createDocumentSafe(db, 'credit_ledger_entries', entry, permissions);
+}
 
-  const legs = [
-    { type: 'coach_payout', owner_type: 'coach', owner_id: plan.coach_id, bps: plan.coach_bps, destination: plan.coach_account_id },
-    { type: 'org_payout', owner_type: 'org', owner_id: plan.organization_id, bps: plan.org_bps, destination: plan.org_account_id },
-  ];
-
-  const created = [];
-  for (const leg of legs) {
-    if (!(leg.bps > 0) || !leg.destination) continue;
-    const legCents = Math.floor((amount * leg.bps) / 10000);
-    if (legCents <= 0) continue;
-
-    const existing = existingRows.documents.find((row) =>
-      row.destination_account_id === leg.destination && row.transfer_id);
-    if (existing) {
-      created.push({ ...leg, amount: Number(existing.amount || legCents), transfer_id: existing.transfer_id });
-      continue;
-    }
-
-    const transfer = await stripe.transfers.create({
-      amount: legCents,
-      currency,
-      destination: leg.destination,
-      source_transaction: chargeId,
-      transfer_group: paymentRecord.$id,
-      metadata: {
-        payment_record_id: paymentRecord.$id,
-        leg: leg.type,
-        coach_id: plan.coach_id,
-        organization_id: plan.organization_id,
-      },
-    });
-    await db.createDocument(DB_ID, 'stripe_transfer_records', ID.unique(), {
-      payment_record_id: paymentRecord.$id,
-      destination_account_id: leg.destination,
-      amount: legCents,
-      status: 'paid',
-      transfer_id: transfer.id,
-    });
-    created.push({ ...leg, amount: legCents, transfer_id: transfer.id });
-  }
-  return created;
+async function writeAudit(db, entry) {
+  const data = { ...entry, actor_email: entry.actor_email || 'stripe-webhook@levelcoach.com' };
+  if (!['admin', 'super_admin'].includes(data.actor_role)) delete data.actor_role;
+  await db.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
 }
 
 async function handleCheckoutCompleted(db, stripe, session) {
@@ -253,29 +311,36 @@ async function handleCheckoutCompleted(db, stripe, session) {
     ? await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null)
     : null;
   const paymentRecord = await ensurePaymentRecord(db, session, paymentIntent);
-  const creditId = await createCreditIfMissing(db, paymentRecord, session);
+  const metadata = paymentMetadataSnapshot(session, paymentIntent, paymentRecord);
+  const creditId = await createCreditIfMissing(db, paymentRecord, session, metadata);
   const chargeId = typeof paymentIntent?.latest_charge === 'string' ? paymentIntent.latest_charge : paymentIntent?.latest_charge?.id || '';
+  const amount = Number(session.amount_total || paymentIntent?.amount || paymentRecord.amount || 0);
+  const currency = session.currency || paymentIntent?.currency || paymentRecord.currency || 'usd';
+  const refundedAmount = Number(paymentRecord.refunded_amount || 0);
 
   const updated = await db.updateDocument(DB_ID, 'stripe_payment_records', paymentRecord.$id, {
     credit_id: creditId || paymentRecord.credit_id || '',
+    credit_lot_id: creditId || paymentRecord.credit_lot_id || paymentRecord.credit_id || '',
     payment_intent_id: paymentIntentId || paymentRecord.payment_intent_id || '',
     charge_id: chargeId || paymentRecord.charge_id || '',
+    amount,
+    application_fee: 0,
+    transfer_destination: '',
     status: 'paid',
     state: 'paid',
+    purpose: paymentRecord.purpose || metadata.purpose || 'prepaid_credit',
+    merchant_of_record: 'levelcoach_platform',
+    athlete_id: metadata.athlete_id || paymentRecord.athlete_id || '',
+    available_for_refund_cents: Math.max(0, amount - refundedAmount),
+    disputed_amount_cents: Number(paymentRecord.disputed_amount_cents || 0),
+    metadata: JSON.stringify(metadata),
     webhook_processed_at: new Date().toISOString(),
-    currency: session.currency || paymentIntent?.currency || paymentRecord.currency || 'usd',
+    currency,
   });
 
-  const metadata = session.metadata || parseJson(updated.metadata);
-  const plan = parsePayoutPlan(metadata);
-  const transfers = await createTransfersForPayment(db, stripe, updated, plan, chargeId);
-
-  // Ledger: append-only, one entry per leg (charge, platform_fee, payouts).
-  const amount = Number(updated.amount || 0);
-  const currency = updated.currency || 'usd';
-  const clientReadGrant = metadata.client_account_id
-    ? [Permission.read(Role.user(metadata.client_account_id))]
-    : [];
+  // Ledger: checkout records only the platform charge and purchased credit.
+  // Coach/org payout ledgers are written after an earned session outcome.
+  const clientReadGrant = ownerReadGrant(metadata);
   await writeLedgerEntry(db, {
     payment_record_id: updated.$id,
     type: 'charge',
@@ -285,57 +350,28 @@ async function handleCheckoutCompleted(db, stripe, session) {
     owner_id: metadata.client_profile_id || '',
     stripe_ref: chargeId || updated.payment_intent_id || '',
     coach_id: metadata.coach_id || '',
-    organization_id: plan?.organization_id || '',
-    metadata: JSON.stringify({ checkout_session_id: session.id }),
+    organization_id: metadata.originating_organization_id || '',
+    credit_lot_id: creditId || '',
+    idempotency_key: `charge_${updated.$id}`,
+    metadata: JSON.stringify({ checkout_session_id: session.id, payout_plan: metadata.payout_plan }),
   }, clientReadGrant);
 
-  if (plan) {
-    const coachLeg = transfers.find((leg) => leg.type === 'coach_payout');
-    const orgLeg = transfers.find((leg) => leg.type === 'org_payout');
-    const platformFee = amount - (coachLeg?.amount || 0) - (orgLeg?.amount || 0);
-    await writeLedgerEntry(db, {
+  if (creditId) {
+    await writeCreditLedgerEntry(db, {
+      credit_id: creditId,
+      credit_lot_id: creditId,
+      client_profile_id: metadata.client_profile_id || '',
+      owner_profile_id: metadata.client_profile_id || '',
+      athlete_id: metadata.athlete_id || '',
       payment_record_id: updated.$id,
-      type: 'platform_fee',
-      amount_cents: platformFee,
+      type: 'purchase',
+      amount_cents: amount,
+      available_delta_cents: amount,
+      reserved_delta_cents: 0,
       currency,
-      owner_type: 'platform',
-      owner_id: '',
-      stripe_ref: chargeId || '',
-      coach_id: plan.coach_id,
-      organization_id: plan.organization_id,
-      metadata: JSON.stringify({ platform_bps: plan.platform_bps }),
-    });
-    if (coachLeg) {
-      const coach = plan.coach_id
-        ? await db.getDocument(DB_ID, 'coaches', plan.coach_id).catch(() => null)
-        : null;
-      await writeLedgerEntry(db, {
-        payment_record_id: updated.$id,
-        type: 'coach_payout',
-        amount_cents: coachLeg.amount,
-        currency,
-        owner_type: 'coach',
-        owner_id: plan.coach_id,
-        stripe_ref: coachLeg.transfer_id,
-        coach_id: plan.coach_id,
-        organization_id: plan.organization_id,
-        metadata: JSON.stringify({ coach_bps: plan.coach_bps }),
-      }, coach?.user_id ? [Permission.read(Role.user(coach.user_id))] : []);
-    }
-    if (orgLeg) {
-      await writeLedgerEntry(db, {
-        payment_record_id: updated.$id,
-        type: 'org_payout',
-        amount_cents: orgLeg.amount,
-        currency,
-        owner_type: 'org',
-        owner_id: plan.organization_id,
-        stripe_ref: orgLeg.transfer_id,
-        coach_id: plan.coach_id,
-        organization_id: plan.organization_id,
-        metadata: JSON.stringify({ org_bps: plan.org_bps }),
-      });
-    }
+      idempotency_key: `credit_checkout_${updated.$id}`,
+      metadata: JSON.stringify({ checkout_session_id: session.id }),
+    }, clientReadGrant);
   }
 }
 
@@ -350,15 +386,152 @@ async function markPayment(db, lookup, status, data = {}) {
   return true;
 }
 
-async function freezeCredit(db, creditId) {
+function creditUnusedUnreservedCents(credit) {
+  const remaining = cents(credit?.remaining_amount_cents, NaN);
+  if (Number.isInteger(remaining) && remaining >= 0) return remaining;
+  const available = cents(credit?.available_amount_cents, NaN);
+  if (Number.isInteger(available) && available >= 0) return available;
+
+  const total = Number(credit?.total_credits || 0);
+  const used = Number(credit?.used_credits || 0);
+  const perSession = cents(credit?.per_session_base_price_cents, 0);
+  if (total > used && perSession > 0) return Math.max(0, total - used) * perSession;
+  return 0;
+}
+
+function creditStatusAfterRefund(credit, remainingAfter, fullRefund) {
+  const reserved = cents(credit?.reserved_amount_cents, 0);
+  const spent = cents(credit?.spent_amount_cents, 0) || cents(credit?.earned_amount_cents, 0);
+  if (fullRefund && reserved > 0) return 'frozen';
+  if (fullRefund && reserved <= 0 && spent <= 0) return 'refunded';
+  if (fullRefund) return 'exhausted';
+  if (remainingAfter > 0) return credit?.status || 'active';
+  if (reserved <= 0) return 'exhausted';
+  return 'frozen';
+}
+
+async function applyUnusedCreditRefund(db, paymentRecord, cumulativeRefundedAmount, refundRef, fullRefund) {
+  const creditId = paymentRecord.credit_lot_id || paymentRecord.credit_id;
+  if (!creditId) return { debit: 0, cumulative_credit_refunded: 0 };
+  const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return { debit: 0, cumulative_credit_refunded: 0 };
+
+  const alreadyRefunded = cents(credit.refunded_amount_cents, 0);
+  const refundableNow = creditUnusedUnreservedCents(credit);
+  const targetRefunded = Math.min(Math.max(0, cumulativeRefundedAmount), alreadyRefunded + refundableNow);
+  const debit = Math.max(0, targetRefunded - alreadyRefunded);
+  if (debit <= 0) {
+    if (fullRefund) {
+      await db.updateDocument(DB_ID, 'session_credits', credit.$id, {
+        status: creditStatusAfterRefund(credit, refundableNow, true),
+      }).catch(() => {});
+    }
+    return { debit: 0, cumulative_credit_refunded: alreadyRefunded };
+  }
+
+  const metadata = parseJson(paymentRecord.metadata);
+  const permissions = ownerReadGrant(metadata);
+  await writeCreditLedgerEntry(db, {
+    credit_id: credit.$id,
+    credit_lot_id: credit.$id,
+    payment_record_id: paymentRecord.$id,
+    client_profile_id: metadata.client_profile_id || credit.client_profile_id || credit.owner_profile_id || '',
+    owner_profile_id: metadata.client_profile_id || credit.owner_profile_id || credit.client_profile_id || '',
+    athlete_id: metadata.athlete_id || credit.athlete_id || '',
+    type: 'refund',
+    amount_cents: debit,
+    available_delta_cents: -debit,
+    reserved_delta_cents: 0,
+    currency: paymentRecord.currency || credit.currency || 'usd',
+    from_coach_id: credit.original_coach_id || credit.coach_id || '',
+    organization_id: credit.original_organization_id || credit.originating_organization_id || '',
+    idempotency_key: `credit_refund_${paymentRecord.$id}_${targetRefunded}`,
+    metadata: JSON.stringify({ refund_ref: refundRef || '', cumulative_refunded_amount: cumulativeRefundedAmount }),
+  }, permissions);
+
+  const remainingAfter = Math.max(0, refundableNow - debit);
+  const update = {
+    remaining_amount_cents: remainingAfter,
+    refunded_amount_cents: targetRefunded,
+    status: creditStatusAfterRefund(credit, remainingAfter, fullRefund),
+  };
+  if (credit.available_amount_cents !== undefined) {
+    update.available_amount_cents = remainingAfter;
+  }
+  await db.updateDocument(DB_ID, 'session_credits', credit.$id, update);
+  return { debit, cumulative_credit_refunded: targetRefunded };
+}
+
+async function freezeUnusedCredit(db, paymentRecord, disputedAmount, disputeRef) {
+  const creditId = paymentRecord.credit_lot_id || paymentRecord.credit_id;
+  if (!creditId) return 0;
+  const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return 0;
+  const freezeAmount = Math.min(Math.max(0, cents(disputedAmount, 0)), creditUnusedUnreservedCents(credit));
+
+  const metadata = parseJson(paymentRecord.metadata);
+  const permissions = ownerReadGrant(metadata);
+  await writeCreditLedgerEntry(db, {
+    credit_id: credit.$id,
+    credit_lot_id: credit.$id,
+    payment_record_id: paymentRecord.$id,
+    client_profile_id: metadata.client_profile_id || credit.client_profile_id || credit.owner_profile_id || '',
+    owner_profile_id: metadata.client_profile_id || credit.owner_profile_id || credit.client_profile_id || '',
+    athlete_id: metadata.athlete_id || credit.athlete_id || '',
+    type: 'dispute_freeze',
+    amount_cents: freezeAmount,
+    available_delta_cents: 0,
+    reserved_delta_cents: 0,
+    currency: paymentRecord.currency || credit.currency || 'usd',
+    from_coach_id: credit.original_coach_id || credit.coach_id || '',
+    organization_id: credit.original_organization_id || credit.originating_organization_id || '',
+    idempotency_key: `credit_dispute_freeze_${paymentRecord.$id}_${disputeRef || disputedAmount}`,
+    metadata: JSON.stringify({
+      dispute_id: disputeRef || '',
+      disputed_amount_cents: disputedAmount,
+      previous_credit_status: credit.status || 'active',
+      freeze_amount_cents: freezeAmount,
+    }),
+  }, permissions);
+
+  await db.updateDocument(DB_ID, 'session_credits', credit.$id, {
+    status: 'frozen',
+  });
+  return freezeAmount;
+}
+
+async function previousCreditStatusFromDisputeFreeze(db, paymentRecord, disputeId) {
+  const rows = await db.listDocuments(DB_ID, 'credit_ledger_entries', [
+    Query.equal('payment_record_id', paymentRecord.$id),
+    Query.equal('type', 'dispute_freeze'),
+    Query.orderDesc('$createdAt'),
+    Query.limit(10),
+  ]).catch(() => ({ documents: [] }));
+  for (const row of rows.documents) {
+    const metadata = parseJson(row.metadata);
+    if (!disputeId || metadata.dispute_id === disputeId) {
+      return String(metadata.previous_credit_status || '');
+    }
+  }
+  return '';
+}
+
+async function unfreezeCreditIfDisputeWon(db, paymentRecord, disputeId) {
+  const creditId = paymentRecord.credit_lot_id || paymentRecord.credit_id;
   if (!creditId) return;
   const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
-  if (!credit) return;
-  const total = Number(credit.total_credits || 0);
-  const used = Number(credit.used_credits || 0);
-  if (total > used) {
-    await db.updateDocument(DB_ID, 'session_credits', credit.$id, { used_credits: total }).catch(() => {});
+  if (!credit || credit.status !== 'frozen') return;
+  const previousStatus = await previousCreditStatusFromDisputeFreeze(db, paymentRecord, disputeId);
+  if (previousStatus === 'frozen') return;
+  if (previousStatus && previousStatus !== 'active') {
+    await db.updateDocument(DB_ID, 'session_credits', credit.$id, {
+      status: previousStatus,
+    }).catch(() => {});
+    return;
   }
+  await db.updateDocument(DB_ID, 'session_credits', credit.$id, {
+    status: creditUnusedUnreservedCents(credit) > 0 || cents(credit.reserved_amount_cents, 0) > 0 ? 'active' : 'exhausted',
+  }).catch(() => {});
 }
 
 function refundState(refundedAmount, totalAmount) {
@@ -387,19 +560,62 @@ async function handleRefundLike(db, stripe, object) {
   if (!paymentRecord) return false;
 
   const totalAmount = Number(paymentRecord.amount || 0);
+  const previouslyRefunded = Number(paymentRecord.refunded_amount || 0);
+  const refundDelta = Math.max(0, refundedAmount - previouslyRefunded);
   const state = refundState(refundedAmount, totalAmount);
   const fullRefund = state === 'refunded';
+  const creditRefund = refundedAmount > 0
+    ? await applyUnusedCreditRefund(db, paymentRecord, refundedAmount, refundId || charge.id, fullRefund)
+    : { debit: 0, cumulative_credit_refunded: 0 };
+  const releasedRefundedAmount = Math.max(0, refundedAmount - creditRefund.cumulative_credit_refunded);
+  if (refundDelta > 0) {
+    const metadata = parseJson(paymentRecord.metadata);
+    const permissions = ownerReadGrant(metadata);
+    await writeLedgerEntry(db, {
+      payment_record_id: paymentRecord.$id,
+      type: 'refund',
+      amount_cents: refundDelta,
+      currency: charge.currency || paymentRecord.currency || 'usd',
+      owner_type: 'client',
+      owner_id: metadata.client_profile_id || '',
+      stripe_ref: refundId || charge.id,
+      coach_id: metadata.coach_id || '',
+      organization_id: metadata.originating_organization_id || '',
+      credit_lot_id: paymentRecord.credit_lot_id || paymentRecord.credit_id || '',
+      idempotency_key: refundId ? `ledger_refund_${refundId}` : `ledger_refund_${paymentRecord.$id}_${refundedAmount}`,
+      metadata: JSON.stringify({
+        charge_id: charge.id,
+        refund_delta_cents: refundDelta,
+        unused_credit_debit_cents: creditRefund.debit,
+        released_transfer_refund_cents: Math.max(0, refundDelta - creditRefund.debit),
+      }),
+    }, permissions);
+  }
   await db.updateDocument(DB_ID, 'stripe_payment_records', paymentRecord.$id, {
     charge_id: charge.id || paymentRecord.charge_id || '',
     refund_id: refundId || paymentRecord.refund_id || '',
     refunded_amount: refundedAmount,
+    available_for_refund_cents: Math.max(0, totalAmount - refundedAmount),
     // Legacy status enum has no partially_refunded: keep 'paid' until full.
     status: fullRefund ? 'refunded' : 'paid',
     state,
     webhook_processed_at: new Date().toISOString(),
   });
-  if (fullRefund) await freezeCredit(db, paymentRecord.credit_id);
-  await reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmount, totalAmount);
+  await reverseTransfersForRefund(db, stripe, paymentRecord, releasedRefundedAmount, totalAmount);
+  await writeAudit(db, {
+    action: 'stripe.webhook_refund',
+    entity_type: 'StripePaymentRecord',
+    entity_id: paymentRecord.$id,
+    before: JSON.stringify({ refunded_amount: previouslyRefunded, state: paymentRecord.state || '' }),
+    after: JSON.stringify({ refunded_amount: refundedAmount, state }),
+    metadata: JSON.stringify({
+      charge_id: charge.id,
+      refund_id: refundId || '',
+      refund_delta_cents: refundDelta,
+      unused_credit_debit_cents: creditRefund.debit,
+      released_transfer_refund_cents: Math.max(0, refundDelta - creditRefund.debit),
+    }),
+  });
   return true;
 }
 
@@ -413,8 +629,6 @@ async function handleRefundLike(db, stripe, object) {
 // handled.
 async function reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmount, totalAmount) {
   if (!(refundedAmount > 0) || !(totalAmount > 0)) return;
-  const recordMeta = parseJson(paymentRecord.metadata);
-  const plan = parsePayoutPlan(recordMeta);
   const rows = await db.listDocuments(DB_ID, 'stripe_transfer_records', [
     Query.equal('payment_record_id', paymentRecord.$id),
     Query.limit(25),
@@ -448,17 +662,20 @@ async function reverseTransfersForRefund(db, stripe, paymentRecord, refundedAmou
       reversal_id: reversal.id,
       status: fullyReversed ? 'reversed' : record.status || 'paid',
     }).catch(() => {});
-    const isOrgLeg = !!plan?.org_account_id && record.destination_account_id === plan.org_account_id;
     await writeLedgerEntry(db, {
       payment_record_id: paymentRecord.$id,
       type: 'transfer_reversal',
-      amount_cents: -delta,
+      amount_cents: delta,
       currency: paymentRecord.currency || 'usd',
-      owner_type: isOrgLeg ? 'org' : 'coach',
-      owner_id: (isOrgLeg ? plan?.organization_id : plan?.coach_id) || '',
+      owner_type: record.owner_type || 'coach',
+      owner_id: record.owner_id || '',
       stripe_ref: reversal.id,
-      coach_id: plan?.coach_id || recordMeta.coach_id || '',
-      organization_id: plan?.organization_id || '',
+      coach_id: record.owner_type === 'coach' ? record.owner_id || '' : '',
+      organization_id: record.owner_type === 'org' ? record.owner_id || '' : '',
+      session_id: record.session_id || '',
+      credit_lot_id: paymentRecord.credit_lot_id || paymentRecord.credit_id || '',
+      credit_reservation_id: record.credit_reservation_id || '',
+      idempotency_key: `ledger_transfer_reversal_${reversal.id}`,
       metadata: JSON.stringify({ transfer_id: record.transfer_id, cumulative_target: target, source: 'webhook' }),
     });
   }
@@ -472,11 +689,20 @@ async function handleDisputeCreated(db, stripe, dispute) {
   const paymentRecord = await findPaymentRecord(db, { paymentIntentId, chargeId });
   if (!paymentRecord) return false;
 
+  const frozenCreditCents = await freezeUnusedCredit(db, paymentRecord, Number(dispute.amount || 0), dispute.id);
   await db.updateDocument(DB_ID, 'stripe_payment_records', paymentRecord.$id, {
     state: 'disputed',
+    disputed_amount_cents: frozenCreditCents,
     webhook_processed_at: new Date().toISOString(),
   });
-  await freezeCredit(db, paymentRecord.credit_id);
+  await writeAudit(db, {
+    action: 'stripe.dispute_created',
+    entity_type: 'StripePaymentRecord',
+    entity_id: paymentRecord.$id,
+    before: JSON.stringify({ state: paymentRecord.state || '', disputed_amount_cents: paymentRecord.disputed_amount_cents || 0 }),
+    after: JSON.stringify({ state: 'disputed', disputed_amount_cents: frozenCreditCents }),
+    metadata: JSON.stringify({ dispute_id: dispute.id, charge_id: chargeId, reason: dispute.reason || '' }),
+  });
 
   const metadata = parseJson(paymentRecord.metadata);
   await writeLedgerEntry(db, {
@@ -489,7 +715,12 @@ async function handleDisputeCreated(db, stripe, dispute) {
     stripe_ref: dispute.id,
     coach_id: metadata.coach_id || '',
     organization_id: '',
-    metadata: JSON.stringify({ reason: dispute.reason || '', dispute_status: dispute.status || '' }),
+    idempotency_key: `ledger_dispute_${dispute.id}`,
+    metadata: JSON.stringify({
+      reason: dispute.reason || '',
+      dispute_status: dispute.status || '',
+      frozen_unused_credit_cents: frozenCreditCents,
+    }),
   });
 
   const masterAdmin = await firstDocument(db, 'profiles', [
@@ -520,13 +751,28 @@ async function handleDisputeClosed(db, dispute) {
   const paymentIntentId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id || '';
   const paymentRecord = await findPaymentRecord(db, { paymentIntentId, chargeId });
   if (!paymentRecord) return false;
+  if (dispute.status === 'won') {
+    await unfreezeCreditIfDisputeWon(db, paymentRecord, dispute.id);
+  }
 
-  await db.updateDocument(DB_ID, 'stripe_payment_records', paymentRecord.$id, {
+  const update = {
     // Dispute won: back to paid (refund state still wins if money left).
     ...(dispute.status === 'won'
-      ? { state: refundState(Number(paymentRecord.refunded_amount || 0), Number(paymentRecord.amount || 0)) }
+      ? {
+        state: refundState(Number(paymentRecord.refunded_amount || 0), Number(paymentRecord.amount || 0)),
+        disputed_amount_cents: 0,
+      }
       : {}),
     webhook_processed_at: new Date().toISOString(),
+  };
+  await db.updateDocument(DB_ID, 'stripe_payment_records', paymentRecord.$id, update);
+  await writeAudit(db, {
+    action: 'stripe.dispute_closed',
+    entity_type: 'StripePaymentRecord',
+    entity_id: paymentRecord.$id,
+    before: JSON.stringify({ state: paymentRecord.state || '', disputed_amount_cents: paymentRecord.disputed_amount_cents || 0 }),
+    after: JSON.stringify({ dispute_status: dispute.status || '', ...update }),
+    metadata: JSON.stringify({ dispute_id: dispute.id, charge_id: chargeId }),
   });
   return true;
 }

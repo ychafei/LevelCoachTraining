@@ -1,8 +1,17 @@
 import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
+import Stripe from 'stripe';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const DEFAULT_TIMEZONE = 'America/Detroit';
+const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DURATIONS = new Map([
+  [60, { hours: 1, discount: 0 }],
+  [90, { hours: 1.5, discount: 0.10 }],
+  [120, { hours: 2, discount: 0.15 }],
+  [150, { hours: 2.5, discount: 0.18 }],
+  [180, { hours: 3, discount: 0.20 }],
+]);
 
 const SIGNER_TO_TEMPLATE_ROLE = {
   athlete: 'athlete',
@@ -93,6 +102,252 @@ function parseJson(raw) {
   } catch { return {}; }
 }
 
+function bpsInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 10000 ? n : null;
+}
+
+function centsInt(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : fallback;
+}
+
+// Admin-set platform fees are capped at 50%.
+function feeBpsInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 5000 ? n : null;
+}
+
+function validId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(value);
+}
+
+function calculateAmountCents(pkg, durationMinutes) {
+  const priceCents = Number(pkg.price_cents);
+  if (Number.isInteger(priceCents) && priceCents > 0) return priceCents;
+
+  const duration = DURATIONS.get(Number(durationMinutes) || 60);
+  if (!duration) return null;
+  const sessions = Math.max(1, Number(pkg.sessions) || 1);
+  const basePrice = Number(pkg.price);
+  if (!Number.isFinite(basePrice) || basePrice <= 0) return null;
+  const perSessionBase = basePrice / sessions;
+  const perSessionPrice = Math.round(perSessionBase * duration.hours * (1 - duration.discount));
+  return Math.round(perSessionPrice * sessions * 100);
+}
+
+function calculateSessionPriceCents(pkg, durationMinutes) {
+  const sessions = Math.max(1, Number(pkg.sessions) || 1);
+  const total = calculateAmountCents(pkg, durationMinutes);
+  if (!Number.isInteger(total) || total <= 0) return null;
+  return Math.max(1, Math.floor(total / sessions));
+}
+
+function normalizedSessionType(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function globalPlatformBps(db) {
+  try {
+    const rows = await db.listDocuments(DB_ID, 'site_content', [
+      Query.equal('key', 'platform_fee_bps'),
+      Query.limit(1),
+    ]);
+    const raw = rows.documents[0]?.value;
+    if (raw !== undefined && raw !== null) {
+      return feeBpsInt(Number.parseInt(String(raw), 10));
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function resolvePlatformBps(db, coach, org) {
+  const fromCoach = feeBpsInt(coach.platform_fee_bps);
+  if (fromCoach !== null) return fromCoach;
+  if (org) {
+    const fromOrg = feeBpsInt(org.platform_fee_bps);
+    if (fromOrg !== null) return fromOrg;
+  }
+  const fromGlobal = await globalPlatformBps(db);
+  if (fromGlobal !== null) return fromGlobal;
+  const fromEnv = bpsInt(Number.parseInt(process.env.PLATFORM_FEE_BPS || '', 10));
+  if (fromEnv !== null) return fromEnv;
+  return 1500;
+}
+
+async function activeOrgCoachLink(db, organizationId, coachId) {
+  if (!organizationId || !coachId) return false;
+  const rows = await db.listDocuments(DB_ID, 'organization_coaches', [
+    Query.equal('organization_id', organizationId),
+    Query.equal('coach_id', coachId),
+    Query.equal('status', 'active'),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.length > 0;
+}
+
+async function activeOrganizationForCoach(db, coachId, preferredOrgId = '') {
+  if (preferredOrgId && await activeOrgCoachLink(db, preferredOrgId, coachId)) {
+    const preferred = await db.getDocument(DB_ID, 'organizations', preferredOrgId).catch(() => null);
+    if (preferred && preferred.status === 'active') return preferred;
+  }
+  const links = await db.listDocuments(DB_ID, 'organization_coaches', [
+    Query.equal('coach_id', coachId),
+    Query.equal('status', 'active'),
+    Query.limit(10),
+  ]).catch(() => ({ documents: [] }));
+  for (const link of links.documents) {
+    const org = await db.getDocument(DB_ID, 'organizations', link.organization_id).catch(() => null);
+    if (org && org.status === 'active') return org;
+  }
+  return null;
+}
+
+async function activePayoutRule(db, organizationId, coachId) {
+  const rows = await db.listDocuments(DB_ID, 'payout_rules', [
+    Query.equal('organization_id', organizationId),
+    Query.equal('coach_id', coachId),
+    Query.equal('active', true),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function readyConnectedAccount(db, ownerType, ownerId) {
+  if (!ownerId) return null;
+  const rows = await db.listDocuments(DB_ID, 'stripe_connected_accounts', [
+    Query.equal('owner_type', ownerType),
+    Query.equal('owner_id', ownerId),
+    Query.limit(10),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || null;
+}
+
+async function resolvePayoutPlan(db, coach, preferredOrgId = '') {
+  const org = await activeOrganizationForCoach(db, coach.$id, preferredOrgId);
+  const platformDefault = await resolvePlatformBps(db, coach, org);
+  if (org) {
+    const rule = await activePayoutRule(db, org.$id, coach.$id);
+    if (rule) {
+      const coachBps = bpsInt(rule.coach_share_bps);
+      const orgBps = bpsInt(rule.org_share_bps);
+      const platformBps = bpsInt(rule.platform_share_bps);
+      if (coachBps === null || orgBps === null || platformBps === null
+        || coachBps + orgBps + platformBps !== 10000) {
+        return { error: `invalid payout_rules row ${rule.$id}` };
+      }
+      return {
+        platform_bps: platformBps,
+        coach_bps: coachBps,
+        org_bps: orgBps,
+        organization_id: org.$id,
+        payout_rule_id: rule.$id,
+      };
+    }
+    if (org.payout_model === 'split' || org.payout_model === 'split_future') {
+      const coachBps = 6000;
+      const orgBps = 10000 - platformDefault - coachBps;
+      if (orgBps < 0) return { error: `platform fee ${platformDefault}bps leaves no org share` };
+      return { platform_bps: platformDefault, coach_bps: coachBps, org_bps: orgBps, organization_id: org.$id, payout_rule_id: '' };
+    }
+    if (org.payout_model === 'organization') {
+      return { platform_bps: platformDefault, coach_bps: 0, org_bps: 10000 - platformDefault, organization_id: org.$id, payout_rule_id: '' };
+    }
+    return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: org.$id, payout_rule_id: '' };
+  }
+  return { platform_bps: platformDefault, coach_bps: 10000 - platformDefault, org_bps: 0, organization_id: '', payout_rule_id: '' };
+}
+
+function originalCreditCoachId(credit) {
+  return String(credit?.original_coach_id || credit?.originating_coach_id || credit?.coach_id || '').trim();
+}
+
+function payoutPlanSnapshot({
+  payoutPlan,
+  coach,
+  offering,
+  priceSnapshotCents,
+  coachAccount,
+  orgAccount,
+  originalCoachId,
+}) {
+  return {
+    release_trigger: 'session_outcome',
+    selected_coach_id: coach.$id,
+    original_credit_coach_id: originalCoachId || '',
+    organization_id: payoutPlan.organization_id || '',
+    payout_rule_id: payoutPlan.payout_rule_id || '',
+    platform_share_bps: payoutPlan.platform_bps,
+    coach_share_bps: payoutPlan.coach_bps,
+    org_share_bps: payoutPlan.org_bps,
+    offering_id: offering.pkg.$id,
+    package_id: offering.pkg.$id,
+    package_name: offering.pkg.name || '',
+    session_type: offering.session_type || offering.pkg.session_type || '',
+    price_snapshot_cents: priceSnapshotCents,
+    currency: 'usd',
+    coach_connected_account_id: coachAccount?.stripe_account_id || '',
+    org_connected_account_id: orgAccount?.stripe_account_id || '',
+  };
+}
+
+async function packageBookableForCoach(db, pkg, coachId) {
+  if (!pkg || pkg.is_visible === false || pkg.is_active === false) return false;
+  const pkgCoachId = typeof pkg.coach_id === 'string' ? pkg.coach_id : '';
+  if (pkgCoachId && pkgCoachId !== coachId) return false;
+  const pkgOrgId = typeof pkg.organization_id === 'string' ? pkg.organization_id : '';
+  if (pkgOrgId) {
+    if (!(await activeOrgCoachLink(db, pkgOrgId, coachId))) return false;
+    const org = await db.getDocument(DB_ID, 'organizations', pkgOrgId).catch(() => null);
+    if (!org || org.status !== 'active') return false;
+  }
+  return true;
+}
+
+async function resolveOffering(db, coach, credit, payload, durationMinutes) {
+  const requestedPackageId = String(payload.package_id || payload.packageId || '').trim();
+  const requestedSessionType = normalizedSessionType(payload.session_type || payload.sessionType);
+  const candidates = [];
+  if (requestedPackageId && validId(requestedPackageId)) candidates.push(requestedPackageId);
+  if (credit?.package_id && validId(credit.package_id) && credit.package_id !== 'admin_grant') candidates.push(credit.package_id);
+
+  for (const packageId of [...new Set(candidates)]) {
+    const pkg = await db.getDocument(DB_ID, 'pricing_packages', packageId).catch(() => null);
+    if (await packageBookableForCoach(db, pkg, coach.$id)) {
+      const pkgSessionType = normalizedSessionType(pkg.session_type);
+      if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
+      const pkgDuration = Number(pkg.duration_minutes) || durationMinutes;
+      if (pkgDuration !== durationMinutes) continue;
+      const amount = calculateSessionPriceCents(pkg, durationMinutes);
+      if (Number.isInteger(amount) && amount > 0) {
+        return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
+      }
+    }
+  }
+
+  const querySets = [
+    [Query.equal('coach_id', coach.$id), Query.equal('is_active', true), Query.equal('is_visible', true), Query.limit(25)],
+    [Query.equal('coach_id', ''), Query.equal('is_active', true), Query.equal('is_visible', true), Query.limit(25)],
+  ];
+  for (const queries of querySets) {
+    const rows = await db.listDocuments(DB_ID, 'pricing_packages', queries).catch(() => ({ documents: [] }));
+    for (const pkg of rows.documents) {
+      if (!(await packageBookableForCoach(db, pkg, coach.$id))) continue;
+      const pkgDuration = Number(pkg.duration_minutes) || durationMinutes;
+      if (pkgDuration !== durationMinutes) continue;
+      const pkgSessionType = normalizedSessionType(pkg.session_type);
+      if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
+      const amount = calculateSessionPriceCents(pkg, durationMinutes);
+      if (Number.isInteger(amount) && amount > 0) {
+        return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
+      }
+    }
+  }
+  return { error: 'Select an active package for this coach before booking.' };
+}
+
 // --- Timezone math (no external deps) ----------------------------------------
 
 function tzOffsetMs(timeZone, utcMs) {
@@ -132,9 +387,7 @@ function coachTimezone(coach) {
 // --- Coach state, availability windows, conflicts -----------------------------
 
 function coachAccepting(coach) {
-  // `published` is the cutover gate; fall back to is_active while it rolls out.
-  if (coach.published !== undefined && coach.published !== null) return coach.published === true;
-  return coach.is_active !== false;
+  return coach.is_active === true && coach.published === true;
 }
 
 function bookingRulesFor(coach) {
@@ -420,6 +673,208 @@ async function updateDocumentResilient(db, collection, id, data) {
   return db.updateDocument(DB_ID, collection, id, payload);
 }
 
+async function firstDocument(db, collection, queries) {
+  const rows = await db.listDocuments(DB_ID, collection, [...queries, Query.limit(1)]);
+  return rows.documents[0] || null;
+}
+
+async function createOnceByIdempotency(db, collection, data, permissions = []) {
+  if (data.idempotency_key) {
+    const existing = await firstDocument(db, collection, [
+      Query.equal('idempotency_key', data.idempotency_key),
+    ]).catch(() => null);
+    if (existing) return existing;
+  }
+  return createDocumentResilient(db, collection, data, permissions);
+}
+
+function creditLedgerAmount(data) {
+  if (Number.isInteger(Number(data.amount_cents))) return Number(data.amount_cents);
+  return Math.max(
+    Math.abs(Number(data.available_delta_cents) || 0),
+    Math.abs(Number(data.reserved_delta_cents) || 0),
+  );
+}
+
+function creditLedgerType(type) {
+  return ({
+    checkout_grant: 'purchase',
+    top_up_grant: 'top_up',
+    reservation_hold: 'reserve',
+    reservation_release: 'restore',
+    reservation_capture: 'release',
+    refund_debit: 'refund',
+    admin_grant: 'admin_adjustment',
+    admin_debit: 'admin_adjustment',
+    migration_import: 'admin_adjustment',
+    legacy_advance_recovery: 'admin_adjustment',
+  })[type] || type;
+}
+
+async function writeCreditLedger(db, data, permissions = []) {
+  const normalized = {
+    ...data,
+    credit_id: data.credit_id || data.credit_lot_id || '',
+    credit_lot_id: data.credit_lot_id || data.credit_id || '',
+    client_profile_id: data.client_profile_id || data.owner_profile_id || '',
+    owner_profile_id: data.owner_profile_id || data.client_profile_id || '',
+    amount_cents: creditLedgerAmount(data),
+    type: creditLedgerType(data.type),
+  };
+  return createOnceByIdempotency(db, 'credit_ledger_entries', normalized, permissions).catch(() => null);
+}
+
+async function writePaymentLedger(db, data, permissions = []) {
+  return createOnceByIdempotency(db, 'payment_ledger_entries', data, permissions).catch(() => null);
+}
+
+function creditAvailableCents(credit) {
+  const remaining = Number(credit.remaining_amount_cents);
+  if (Number.isInteger(remaining) && remaining >= 0) return remaining;
+  const available = Number(credit.available_amount_cents);
+  if (Number.isInteger(available) && available >= 0) return available;
+  const total = Number(credit.total_credits) || 0;
+  const used = Number(credit.used_credits) || 0;
+  const remainingUnits = Math.max(0, total - used);
+  const perSession = Number(credit.per_session_base_price_cents);
+  if (Number.isInteger(perSession) && perSession > 0) return remainingUnits * perSession;
+  const amount = Number(credit.amount_cents) || 0;
+  return total > 0 ? Math.floor((amount * remainingUnits) / total) : 0;
+}
+
+async function ensureValueCreditFields(db, credit) {
+  const hasAvailable = Number.isInteger(Number(credit.available_amount_cents));
+  const hasRemaining = Number.isInteger(Number(credit.remaining_amount_cents));
+  const hasReserved = Number.isInteger(Number(credit.reserved_amount_cents));
+  const hasOriginal = Number.isInteger(Number(credit.original_amount_cents));
+  const hasSpent = Number.isInteger(Number(credit.spent_amount_cents));
+  const hasRequestedIdentityFields = credit.original_coach_id !== undefined
+    && credit.original_organization_id !== undefined
+    && credit.transferable !== undefined;
+  if (hasAvailable && hasRemaining && hasReserved && hasOriginal && hasSpent && hasRequestedIdentityFields) return credit;
+
+  const available = creditAvailableCents(credit);
+  const original = hasOriginal ? Number(credit.original_amount_cents) : (Number(credit.amount_cents) || available);
+  const spent = hasSpent ? Number(credit.spent_amount_cents) : Math.max(0, original - available);
+  return updateDocumentResilient(db, 'session_credits', credit.$id, {
+    owner_profile_id: credit.owner_profile_id || credit.client_profile_id || '',
+    owner_account_id: credit.owner_account_id || '',
+    currency: credit.currency || 'usd',
+    original_amount_cents: original,
+    remaining_amount_cents: available,
+    available_amount_cents: hasAvailable ? Number(credit.available_amount_cents) : available,
+    reserved_amount_cents: Number.isInteger(Number(credit.reserved_amount_cents)) ? Number(credit.reserved_amount_cents) : 0,
+    spent_amount_cents: spent,
+    refunded_amount_cents: Number.isInteger(Number(credit.refunded_amount_cents)) ? Number(credit.refunded_amount_cents) : 0,
+    earned_amount_cents: Number.isInteger(Number(credit.earned_amount_cents)) ? Number(credit.earned_amount_cents) : spent,
+    original_coach_id: credit.original_coach_id || credit.originating_coach_id || credit.coach_id || '',
+    original_organization_id: credit.original_organization_id || credit.originating_organization_id || '',
+    originating_coach_id: credit.originating_coach_id || credit.original_coach_id || credit.coach_id || '',
+    originating_organization_id: credit.originating_organization_id || credit.original_organization_id || '',
+    source_payment_record_id: credit.source_payment_record_id || '',
+    transferable: typeof credit.transferable === 'boolean' ? credit.transferable : true,
+    status: credit.status || 'active',
+  }).catch(() => credit);
+}
+
+async function reserveCreditValue(db, credit, amountCents, reservationKey, ledgerBase, permissions, error) {
+  const current = await ensureValueCreditFields(db, credit);
+  const available = creditAvailableCents(current);
+  if (available < amountCents) {
+    return {
+      error: 'Additional credit is required before booking this coach.',
+      status: 402,
+      amount_due_cents: amountCents - available,
+      top_up_amount_cents: amountCents - available,
+      session_price_cents: amountCents,
+      remaining_amount_cents: available,
+      available_amount_cents: available,
+    };
+  }
+
+  const existing = await firstDocument(db, 'credit_reservations', [
+    Query.equal('idempotency_key', reservationKey),
+  ]).catch(() => null);
+  if (existing) return { reservation: existing, duplicate: true };
+
+  let remainingDebited = false;
+  let reservedIncremented = false;
+  let availableDebited = false;
+  let legacyUnitReserved = false;
+  try {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents, 0);
+    remainingDebited = true;
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents);
+    reservedIncremented = true;
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents, 0)
+      .then(() => { availableDebited = true; })
+      .catch(() => {});
+    // Legacy UI compatibility: keep "sessions remaining" moving, but the
+    // cent balance above is authoritative.
+    const total = Number(current.total_credits) || 0;
+    if (total > 0) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'used_credits', 1, total)
+        .then(() => { legacyUnitReserved = true; })
+        .catch(() => {});
+    }
+  } catch (err) {
+    if (reservedIncremented) {
+      await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
+    }
+    if (remainingDebited) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
+    }
+    if (availableDebited) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
+    }
+    if (legacyUnitReserved) {
+      await restoreLegacyCreditUnit(db, current.$id, error);
+    }
+    error?.(`Credit reservation failed: ${err?.message || err}`);
+    return { error: 'No remaining credit value on this package.', status: 409, session_price_cents: amountCents };
+  }
+
+  let reservation;
+  try {
+    reservation = await createOnceByIdempotency(db, 'credit_reservations', {
+      credit_lot_id: current.$id,
+      owner_profile_id: ledgerBase.owner_profile_id || '',
+      athlete_id: ledgerBase.athlete_id || '',
+      coach_id: ledgerBase.coach_id || '',
+      organization_id: ledgerBase.organization_id || '',
+      offering_id: ledgerBase.offering_id || '',
+      reserved_amount_cents: amountCents,
+      captured_amount_cents: 0,
+      released_amount_cents: 0,
+      currency: ledgerBase.currency || 'usd',
+      status: 'reserved',
+      idempotency_key: reservationKey,
+      metadata: JSON.stringify(ledgerBase.metadata || {}),
+    }, permissions);
+  } catch (err) {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
+    await restoreLegacyCreditUnit(db, current.$id, error);
+    throw err;
+  }
+
+  await writeCreditLedger(db, {
+    credit_lot_id: current.$id,
+    owner_profile_id: ledgerBase.owner_profile_id || '',
+    athlete_id: ledgerBase.athlete_id || '',
+    payment_record_id: current.source_payment_record_id || '',
+    reservation_id: reservation.$id,
+    type: 'reservation_hold',
+    available_delta_cents: -amountCents,
+    reserved_delta_cents: amountCents,
+    currency: ledgerBase.currency || 'usd',
+    idempotency_key: `credit_hold_${reservation.$id}`,
+    metadata: JSON.stringify(ledgerBase.metadata || {}),
+  }, permissions);
+  return { reservation };
+}
+
 // --- Shared session helpers ----------------------------------------------------
 
 function sessionStartMs(session, coach) {
@@ -452,7 +907,7 @@ async function sessionAuthority(db, users, accountId, profile, session) {
   return { coach, isClient, isCoach, isGuardian, isAdmin, any: isClient || isCoach || isGuardian || isAdmin };
 }
 
-async function restoreCredit(db, creditId, error) {
+async function restoreLegacyCreditUnit(db, creditId, error) {
   if (!creditId) return;
   try {
     // Atomic bounded decrement: floor at 0 so concurrent restores can never
@@ -460,6 +915,43 @@ async function restoreCredit(db, creditId, error) {
     await db.decrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', 1, 0);
   } catch (err) {
     error?.(`Credit restore failed: ${err?.message || err}`);
+  }
+}
+
+async function restoreCreditReservation(db, session, error) {
+  if (!session?.credit_reservation_id) {
+    await restoreLegacyCreditUnit(db, session?.credit_id, error);
+    return;
+  }
+  const reservation = await db.getDocument(DB_ID, 'credit_reservations', session.credit_reservation_id).catch(() => null);
+  if (!reservation || reservation.status !== 'reserved') return;
+  const amount = Number(reservation.reserved_amount_cents || 0);
+  if (!(amount > 0)) return;
+
+  try {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'reserved_amount_cents', amount, 0);
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'available_amount_cents', amount);
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'remaining_amount_cents', amount).catch(() => {});
+    await restoreLegacyCreditUnit(db, reservation.credit_lot_id, error);
+    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
+      status: 'released',
+      released_amount_cents: amount,
+    });
+    await writeCreditLedger(db, {
+      credit_lot_id: reservation.credit_lot_id,
+      owner_profile_id: reservation.owner_profile_id || '',
+      athlete_id: reservation.athlete_id || '',
+      session_id: session.$id,
+      reservation_id: reservation.$id,
+      type: 'reservation_release',
+      available_delta_cents: amount,
+      reserved_delta_cents: -amount,
+      currency: reservation.currency || 'usd',
+      idempotency_key: `credit_release_${reservation.$id}`,
+      metadata: JSON.stringify({ session_id: session.$id }),
+    });
+  } catch (err) {
+    error?.(`Credit reservation restore failed: ${err?.message || err}`);
   }
 }
 
@@ -488,11 +980,350 @@ async function notifyBothSides(db, { session, coach, profile, type, title, clien
   });
 }
 
+function payoutReleaseIdForSession(sessionId) {
+  return `release_${String(sessionId || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120)}`;
+}
+
+function payoutAlreadyReleased(session) {
+  return ['released', 'paid'].includes(String(session?.payout_state || ''));
+}
+
+function payoutSnapshotForSession(session) {
+  const snapshot = parseJson(session.payout_plan_snapshot);
+  const platformBps = bpsInt(snapshot.platform_share_bps ?? snapshot.platform_bps);
+  const coachBps = bpsInt(snapshot.coach_share_bps ?? snapshot.coach_bps);
+  const orgBps = bpsInt(snapshot.org_share_bps ?? snapshot.org_bps);
+  if (platformBps === null || coachBps === null || orgBps === null) {
+    return { error: 'Session payout snapshot is missing split basis points.' };
+  }
+  if (platformBps + coachBps + orgBps !== 10000) {
+    return { error: 'Session payout snapshot split basis points must equal 10000.' };
+  }
+  return {
+    platform_bps: platformBps,
+    coach_bps: coachBps,
+    org_bps: orgBps,
+    coach_id: String(snapshot.selected_coach_id || session.coach_id || ''),
+    organization_id: String(snapshot.organization_id || session.organization_id || ''),
+    coach_connected_account_id: String(snapshot.coach_connected_account_id || ''),
+    org_connected_account_id: String(snapshot.org_connected_account_id || ''),
+    raw: snapshot,
+  };
+}
+
+async function creditReadPermissions(db, credit, reservation) {
+  const accountIds = [];
+  if (credit?.owner_account_id) accountIds.push(credit.owner_account_id);
+  const ownerProfileId = credit?.owner_profile_id || credit?.client_profile_id || reservation?.owner_profile_id || '';
+  if (ownerProfileId) {
+    const owner = await db.getDocument(DB_ID, 'profiles', ownerProfileId).catch(() => null);
+    if (owner?.account_id) accountIds.push(owner.account_id);
+  }
+  const guardianAccounts = await guardianAccountsForAthlete(db, credit?.athlete_id || reservation?.athlete_id || '');
+  accountIds.push(...guardianAccounts);
+  return [...new Set(accountIds.filter(Boolean))].map((id) => Permission.read(Role.user(id)));
+}
+
+async function notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, detail) {
+  const masterAdmin = await firstDocument(db, 'profiles', [
+    Query.equal('master_admin_locked', true),
+  ]).catch(() => null);
+  if (!masterAdmin) return;
+  const permissions = masterAdmin.account_id
+    ? [
+      Permission.read(Role.user(masterAdmin.account_id)),
+      Permission.update(Role.user(masterAdmin.account_id)),
+    ]
+    : [];
+  await createDocumentResilient(db, 'notifications', {
+    recipient_profile_id: masterAdmin.$id,
+    recipient_account_id: masterAdmin.account_id || '',
+    type: 'payout_release_failed',
+    title: 'Payout release needs retry',
+    body: cleanText(`Session ${session.$id} could not release payout: ${detail}`, 2000),
+    link: `/admin/payments?session_id=${encodeURIComponent(session.$id)}`,
+    read: false,
+    data: JSON.stringify({
+      session_id: session.$id,
+      payout_release_id: payoutReleaseId,
+      reason,
+    }),
+    metadata: JSON.stringify({ detail: String(detail || '').slice(0, 1000) }),
+  }, permissions).catch(() => {});
+}
+
+async function captureReservation(db, session, reservation, credit, amountCents, { payoutReleaseId, reason, permissions = [] }) {
+  if (reservation.status !== 'captured') {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'reserved_amount_cents', amountCents, 0);
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'spent_amount_cents', amountCents).catch(() => {});
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'earned_amount_cents', amountCents);
+    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
+      status: 'captured',
+      captured_amount_cents: amountCents,
+    });
+  }
+  await writeCreditLedger(db, {
+    credit_lot_id: reservation.credit_lot_id,
+    owner_profile_id: reservation.owner_profile_id || '',
+    client_profile_id: reservation.owner_profile_id || '',
+    athlete_id: reservation.athlete_id || '',
+    session_id: session.$id,
+    payment_record_id: credit?.source_payment_record_id || '',
+    reservation_id: reservation.$id,
+    type: 'release',
+    amount_cents: amountCents,
+    reserved_delta_cents: -amountCents,
+    currency: reservation.currency || session.currency || 'usd',
+    idempotency_key: `credit_release_${payoutReleaseId}`,
+    metadata: JSON.stringify({ session_id: session.$id, payout_release_id: payoutReleaseId, reason }),
+  }, permissions);
+}
+
+async function releasePayoutLeg(db, stripe, { session, reservation, paymentRecordId, payoutReleaseId, reason, leg, permissions }) {
+  const transferIdempotencyKey = `transfer_${payoutReleaseId}_${leg.owner_type}_${leg.owner_id}_${leg.amount_cents}`;
+  const obligation = await createOnceByIdempotency(db, 'payout_obligations', {
+    session_id: session.$id,
+    credit_reservation_id: reservation.$id,
+    owner_type: leg.owner_type,
+    owner_id: leg.owner_id,
+    stripe_connected_account_id: leg.destination,
+    gross_session_amount_cents: leg.gross_amount_cents,
+    share_bps: leg.share_bps,
+    amount_cents: leg.amount_cents,
+    currency: leg.currency,
+    status: stripe && leg.destination ? 'pending' : 'failed',
+    idempotency_key: transferIdempotencyKey,
+    metadata: JSON.stringify({ payout_release_id: payoutReleaseId, reason }),
+  }, permissions);
+  if (obligation.status === 'paid' && obligation.transfer_id) return { status: 'paid', transfer_id: obligation.transfer_id };
+  if (!stripe || !leg.destination) {
+    await updateDocumentResilient(db, 'payout_obligations', obligation.$id, {
+      status: 'failed',
+      metadata: JSON.stringify({
+        payout_release_id: payoutReleaseId,
+        reason,
+        error: !stripe ? 'STRIPE_SECRET_KEY is not configured.' : 'Missing snapshot connected account id.',
+      }),
+    }).catch(() => {});
+    return { status: 'failed', error: new Error(!stripe ? 'Stripe is not configured.' : 'Missing payout destination.') };
+  }
+
+  await updateDocumentResilient(db, 'payout_obligations', obligation.$id, { status: 'processing' });
+  try {
+    const transfer = await stripe.transfers.create({
+      amount: leg.amount_cents,
+      currency: leg.currency,
+      destination: leg.destination,
+      transfer_group: payoutReleaseId,
+      metadata: {
+        session_id: session.$id,
+        payout_release_id: payoutReleaseId,
+        payout_obligation_id: obligation.$id,
+        reason,
+        owner_type: leg.owner_type,
+        owner_id: leg.owner_id,
+      },
+    }, { idempotencyKey: transferIdempotencyKey });
+
+    const transferRecord = await createOnceByIdempotency(db, 'stripe_transfer_records', {
+      payment_record_id: paymentRecordId,
+      session_id: session.$id,
+      credit_reservation_id: session.credit_reservation_id || '',
+      payout_obligation_id: obligation.$id,
+      owner_type: leg.owner_type,
+      owner_id: leg.owner_id,
+      destination_account_id: leg.destination,
+      amount: leg.amount_cents,
+      amount_cents: leg.amount_cents,
+      currency: leg.currency,
+      transfer_group: payoutReleaseId,
+      idempotency_key: transferIdempotencyKey,
+      status: 'paid',
+      transfer_id: transfer.id,
+    }, permissions);
+
+    await updateDocumentResilient(db, 'payout_obligations', obligation.$id, {
+      status: 'paid',
+      stripe_transfer_record_id: transferRecord.$id,
+      transfer_id: transfer.id,
+    });
+    await writePaymentLedger(db, {
+      payment_record_id: paymentRecordId,
+      type: leg.ledger_type,
+      amount_cents: leg.amount_cents,
+      currency: leg.currency,
+      owner_type: leg.owner_type,
+      owner_id: leg.owner_id,
+      stripe_ref: transfer.id,
+      coach_id: session.coach_id || '',
+      organization_id: session.organization_id || '',
+      session_id: session.$id,
+      credit_lot_id: reservation.credit_lot_id,
+      credit_reservation_id: session.credit_reservation_id || '',
+      idempotency_key: `ledger_${payoutReleaseId}_${leg.ledger_type}`,
+      metadata: JSON.stringify({
+        payout_release_id: payoutReleaseId,
+        reason,
+        transfer_record_id: transferRecord.$id,
+        share_bps: leg.share_bps,
+        destination_account_id: leg.destination,
+      }),
+    }, permissions);
+    return { status: 'paid', transfer_id: transfer.id };
+  } catch (err) {
+    await updateDocumentResilient(db, 'payout_obligations', obligation.$id, {
+      status: 'failed',
+      metadata: JSON.stringify({
+        payout_release_id: payoutReleaseId,
+        reason,
+        error: String(err?.message || err).slice(0, 1000),
+      }),
+    }).catch(() => {});
+    return { status: 'failed', error: err };
+  }
+}
+
+async function releaseSessionPayout(db, sessionId, reason, error) {
+  const session = await db.getDocument(DB_ID, 'sessions', sessionId).catch(() => null);
+  if (!session) return { payout_state: 'not_payable' };
+  if (!session.credit_reservation_id) return { payout_state: session.payout_state || 'not_payable' };
+  if (payoutAlreadyReleased(session)) return { payout_state: session.payout_state || 'released' };
+
+  const reservation = await db.getDocument(DB_ID, 'credit_reservations', session.credit_reservation_id).catch(() => null);
+  const payoutReleaseId = payoutReleaseIdForSession(session.$id);
+  if (!reservation) return { payout_state: 'release_pending_retry' };
+  const credit = await db.getDocument(DB_ID, 'session_credits', reservation.credit_lot_id).catch(() => null);
+  if (String(credit?.status || 'active') === 'frozen') {
+    const detail = 'Credit is frozen, likely due to a payment dispute. Payout release is blocked until the dispute is resolved.';
+    await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, detail);
+    await updateDocumentResilient(db, 'sessions', session.$id, {
+      payout_state: 'release_pending_retry',
+      payout_release_id: payoutReleaseId,
+    }).catch(() => {});
+    return { payout_state: 'release_pending_retry', error: detail };
+  }
+  const amountCents = centsInt(session.reserved_amount_cents, 0)
+    || centsInt(session.price_snapshot_cents, 0)
+    || centsInt(reservation.reserved_amount_cents, 0);
+  if (!(amountCents > 0)) return { payout_state: session.payout_state || 'not_payable' };
+  const currency = session.currency || reservation.currency || 'usd';
+  const paymentRecordId = credit?.source_payment_record_id || session.credit_id || reservation.credit_lot_id;
+  const snapshot = payoutSnapshotForSession(session);
+  if (snapshot.error) {
+    await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, snapshot.error);
+    await updateDocumentResilient(db, 'sessions', session.$id, { payout_state: 'release_pending_retry' }).catch(() => {});
+    return { payout_state: 'release_pending_retry', error: snapshot.error };
+  }
+  const creditPermissions = await creditReadPermissions(db, credit, reservation);
+
+  await captureReservation(db, session, reservation, credit, amountCents, {
+    payoutReleaseId,
+    reason,
+    permissions: creditPermissions,
+  });
+
+  const coachPayoutCents = Math.floor((amountCents * snapshot.coach_bps) / 10000);
+  const orgPayoutCents = Math.floor((amountCents * snapshot.org_bps) / 10000);
+  const platformFeeCents = amountCents - coachPayoutCents - orgPayoutCents;
+  if (platformFeeCents < 0) {
+    const detail = 'Computed payout split exceeds reserved amount.';
+    await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, detail);
+    await updateDocumentResilient(db, 'sessions', session.$id, {
+      payment_state: 'released',
+      payout_state: 'release_pending_retry',
+    }).catch(() => {});
+    return { payout_state: 'release_pending_retry', error: detail };
+  }
+
+  await writePaymentLedger(db, {
+    payment_record_id: paymentRecordId,
+    type: 'platform_fee',
+    amount_cents: platformFeeCents,
+    currency,
+    owner_type: 'platform',
+    owner_id: '',
+    stripe_ref: '',
+    coach_id: session.coach_id || '',
+    organization_id: session.organization_id || '',
+    session_id: session.$id,
+    credit_lot_id: reservation.credit_lot_id,
+    credit_reservation_id: reservation.$id,
+    idempotency_key: `ledger_${payoutReleaseId}_platform_fee`,
+    metadata: JSON.stringify({
+      payout_release_id: payoutReleaseId,
+      reason,
+      platform_bps: snapshot.platform_bps,
+      reserved_amount_cents: amountCents,
+    }),
+  });
+
+  const coach = snapshot.coach_id ? await db.getDocument(DB_ID, 'coaches', snapshot.coach_id).catch(() => null) : null;
+  const coachPermissions = coach?.user_id ? [Permission.read(Role.user(coach.user_id))] : [];
+  const legs = [
+    {
+      owner_type: 'coach',
+      owner_id: snapshot.coach_id,
+      amount_cents: coachPayoutCents,
+      gross_amount_cents: amountCents,
+      share_bps: snapshot.coach_bps,
+      destination: snapshot.coach_connected_account_id,
+      ledger_type: 'coach_payout',
+      currency,
+      permissions: coachPermissions,
+    },
+    {
+      owner_type: 'org',
+      owner_id: snapshot.organization_id,
+      amount_cents: orgPayoutCents,
+      gross_amount_cents: amountCents,
+      share_bps: snapshot.org_bps,
+      destination: snapshot.org_connected_account_id,
+      ledger_type: 'org_payout',
+      currency,
+      permissions: [],
+    },
+  ].filter((leg) => leg.amount_cents > 0 && leg.owner_id);
+
+  const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION })
+    : null;
+  const results = [];
+  for (const leg of legs) {
+    results.push(await releasePayoutLeg(db, stripe, {
+      session,
+      reservation,
+      paymentRecordId,
+      payoutReleaseId,
+      reason,
+      leg,
+      permissions: leg.permissions,
+    }));
+  }
+
+  const failed = results.find((r) => r.status === 'failed');
+  if (failed) {
+    const detail = failed.error?.message || failed.error || 'Stripe transfer failed.';
+    error?.(`Payout release ${payoutReleaseId} failed: ${detail}`);
+    await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, detail);
+    await updateDocumentResilient(db, 'sessions', session.$id, {
+      payment_state: 'released',
+      payout_state: 'release_pending_retry',
+    }).catch(() => {});
+    return { payout_state: 'release_pending_retry', error: detail };
+  }
+  await updateDocumentResilient(db, 'sessions', session.$id, {
+    payment_state: 'released',
+    payout_state: 'released',
+  }).catch(() => {});
+  return { payout_state: 'released', payout_release_id: payoutReleaseId };
+}
+
 // --- Actions -------------------------------------------------------------------
 
 async function bookAction(db, users, accountId, profile, payload, res, error) {
   const coachId = String(payload.coach_id || '').trim();
   const creditId = String(payload.credit_id || '').trim();
+  const packageId = String(payload.package_id || payload.packageId || '').trim();
   const date = String(payload.date || '').trim();
   const startTime = String(payload.start_time || '').trim();
   const durationMinutes = Number(payload.duration_minutes);
@@ -501,6 +1332,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
 
   if (!coachId || coachId.length > 64) return res.json({ error: 'coach_id is required.' }, 400);
   if (!creditId || creditId.length > 64) return res.json({ error: 'credit_id is required.' }, 400);
+  if (packageId && !validId(packageId)) return res.json({ error: 'package_id is invalid.' }, 400);
   if (!validDate(date)) return res.json({ error: 'date must be YYYY-MM-DD.' }, 400);
   if (!validTime(startTime)) return res.json({ error: 'start_time must be HH:MM.' }, 400);
   if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || durationMinutes > 480) {
@@ -516,20 +1348,43 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     return res.json({ error: 'A parent or guardian must book sessions for minors.' }, 403);
   }
 
+  const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return res.json({ error: 'Credit not found.' }, 404);
+  const creditAthleteId = String(credit.athlete_id || '').trim();
+  const effectiveAthleteId = athleteId || creditAthleteId;
+  if (athleteId && creditAthleteId && athleteId !== creditAthleteId) {
+    return res.json({ error: 'This credit belongs to a different athlete.' }, 403);
+  }
+  if (String(credit.status || 'active') !== 'active') {
+    return res.json({ error: 'This credit is not available for booking.' }, 409);
+  }
+
   // Athlete resolution: self athlete profile, or guardian booking for a child.
   let athlete = null;
   let guardianBooking = false;
-  if (athleteId) {
-    athlete = await db.getDocument(DB_ID, 'athlete_profiles', athleteId).catch(() => null);
+  let athleteGuardianLink = null;
+  if (effectiveAthleteId) {
+    athlete = await db.getDocument(DB_ID, 'athlete_profiles', effectiveAthleteId).catch(() => null);
     if (!athlete) return res.json({ error: 'Athlete not found.' }, 404);
     if (athlete.profile_id === profile.$id) {
       guardianBooking = false;
     } else {
-      const link = await guardianLink(db, profile.$id, athlete.$id);
-      if (!link) return res.json({ error: 'You are not linked to this athlete.' }, 403);
-      if (link.can_book === false) return res.json({ error: 'Your guardian permissions do not allow booking.' }, 403);
+      athleteGuardianLink = await guardianLink(db, profile.$id, athlete.$id);
+      if (!athleteGuardianLink) return res.json({ error: 'You are not linked to this athlete.' }, 403);
+      if (athleteGuardianLink.can_book === false) return res.json({ error: 'Your guardian permissions do not allow booking.' }, 403);
       guardianBooking = true;
     }
+  }
+
+  const ownsCredit = credit.client_profile_id
+    ? credit.client_profile_id === profile.$id
+    : credit.owner_profile_id
+      ? credit.owner_profile_id === profile.$id
+    : String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase();
+  const isCreditAthleteSelf = Boolean(creditAthleteId && athlete?.profile_id === profile.$id);
+  const isCreditGuardian = Boolean(creditAthleteId && athleteGuardianLink && athleteGuardianLink.can_book !== false);
+  if (!ownsCredit && !isCreditAthleteSelf && !isCreditGuardian) {
+    return res.json({ error: 'This credit does not belong to you or an athlete linked to you.' }, 403);
   }
 
   const signerRole = guardianBooking ? 'guardian' : 'athlete';
@@ -540,31 +1395,72 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   const slot = await validateSlot(db, coach, { date, startTime, durationMinutes, excludeSessionId: null });
   if (slot.error) return res.json({ error: slot.error }, slot.status || 409);
 
-  // Credit ownership + capacity.
-  const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
-  if (!credit) return res.json({ error: 'Credit not found.' }, 404);
-  const ownsCredit = credit.client_profile_id
-    ? credit.client_profile_id === profile.$id
-    : String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase();
-  if (!ownsCredit) return res.json({ error: 'This credit does not belong to you.' }, 403);
-  if (credit.coach_id && credit.coach_id !== coach.$id) {
-    return res.json({ error: 'This credit was purchased for a different coach.' }, 400);
-  }
-  const total = Number(credit.total_credits) || 0;
-  const used = Number(credit.used_credits) || 0;
-  if (total - used <= 0) return res.json({ error: 'No remaining credits on this package.' }, 409);
-  const creditDuration = Number(credit.session_duration_minutes) || 0;
-  if (creditDuration > 0 && creditDuration !== durationMinutes) {
-    return res.json({ error: `This credit is for ${creditDuration}-minute sessions.` }, 400);
+  const offering = await resolveOffering(db, coach, credit, { ...payload, package_id: packageId }, durationMinutes);
+  if (offering.error) return res.json({ error: offering.error }, 400);
+  const priceSnapshotCents = offering.amount_cents;
+  if (!Number.isInteger(priceSnapshotCents) || priceSnapshotCents <= 0) {
+    return res.json({ error: 'A valid server-side session price is required.' }, 400);
   }
 
-  // Consume the credit atomically before creating the session. The bounded
-  // increment (max = total_credits) makes concurrent double-spend impossible:
-  // the loser's increment fails instead of overwriting the winner's.
-  try {
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', 1, total);
-  } catch {
-    return res.json({ error: 'No remaining credits on this package.' }, 409);
+  const payoutPlan = await resolvePayoutPlan(db, coach, offering.organization_id || '');
+  if (payoutPlan.error) return res.json({ error: 'This coach is not ready for payout routing.' }, 400);
+  const coachAccount = payoutPlan.coach_bps > 0 ? await readyConnectedAccount(db, 'coach', coach.$id) : null;
+  if (payoutPlan.coach_bps > 0 && !coachAccount) return res.json({ error: 'This coach is not ready for payouts yet.' }, 400);
+  const orgAccount = payoutPlan.org_bps > 0 ? await readyConnectedAccount(db, 'org', payoutPlan.organization_id) : null;
+  if (payoutPlan.org_bps > 0 && !orgAccount) return res.json({ error: 'This organization is not ready for payouts yet.' }, 400);
+  const originalCoachId = originalCreditCoachId(credit);
+  const payoutSnapshot = payoutPlanSnapshot({
+    payoutPlan,
+    coach,
+    offering,
+    priceSnapshotCents,
+    coachAccount,
+    orgAccount,
+    originalCoachId,
+  });
+
+  const reservationKey = [
+    'reserve',
+    creditId,
+    coach.$id,
+    athlete?.$id || profile.$id,
+    offering.pkg.$id,
+    date,
+    startTime,
+    durationMinutes,
+  ].join('_');
+
+  const reservationResult = await reserveCreditValue(db, credit, priceSnapshotCents, reservationKey, {
+    owner_profile_id: profile.$id,
+    athlete_id: athlete?.$id || '',
+    coach_id: coach.$id,
+    organization_id: payoutPlan.organization_id || '',
+    offering_id: offering.pkg.$id,
+    currency: 'usd',
+    metadata: {
+      price_snapshot_cents: priceSnapshotCents,
+      platform_share_bps: payoutPlan.platform_bps,
+      coach_share_bps: payoutPlan.coach_bps,
+      org_share_bps: payoutPlan.org_bps,
+      original_credit_coach_id: originalCoachId,
+      payout_plan_snapshot: payoutSnapshot,
+    },
+  }, [], error);
+  if (reservationResult.error) {
+    return res.json({
+      error: reservationResult.error,
+      requires_top_up: reservationResult.status === 402,
+      amount_due_cents: reservationResult.amount_due_cents || reservationResult.top_up_amount_cents || 0,
+      top_up_amount_cents: reservationResult.top_up_amount_cents || 0,
+      session_price_cents: reservationResult.session_price_cents || priceSnapshotCents,
+      remaining_amount_cents: reservationResult.remaining_amount_cents || reservationResult.available_amount_cents || 0,
+      available_amount_cents: reservationResult.available_amount_cents || 0,
+    }, reservationResult.status || 409);
+  }
+  const reservation = reservationResult.reservation;
+  if (reservationResult.duplicate && reservation.session_id) {
+    const existingSession = await db.getDocument(DB_ID, 'sessions', reservation.session_id).catch(() => null);
+    if (existingSession) return res.json({ session: existingSession, duplicate: true });
   }
 
   const guardianAccounts = await guardianAccountsForAthlete(db, athlete?.$id);
@@ -598,9 +1494,29 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       booked_by_profile_id: profile.$id,
       timezone: slot.timezone,
       starts_at_utc: slot.startUtcIso,
+      total_price: priceSnapshotCents / 100,
+      credit_reservation_id: reservation.$id,
+      offering_id: offering.pkg.$id,
+      reserved_amount_cents: priceSnapshotCents,
+      price_snapshot_cents: priceSnapshotCents,
+      payout_plan_snapshot: JSON.stringify(payoutSnapshot),
+      original_credit_coach_id: originalCoachId,
+      currency: 'usd',
+      platform_share_bps: payoutPlan.platform_bps,
+      coach_share_bps: payoutPlan.coach_bps,
+      org_share_bps: payoutPlan.org_bps,
+      organization_id: payoutPlan.organization_id || '',
+      payout_rule_id: payoutPlan.payout_rule_id || '',
+      coach_connected_account_id_snapshot: coachAccount?.stripe_account_id || '',
+      org_connected_account_id_snapshot: orgAccount?.stripe_account_id || '',
+      payment_state: 'reserved',
+      payout_state: 'not_payable',
     }, permissions);
+    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
+      session_id: session.$id,
+    });
   } catch (err) {
-    await restoreCredit(db, creditId, error);
+    await restoreCreditReservation(db, { ...reservation, credit_reservation_id: reservation.$id, credit_id: creditId, $id: '' }, error);
     throw err;
   }
 
@@ -661,12 +1577,20 @@ async function cancelAction(db, users, accountId, profile, payload, res, error) 
   const startMs = sessionStartMs(session, authority.coach);
   const hoursUntil = startMs === null ? 0 : (startMs - Date.now()) / 3600000;
   const restore = authority.isCoach || hoursUntil >= 24;
-  if (restore) await restoreCredit(db, session.credit_id, error);
+  if (restore) await restoreCreditReservation(db, session, error);
 
-  const updated = await updateDocumentResilient(db, 'sessions', session.$id, {
+  let updated = await updateDocumentResilient(db, 'sessions', session.$id, {
     status: 'cancelled',
     cancellation_reason: reason,
+    payment_state: restore ? 'restored' : session.payment_state || 'reserved',
   });
+  if (!restore) {
+    const payout = await releaseSessionPayout(db, updated.$id, 'late_cancel_forfeiture', error);
+    updated = await updateDocumentResilient(db, 'sessions', updated.$id, {
+      payment_state: 'released',
+      payout_state: payout.payout_state,
+    });
+  }
 
   const when = `${session.date} ${session.start_time}`;
   await notifyBothSides(db, {
@@ -739,13 +1663,13 @@ async function rescheduleAction(db, users, accountId, profile, payload, res, err
   return res.json({ session: updated });
 }
 
-async function statusAction(db, users, accountId, profile, payload, newStatus, res) {
+async function statusAction(db, users, accountId, profile, payload, newStatus, res, error) {
   const sessionId = String(payload.session_id || '').trim();
   if (!sessionId) return res.json({ error: 'session_id is required.' }, 400);
 
   const session = await db.getDocument(DB_ID, 'sessions', sessionId).catch(() => null);
   if (!session) return res.json({ error: 'Session not found.' }, 404);
-  if (session.status !== 'confirmed') {
+  if (session.status !== 'confirmed' && session.status !== newStatus) {
     return res.json({ error: 'Only confirmed sessions can be updated.' }, 400);
   }
 
@@ -756,9 +1680,28 @@ async function statusAction(db, users, accountId, profile, payload, newStatus, r
       return res.json({ error: 'Only the coach or an admin can do that.' }, 403);
     }
   }
+  if (session.status === newStatus && payoutAlreadyReleased(session)) {
+    return res.json({ session, duplicate: true });
+  }
 
-  // no_show does not restore the credit; the credit stays consumed.
-  const updated = await updateDocumentResilient(db, 'sessions', session.$id, { status: newStatus });
+  const startMs = sessionStartMs(session, authority.coach);
+  if (session.status !== newStatus && newStatus !== 'late_cancelled_chargeable' && startMs !== null && startMs > Date.now() && !authority.isAdmin) {
+    return res.json({ error: 'Sessions can only be finalized after their scheduled start time.' }, 400);
+  }
+
+  // completed/no_show/late_cancelled_chargeable capture reserved value and
+  // release delayed payouts. They never restore the credit.
+  const provisional = session.status === newStatus
+    ? session
+    : await updateDocumentResilient(db, 'sessions', session.$id, {
+      status: newStatus,
+      outcome_finalized_at: new Date().toISOString(),
+    });
+  const payout = await releaseSessionPayout(db, provisional.$id, newStatus, error);
+  const updated = await updateDocumentResilient(db, 'sessions', provisional.$id, {
+    payment_state: 'released',
+    payout_state: payout.payout_state,
+  });
   return res.json({ session: updated });
 }
 
@@ -785,9 +1728,11 @@ export default async ({ req, res, error }) => {
       case 'reschedule':
         return await rescheduleAction(db, users, accountId, profile, payload, res, error);
       case 'complete':
-        return await statusAction(db, users, accountId, profile, payload, 'completed', res);
+        return await statusAction(db, users, accountId, profile, payload, 'completed', res, error);
       case 'no_show':
-        return await statusAction(db, users, accountId, profile, payload, 'no_show', res);
+        return await statusAction(db, users, accountId, profile, payload, 'no_show', res, error);
+      case 'late_cancelled_chargeable':
+        return await statusAction(db, users, accountId, profile, payload, 'late_cancelled_chargeable', res, error);
       default:
         return res.json({ error: 'Unknown action.' }, 400);
     }

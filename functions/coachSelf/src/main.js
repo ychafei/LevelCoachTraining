@@ -10,6 +10,9 @@ const SERVICE_TYPES = ['facility', 'travels', 'hybrid', 'online'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PUBLISH_POLICY_KEYS = ['coach_publish_policy', 'coach_safety_policy', 'coach_compliance_policy'];
+const COMPLETE_STATUS_VALUES = new Set(['approved', 'clear', 'cleared', 'passed', 'complete', 'completed', 'verified', 'active', 'current', 'valid', 'yes', 'true']);
+const INCOMPLETE_STATUS_VALUES = new Set(['', 'none', 'no', 'false', 'pending', 'required', 'missing', 'not_started', 'incomplete', 'failed', 'rejected', 'denied', 'expired']);
 
 function services() {
   const client = new Client()
@@ -149,6 +152,16 @@ function validTimezone(value) {
   const tz = str(value, 1, 64);
   if (tz === undefined) return undefined;
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { return undefined; }
+}
+
+function hasText(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : value !== undefined && value !== null && value !== '';
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
 }
 
 // Update the coach document, tolerating a live `coaches` collection that is
@@ -660,46 +673,233 @@ async function hasAvailability(databases, coach) {
   return rows.documents.some((row) => row.block_type !== 'blackout');
 }
 
-async function hasSport(databases, coach) {
-  if (Array.isArray(coach.sports) && coach.sports.length > 0) return true;
-  const rows = await databases.listDocuments(DB_ID, 'coach_sport_profiles', [
-    Query.equal('coach_id', coach.$id),
-    Query.limit(1),
-  ]).catch(() => ({ documents: [] }));
-  return rows.documents.length > 0;
+function hasSelectedSport(coach) {
+  return asArray(coach.sports).length > 0;
 }
 
-async function publish(databases, profile, coach) {
+function completeSportProfile(row) {
+  return asArray(row?.specialties).length > 0
+    && asArray(row?.levels).length > 0
+    && asArray(row?.session_types).length > 0;
+}
+
+async function hasCompleteSportProfile(databases, coach) {
+  const rows = await databases.listDocuments(DB_ID, 'coach_sport_profiles', [
+    Query.equal('coach_id', coach.$id),
+    Query.limit(100),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents.some(completeSportProfile);
+}
+
+function serviceLocationComplete(coach) {
+  const serviceType = String(coach.service_type || '').trim();
+  if (!SERVICE_TYPES.includes(serviceType)) return false;
+  if (!hasText(coach.service_city) || !hasText(coach.service_state) || !hasText(coach.service_zip)) return false;
+  if ((serviceType === 'facility' || serviceType === 'hybrid') && !hasText(coach.service_venue)) return false;
+  if (serviceType === 'travels' || serviceType === 'hybrid') {
+    const radius = Number(coach.service_radius_miles);
+    if (!Number.isFinite(radius) || radius <= 0) return false;
+  }
+  return true;
+}
+
+async function linkedAccountExists(users, coach) {
+  const userId = String(coach.user_id || '').trim();
+  if (!userId) return false;
+  const account = await users.get(userId).catch(() => null);
+  return !!account?.$id;
+}
+
+async function loadPublishPolicy(databases) {
+  for (const key of PUBLISH_POLICY_KEYS) {
+    const rows = await databases.listDocuments(DB_ID, 'site_content', [
+      Query.equal('key', key),
+      Query.limit(1),
+    ]).catch(() => ({ documents: [] }));
+    const raw = rows.documents[0]?.value;
+    if (!raw) continue;
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // Ignore malformed optional policy rows; admins can fix the content row
+      // without blocking all coach publishing.
+    }
+  }
+  return null;
+}
+
+function policyRequiredFields(policy) {
+  if (!policy || typeof policy !== 'object') return [];
+  const fields = new Set();
+  const add = (value) => {
+    if (Array.isArray(value)) {
+      for (const item of value) if (hasText(item)) fields.add(String(item).trim());
+    }
+  };
+  add(policy.required_fields);
+  add(policy.requiredFields);
+  add(policy.safety?.required_fields);
+  add(policy.safety?.requiredFields);
+  add(policy.background?.required_fields);
+  add(policy.background?.requiredFields);
+  add(policy.insurance?.required_fields);
+  add(policy.insurance?.requiredFields);
+  return [...fields];
+}
+
+function anyFieldComplete(source, fields, acceptedValues = {}) {
+  return fields.some((field) => {
+    const value = source[field];
+    if (value === true) return true;
+    if (value === false || value === undefined || value === null) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (field.endsWith('_expires_at') || field.endsWith('_expiration_date')) {
+      const ts = Date.parse(String(value));
+      return Number.isFinite(ts) && ts > Date.now();
+    }
+    const normalized = String(value).trim().toLowerCase();
+    if (Array.isArray(acceptedValues[field])) {
+      return acceptedValues[field].map((item) => String(item).trim().toLowerCase()).includes(normalized);
+    }
+    if (COMPLETE_STATUS_VALUES.has(normalized)) return true;
+    if (INCOMPLETE_STATUS_VALUES.has(normalized)) return false;
+    return normalized.length > 0;
+  });
+}
+
+async function safetyPolicyStatus(databases, coach, profile, priv) {
+  const policy = await loadPublishPolicy(databases);
+  if (!policy) return { done: true, details: [], configured: false };
+
+  const source = { ...profile, ...coach, ...priv };
+  const acceptedValues = policy.accepted_values || policy.acceptedValues || {};
   const missing = [];
-  // email_verified_at lives in coach_private now; fall back to the coach doc
-  // for any coach not yet migrated.
+
+  for (const field of policyRequiredFields(policy)) {
+    if (!anyFieldComplete(source, [field], acceptedValues)) missing.push(field);
+  }
+
+  const requireBackground = policy.require_background_check === true
+    || policy.requireBackgroundCheck === true
+    || policy.background?.required === true;
+  if (requireBackground && !anyFieldComplete(source, [
+    'background_check_status',
+    'background_status',
+    'background_verified_at',
+    'background_check_completed_at',
+  ], acceptedValues)) {
+    missing.push('background_check');
+  }
+
+  const requireInsurance = policy.require_insurance === true
+    || policy.requireInsurance === true
+    || policy.insurance?.required === true;
+  if (requireInsurance && !anyFieldComplete(source, [
+    'insurance_status',
+    'insurance_verified_at',
+    'insurance_expires_at',
+    'insurance_policy_number',
+    'insurance_document_file_id',
+  ], acceptedValues)) {
+    missing.push('insurance');
+  }
+
+  const requireSafetyTraining = policy.require_safety_training === true
+    || policy.requireSafetyTraining === true
+    || policy.safety?.required === true;
+  if (requireSafetyTraining && !anyFieldComplete(source, [
+    'safety_training_status',
+    'safety_training_completed_at',
+    'safety_certification_status',
+  ], acceptedValues)) {
+    missing.push('safety_training');
+  }
+
+  return { done: missing.length === 0, details: [...new Set(missing)], configured: true };
+}
+
+function checklistItem(key, label, done, description, details = []) {
+  return {
+    key,
+    label,
+    description,
+    done: done === true,
+    blocking: done !== true,
+    details,
+  };
+}
+
+async function buildPublishChecklist(databases, users, profile, coach) {
   const priv = await getCoachPrivate(databases, coach.$id);
   const emailVerifiedAt = priv?.email_verified_at ?? coach.email_verified_at ?? null;
-  if (!(await coachLegalPacketComplete(databases, profile, coach))) missing.push('legal_packet');
-  if (!(await connectReady(databases, coach))) missing.push('stripe_connect');
-  if (!emailVerifiedAt) missing.push('email_verification');
-  if (String(coach.bio || '').trim().length < 80) missing.push('bio');
-  if (!String(coach.photo_url || '').trim()) missing.push('photo');
-  if (!(await hasSport(databases, coach))) missing.push('sport');
-  if (!(await hasAvailability(databases, coach))) missing.push('availability');
-  if (!(await hasActivePackage(databases, coach))) missing.push('pricing');
-  if (missing.length > 0) {
-    return { status: 400, body: { error: 'Publish requirements not met.', missing } };
+  const [
+    linked,
+    legal,
+    connect,
+    sportProfile,
+    availability,
+    pricing,
+    safety,
+  ] = await Promise.all([
+    linkedAccountExists(users, coach),
+    coachLegalPacketComplete(databases, profile, coach),
+    connectReady(databases, coach),
+    hasCompleteSportProfile(databases, coach),
+    hasAvailability(databases, coach),
+    hasActivePackage(databases, coach),
+    safetyPolicyStatus(databases, coach, profile, priv),
+  ]);
+
+  const items = [
+    checklistItem('linked_account', 'Linked user account exists', linked, 'An Appwrite user account must be linked to this coach record.'),
+    checklistItem('legal_packet', 'Coach legal packet signed', legal, 'All active required coach legal templates must be signed.'),
+    checklistItem('email_verification', 'Coach email verified', !!emailVerifiedAt, 'The coach contact email must be verified through the coach portal.'),
+    checklistItem('stripe_connect', 'Stripe Connect ready', connect, 'The coach connected account must have charges_enabled and payouts_enabled.'),
+    checklistItem('active', 'Coach is active', coach.is_active === true, 'An admin must keep this coach active before they can publish.'),
+    checklistItem('name', 'First and last name present', hasText(coach.first_name) && hasText(coach.last_name), 'Both first_name and last_name are required.'),
+    checklistItem('bio_or_quote', 'Bio or headline present', hasText(coach.bio) || hasText(coach.quote), 'Add either a public bio or a short headline/quote.'),
+    checklistItem('sport', 'At least one sport selected', hasSelectedSport(coach), 'Choose at least one sport from the coach profile.'),
+    checklistItem('sport_profile', 'Sport profile details complete', sportProfile, 'At least one sport profile row must include specialties, levels, and session types.'),
+    checklistItem('service_location', 'Service location complete', serviceLocationComplete(coach), 'Set service type, city, state, ZIP, and required venue/radius details.'),
+    checklistItem('timezone', 'Timezone set', !!validTimezone(coach.timezone), 'Choose the timezone used for availability and bookings.'),
+    checklistItem('availability', 'Availability exists', availability, 'Add weekly availability or active availability blocks.'),
+    checklistItem('pricing', 'Active pricing package exists', pricing, 'Create at least one active pricing package.'),
+    checklistItem('safety_policy', 'Safety, background, and insurance policy complete', safety.done, 'Configured site policy requirements must be complete.', safety.details),
+  ];
+  const missing = items.filter((item) => !item.done).map((item) => item.key);
+  return {
+    publishable: missing.length === 0,
+    missing,
+    checklist: items,
+    policy_configured: safety.configured,
+  };
+}
+
+async function publishChecklist(databases, users, profile, coach) {
+  const result = await buildPublishChecklist(databases, users, profile, coach);
+  return { status: 200, body: { ok: true, ...result } };
+}
+
+async function publish(databases, users, profile, coach) {
+  const checklist = await buildPublishChecklist(databases, users, profile, coach);
+  if (!checklist.publishable) {
+    return { status: 400, body: { error: 'Publish requirements not met.', ...checklist } };
   }
-  await updateCoach(databases, coach.$id, { published: true, is_active: true });
+  await updateCoach(databases, coach.$id, { published: true });
   await writeAudit(databases, {
     actor_email: profile.email || '',
     action: 'coach.publish',
     entity_type: 'Coach',
     entity_id: coach.$id,
-    after: JSON.stringify({ published: true, is_active: true }),
+    after: JSON.stringify({ published: true }),
     metadata: JSON.stringify({ profile_id: profile.$id }),
   });
-  return { status: 200, body: { ok: true, published: true } };
+  return { status: 200, body: { ok: true, published: true, ...checklist } };
 }
 
 async function unpublish(databases, profile, coach) {
-  await updateCoach(databases, coach.$id, { published: false, is_active: false });
+  await updateCoach(databases, coach.$id, { published: false });
   await writeAudit(databases, {
     actor_email: profile.email || '',
     action: 'coach.unpublish',
@@ -771,8 +971,11 @@ export default async ({ req, res, error }) => {
       case 'confirmEmailCode':
         result = await confirmEmailCode(databases, coach, payload);
         break;
+      case 'publishChecklist':
+        result = await publishChecklist(databases, users, profile, coach);
+        break;
       case 'publish':
-        result = await publish(databases, profile, coach);
+        result = await publish(databases, users, profile, coach);
         break;
       case 'unpublish':
         result = await unpublish(databases, profile, coach);

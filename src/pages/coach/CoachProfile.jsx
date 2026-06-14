@@ -30,6 +30,14 @@ const SERVICE_TYPE_OPTIONS = [
   { value: 'online', label: 'Online training only' },
 ];
 
+const SESSION_TYPE_OPTIONS = [
+  { value: 'private', label: 'Private' },
+  { value: 'small_group', label: 'Small group' },
+  { value: 'team', label: 'Team' },
+  { value: 'evaluation', label: 'Evaluation' },
+  { value: 'virtual', label: 'Virtual' },
+];
+
 // Fields editable through the coachSelf.updateProfile whitelist.
 const EDITABLE_KEYS = [
   'bio', 'quote', 'training_area', 'specializations', 'sports',
@@ -123,12 +131,14 @@ function MultiPick({ options, selected, onToggle, label }) {
   return (
     <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
       {options.map((option) => {
-        const active = selected.includes(option);
+        const value = typeof option === 'string' ? option : option.value;
+        const text = typeof option === 'string' ? option : option.label;
+        const active = selected.includes(value);
         return (
           <button
-            key={option}
+            key={value}
             type="button"
-            onClick={() => onToggle(option)}
+            onClick={() => onToggle(value)}
             aria-pressed={active}
             className={`rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               active
@@ -136,7 +146,7 @@ function MultiPick({ options, selected, onToggle, label }) {
                 : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
             }`}
           >
-            {option}
+            {text}
           </button>
         );
       })}
@@ -165,6 +175,7 @@ function SportProfilesEditor({ coach, selectedSports }) {
             specialties: Array.isArray(row.specialties) ? row.specialties : [],
             levels: Array.isArray(row.levels) ? row.levels : [],
             positions: Array.isArray(row.positions) ? row.positions : [],
+            session_types: Array.isArray(row.session_types) ? row.session_types : [],
           };
         }
         setProfiles(next);
@@ -175,11 +186,11 @@ function SportProfilesEditor({ coach, selectedSports }) {
     return () => { cancelled = true; };
   }, [coach?.id]);
 
-  const entryFor = (sportKey) => profiles[sportKey] || { specialties: [], levels: [], positions: [] };
+  const entryFor = (sportKey) => profiles[sportKey] || { specialties: [], levels: [], positions: [], session_types: [] };
 
   const toggle = (sportKey, field, value) => {
     setProfiles((prev) => {
-      const entry = prev[sportKey] || { specialties: [], levels: [], positions: [] };
+      const entry = prev[sportKey] || { specialties: [], levels: [], positions: [], session_types: [] };
       const list = entry[field] || [];
       const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
       return { ...prev, [sportKey]: { ...entry, [field]: next } };
@@ -246,6 +257,15 @@ function SportProfilesEditor({ coach, selectedSports }) {
                   selected={entry.levels}
                   onToggle={(v) => toggle(sportKey, 'levels', v)}
                   label={`${sport.display_name} levels`}
+                />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Session types</p>
+                <MultiPick
+                  options={SESSION_TYPE_OPTIONS}
+                  selected={entry.session_types}
+                  onToggle={(v) => toggle(sportKey, 'session_types', v)}
+                  label={`${sport.display_name} session types`}
                 />
               </div>
               {sport.positions.length > 0 && (
@@ -571,6 +591,7 @@ export default function CoachProfile() {
   }
 
   const bioLength = String(draft.bio || '').trim().length;
+  const hasBioOrQuote = bioLength > 0 || String(draft.quote || '').trim().length > 0;
 
   return (
     <div className="space-y-6">
@@ -616,7 +637,7 @@ export default function CoachProfile() {
                   <Upload className="w-3 h-3 mr-1" aria-hidden="true" /> {uploadingPhoto ? 'Uploading…' : 'Upload photo'}
                 </Button>
               </label>
-              <p className="text-xs text-muted-foreground">JPG/PNG. A clear face shot works best. Required to publish.</p>
+              <p className="text-xs text-muted-foreground">JPG/PNG. A clear face shot works best.</p>
             </div>
           </Section>
 
@@ -625,8 +646,8 @@ export default function CoachProfile() {
             <div>
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="bio" className="text-xs font-semibold">Bio</Label>
-                <span className={`text-[11px] ${bioLength >= 80 ? 'text-muted-foreground' : 'text-yellow-700'}`}>
-                  {bioLength}/80+ characters {bioLength < 80 && '(required to publish)'}
+                <span className={`text-[11px] ${hasBioOrQuote ? 'text-muted-foreground' : 'text-yellow-700'}`}>
+                  {bioLength} characters {!hasBioOrQuote && '(bio or quote required to publish)'}
                 </span>
               </div>
               <Textarea
@@ -825,8 +846,9 @@ export default function CoachProfile() {
                 value={draft.service_venue || ''}
                 onChange={e => updateDraft({ service_venue: e.target.value })}
                 className="bg-secondary border-border mt-1"
-                placeholder="Where you usually train athletes (optional)"
+                placeholder="Where you usually train athletes"
               />
+              <p className="text-[11px] text-muted-foreground mt-1">Required when you host at a facility or offer hybrid training.</p>
             </div>
             <div className="mt-3">
               <Label htmlFor="training-area" className="text-xs font-semibold">Training area summary</Label>

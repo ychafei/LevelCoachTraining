@@ -28,7 +28,9 @@ import {
   isUpcomingSession,
   parseJsonObject,
   sessionStartMs,
+  usd,
 } from '@/features/athlete/portalShared';
+import { creditRemainingCents } from '@/features/athlete/useAthletePortalData';
 
 const EASE = [0.16, 1, 0.3, 1];
 
@@ -77,10 +79,7 @@ function useFamilyCredits(user) {
     queryFn: () => sessionCreditRepo.list('-created_date').catch(() => []),
   });
   const credits = query.data || [];
-  const remaining = credits.reduce(
-    (sum, c) => sum + Math.max(0, (Number(c.total_credits) || 0) - (Number(c.used_credits) || 0)),
-    0,
-  );
+  const remaining = credits.reduce((sum, c) => sum + creditRemainingCents(c), 0);
   return { remaining, loading: query.isLoading && !!user?.id };
 }
 
@@ -274,8 +273,8 @@ export default function FamilyDashboard({
         />
         <StatTile
           icon={CreditCard}
-          label="Session credits"
-          value={credits.loading ? '…' : credits.remaining}
+          label="Credit balance"
+          value={credits.loading ? '…' : usd(credits.remaining)}
           sub={credits.remaining === 0 ? 'Buy a package to book' : 'Ready to book'}
           delay={0.1}
         />

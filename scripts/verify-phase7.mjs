@@ -27,16 +27,23 @@ function mustNotMatch(rel, regex, why) {
   if (regex.test(code)) failures.push(`${rel} must NOT match ${regex} — ${why}`);
 }
 
-// ── Payments: separate charges & transfers ───────────────────────────────────
-mustNotMatch('functions/createStripeCheckout/src/main.js', /transfer_data\s*:/, 'checkout must not use destination charges; splits happen via webhook transfers');
-mustNotMatch('functions/createStripeCheckout/src/main.js', /application_fee_amount/, 'platform fee is a ledger split, not a Connect application fee');
-mustInclude('functions/createStripeCheckout/src/main.js', 'payout_plan', 'server-computed split plan must ride in metadata');
-mustInclude('functions/createStripeCheckout/src/main.js', 'PLATFORM_FEE_BPS', 'platform fee default must come from env (bps)');
-mustInclude('functions/stripeWebhook/src/main.js', 'transfers.create', 'webhook must create real Stripe transfers for payout legs');
-mustInclude('functions/stripeWebhook/src/main.js', 'source_transaction', 'transfers must be tied to the charge');
+// ── Payments: prepaid credits + delayed payouts ──────────────────────────────
+mustNotMatch('functions/createStripeCheckout/src/main.js', /transfer_data\s*:/, 'checkout must not use destination charges');
+mustNotMatch('functions/createStripeCheckout/src/main.js', /application_fee_amount/, 'checkout must not create a Connect application fee');
+mustNotMatch('functions/createStripeCheckout/src/main.js', /payout_plan/, 'checkout metadata must not carry payout destinations');
+mustNotMatch('functions/stripeWebhook/src/main.js', /transfers\.create\s*\(/, 'checkout webhook must not create coach/org transfers');
+mustNotMatch('functions/stripeWebhook/src/main.js', /source_transaction/, 'delayed payouts are not tied to the checkout charge as source_transaction');
 mustInclude('functions/stripeWebhook/src/main.js', 'constructEvent', 'webhook signature verification is mandatory');
 mustInclude('functions/stripeWebhook/src/main.js', 'payment_ledger_entries', 'every money movement writes the ledger');
-mustInclude('functions/refundStripePayment/src/main.js', 'createReversal', 'refunds must reverse payout transfers');
+mustInclude('functions/stripeWebhook/src/main.js', "type: 'charge'", 'checkout must write a platform charge ledger entry');
+mustInclude('functions/stripeWebhook/src/main.js', "type: 'purchase'", 'checkout must write a prepaid credit purchase ledger entry');
+mustInclude('functions/booking/src/main.js', 'price_snapshot_cents', 'booking must snapshot server-computed session price');
+mustInclude('functions/booking/src/main.js', 'payout_plan_snapshot', 'payout release must use the immutable booking-time payout plan');
+mustInclude('functions/booking/src/main.js', 'releaseSessionPayout', 'earned outcomes must release payouts through one idempotent helper');
+mustInclude('functions/booking/src/main.js', 'release_pending_retry', 'failed payout releases must be retryable instead of double-capturing credits');
+mustInclude('functions/booking/src/main.js', 'payout_obligations', 'earned outcomes must create delayed payout obligations');
+mustInclude('functions/booking/src/main.js', 'transfers.create', 'earned outcomes must create Stripe transfers after session finalization');
+mustInclude('functions/refundStripePayment/src/main.js', 'createReversal', 'earned-session refunds can reverse payout transfers');
 mustInclude('functions/refundStripePayment/src/main.js', 'request_id', 'refunds must be idempotent per request');
 mustInclude('functions/stripeConnectWebhook/src/main.js', 'account.updated', 'Connect account status must sync via webhook');
 

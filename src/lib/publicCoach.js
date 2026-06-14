@@ -1,8 +1,8 @@
-// getPublicCoaches returns sanitized public cards: no email/phone/user_id/fee
-// fields ever reach the client. Cards include rating_avg, review_count, sports,
-// price_hint_cents and organization {id,name,slug,logo_file_id}. `availability`
-// may arrive as a JSON string from direct coach reads, so normalise here and
-// expose `coach.id` consistently.
+// getPublicCoaches returns sanitized public cards. This helper also sanitizes
+// defensively so a raw coach document passed in by mistake cannot leak
+// email/phone/user_id, Stripe ids, fee fields, or internal verification notes.
+// `availability` may arrive as a JSON string from direct coach reads, so
+// normalize here and expose `coach.id` consistently.
 import {
   coachDistanceMiles,
   coachServiceRadiusMiles,
@@ -35,6 +35,65 @@ const SERVICE_TYPE_LABELS = {
   online: 'Online training',
 };
 
+const PUBLIC_COACH_FIELDS = [
+  'id',
+  'first_name',
+  'last_name',
+  'bio',
+  'quote',
+  'photo_url',
+  'intro_video_url',
+  'specializations',
+  'sports',
+  'rating_avg',
+  'review_count',
+  'price_hint_cents',
+  'county',
+  'training_area',
+  'service_city',
+  'service_state',
+  'service_zip',
+  'service_radius_miles',
+  'service_type',
+  'service_venue',
+  'service_counties',
+  'location_lat',
+  'location_lng',
+  'timezone',
+  'availability',
+  'is_head_coach',
+  'display_order',
+  'organization',
+  // Legacy/imported display-only fields that older public cards may include.
+  'primary_sport',
+  'sport',
+  'age_groups',
+  'training_formats',
+  'service_area_label',
+  'location',
+  'city',
+  'organization_name',
+  'org_name',
+  'business_name',
+  'academy_name',
+  'public_verified',
+];
+
+const PUBLIC_ORGANIZATION_FIELDS = ['id', 'name', 'slug', 'logo_file_id'];
+
+function pickAllowed(obj, fields) {
+  const out = {};
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(obj || {}, field)) out[field] = obj[field];
+  }
+  return out;
+}
+
+function sanitizeOrganization(org) {
+  if (!org || typeof org !== 'object') return null;
+  return pickAllowed(org, PUBLIC_ORGANIZATION_FIELDS);
+}
+
 export function parseAvailability(val) {
   if (val && typeof val === 'object') return val;
   if (typeof val === 'string' && val.trim()) {
@@ -45,12 +104,13 @@ export function parseAvailability(val) {
 
 export function normalizePublicCoach(doc) {
   if (!doc) return doc;
+  const safe = pickAllowed(doc, PUBLIC_COACH_FIELDS);
   return {
-    ...doc,
+    ...safe,
     id: doc.id || doc.$id,
-    availability: parseAvailability(doc.availability),
-    sports: Array.isArray(doc.sports) ? doc.sports : [],
-    organization: doc.organization && typeof doc.organization === 'object' ? doc.organization : null,
+    availability: parseAvailability(safe.availability),
+    sports: Array.isArray(safe.sports) ? safe.sports : [],
+    organization: sanitizeOrganization(safe.organization),
   };
 }
 
@@ -79,6 +139,14 @@ function money(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return '';
   return `$${Math.round(numeric)}`;
+}
+
+function packagePerSessionDollars(pkg) {
+  const sessions = Number(pkg?.sessions) || 1;
+  const cents = Number(pkg?.price_cents);
+  if (Number.isInteger(cents) && cents > 0) return (cents / 100) / sessions;
+  const dollars = Number(pkg?.price);
+  return Number.isFinite(dollars) && dollars > 0 ? dollars / sessions : NaN;
 }
 
 export function formatAvailabilityTime(time) {
@@ -191,19 +259,25 @@ export function publicCoachDisplay(coach, options = {}) {
   // is the MINIMUM per-session price across the coach's active packages
   // (getPublicCoaches), so the label always carries a "From" qualifier.
   const priceHintCents = Number(normalized?.price_hint_cents);
-  // Fallback only over THIS coach's packages (callers often pass the
-  // platform-wide visible list), else platform-default templates (no
-  // coach_id) — mirroring what Book.jsx actually offers. Never another
-  // coach's pricing.
+  // Fallback only over packages this coach can offer (direct coach packages,
+  // active org packages, then platform defaults). Never another coach's
+  // pricing.
+  const visiblePackage = (pkg) => pkg?.is_active !== false && pkg?.is_visible !== false;
   const ownPackages = Array.isArray(options.packages)
-    ? options.packages.filter((pkg) => pkg.coach_id === normalized.id)
+    ? options.packages.filter((pkg) => visiblePackage(pkg) && pkg.coach_id === normalized.id)
+    : [];
+  const orgPackages = Array.isArray(options.packages) && organization?.id
+    ? options.packages.filter((pkg) =>
+      visiblePackage(pkg)
+      && pkg.organization_id === organization.id
+      && (!pkg.coach_id || pkg.coach_id === normalized.id))
     : [];
   const defaultPackages = Array.isArray(options.packages)
-    ? options.packages.filter((pkg) => !pkg.coach_id)
+    ? options.packages.filter((pkg) => visiblePackage(pkg) && !pkg.coach_id && !pkg.organization_id)
     : [];
-  const packagePool = ownPackages.length ? ownPackages : defaultPackages;
+  const packagePool = ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages;
   const minPackagePrice = packagePool.length
-    ? Math.min(...packagePool.map((pkg) => Number(pkg.price) / (Number(pkg.sessions) || 1)).filter(Number.isFinite))
+    ? Math.min(...packagePool.map(packagePerSessionDollars).filter(Number.isFinite))
     : null;
   const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? `From ${money(priceHintCents / 100)}` : '')
     || (Number.isFinite(minPackagePrice) ? `From $${Math.round(minPackagePrice)}` : '');
@@ -241,12 +315,8 @@ export function publicCoachDisplay(coach, options = {}) {
     organization,
     headline: compact(normalized?.quote) || `Personal coaching for athletes who want structured, focused training.`,
     bio: compact(normalized?.bio) || '',
-    // Server-set signal only: coachSelf confirmEmailCode sets email_verified_at.
-    // `published` is NOT a verification signal — every visible coach is published,
-    // so treating it as one would make the badge meaningless. Label this as
-    // "Email verified", never bare "Verified".
-    verified: !!normalized?.email_verified_at,
-    contactVerified: !!normalized?.email_verified_at,
+    verified: normalized?.public_verified === true,
+    contactVerified: normalized?.public_verified === true,
     nextAvailable: nextAvailabilityLabel(normalized),
     availability: availabilitySummary(normalized),
     rateLabel,

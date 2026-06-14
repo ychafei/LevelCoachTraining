@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ledgerRepo,
+  payoutObligationRepo,
   stripePaymentRecordRepo,
   stripeTransferRecordRepo,
   stripeWebhookEventRepo,
@@ -13,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatCents, shortId } from '@/features/admin/money';
-import { ArrowLeft, BookOpenText, CreditCard, RefreshCw, RotateCcw, Webhook } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpenText, CreditCard, RefreshCw, RotateCcw, Webhook } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -150,21 +151,24 @@ export default function AdminPayments() {
   const [transfers, setTransfers] = useState([]);
   const [events, setEvents] = useState([]);
   const [ledger, setLedger] = useState([]);
+  const [payoutQueue, setPayoutQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refundTarget, setRefundTarget] = useState(null);
 
   const load = async () => {
     setLoading(true);
-    const [paymentRows, transferRows, eventRows, ledgerRows] = await Promise.all([
+    const [paymentRows, transferRows, eventRows, ledgerRows, payoutRows] = await Promise.all([
       stripePaymentRecordRepo.list('-created_date').catch(() => []),
       stripeTransferRecordRepo.list('-created_date').catch(() => []),
       stripeWebhookEventRepo.list('-created_date').catch(() => []),
       ledgerRepo.list('-created_date').catch(() => []),
+      payoutObligationRepo.list('-created_date').catch(() => []),
     ]);
     setPayments(paymentRows);
     setTransfers(transferRows);
     setEvents(eventRows);
     setLedger(ledgerRows);
+    setPayoutQueue(payoutRows.filter((row) => ['pending', 'held', 'processing', 'failed'].includes(row.status)));
     setLoading(false);
   };
 
@@ -187,6 +191,7 @@ export default function AdminPayments() {
     let paidCount = 0;
     let refundedAmount = 0;
     let disputedCount = 0;
+    const failedPayoutCount = payoutQueue.filter((row) => row.status === 'failed').length;
     for (const payment of payments) {
       const state = payment.state || payment.status;
       if (['paid', 'partially_refunded', 'refunded'].includes(state) || payment.status === 'paid') {
@@ -196,8 +201,8 @@ export default function AdminPayments() {
       refundedAmount += Number(payment.refunded_amount) || 0;
       if (state === 'disputed') disputedCount += 1;
     }
-    return { paidAmount, paidCount, refundedAmount, disputedCount };
-  }, [payments]);
+    return { paidAmount, paidCount, refundedAmount, disputedCount, failedPayoutCount };
+  }, [payments, payoutQueue]);
 
   return (
     <div className="py-12">
@@ -209,7 +214,7 @@ export default function AdminPayments() {
               Back to admin
             </Link>
             <h1 className="text-4xl font-bold tracking-[-0.01em] text-foreground">Payments</h1>
-            <p className="text-muted-foreground">Stripe checkout, transfer, refund, ledger, and webhook reconciliation.</p>
+            <p className="text-muted-foreground">Stripe checkout, delayed payout, refund, ledger, and webhook reconciliation.</p>
           </div>
           <Button variant="outline" onClick={load} disabled={loading} className="font-semibold">
             <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -222,7 +227,7 @@ export default function AdminPayments() {
             { label: 'Paid volume', value: formatCents(stats.paidAmount), sub: `${stats.paidCount} payments` },
             { label: 'Refunded', value: formatCents(stats.refundedAmount), sub: 'accumulated refund amounts' },
             { label: 'Disputed', value: stats.disputedCount, sub: 'payments in dispute' },
-            { label: 'Webhook events', value: events.length, sub: 'stored for idempotency' },
+            { label: 'Payout queue', value: payoutQueue.length, sub: `${stats.failedPayoutCount} failed release${stats.failedPayoutCount === 1 ? '' : 's'}` },
           ].map(item => (
             <div key={item.label} className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
@@ -315,6 +320,33 @@ export default function AdminPayments() {
           </div>
 
           <div className="space-y-6">
+            <div className="rounded-lg border border-border bg-card">
+              <div className="border-b border-border p-4">
+                <h2 className="flex items-center gap-2 text-lg font-bold tracking-[-0.01em] text-foreground">
+                  <AlertTriangle className="h-4 w-4 text-accent" aria-hidden="true" /> Payout release queue
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">Delayed payout releases that are pending, processing, held, or failed.</p>
+              </div>
+              <div className="divide-y divide-border">
+                {payoutQueue.slice(0, 12).map((item) => (
+                  <div key={item.id} className="p-4 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display text-foreground">{formatCents(item.amount_cents || 0)}</span>
+                      <Badge className={`${statusTone(item.status)} border`}>{STATUS_LABELS[item.status] || item.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {item.owner_type || 'owner'} {shortId(item.owner_id)}
+                      {item.session_id ? ` · session ${shortId(item.session_id)}` : ''}
+                    </p>
+                    {item.metadata && (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{String(item.metadata).slice(0, 180)}</p>
+                    )}
+                  </div>
+                ))}
+                {payoutQueue.length === 0 && <div className="p-4 text-sm text-muted-foreground">No pending or failed payout releases.</div>}
+              </div>
+            </div>
+
             <div className="rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4">
                 <h2 className="text-lg font-bold tracking-[-0.01em] text-foreground">Transfers</h2>

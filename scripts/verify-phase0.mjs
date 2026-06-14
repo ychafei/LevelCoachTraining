@@ -81,6 +81,9 @@ const expectedCollections = [
   // production cutover additions
   'coach_link_requests',
   'payment_ledger_entries',
+  'credit_ledger_entries',
+  'credit_reservations',
+  'payout_obligations',
   'payout_rules',
   'notifications',
   'coach_reviews',

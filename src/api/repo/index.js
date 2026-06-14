@@ -23,5 +23,7 @@ export { coachReviewRepo } from './coachReviewRepo';
 export { trainingRepo } from './trainingRepo';
 export { payoutRuleRepo } from './payoutRuleRepo';
 export { ledgerRepo } from './ledgerRepo';
+export { creditLedgerRepo } from './creditLedgerRepo';
+export { payoutObligationRepo } from './payoutObligationRepo';
 export { safetyReportRepo } from './safetyReportRepo';
 export { reportsRepo } from './reportsRepo';

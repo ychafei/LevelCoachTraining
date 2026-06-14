@@ -61,6 +61,7 @@ export const coachRepo = {
 
   // Marketplace publication (server-gated: legal packet + Connect + verified
   // email + complete profile + at least one active package).
+  publishChecklist: () => callFn('coachSelf', { action: 'publishChecklist' }),
   publish: () => callFn('coachSelf', { action: 'publish' }),
   unpublish: () => callFn('coachSelf', { action: 'unpublish' }),
 

@@ -407,9 +407,9 @@ async function provisionSessions() {
   await attrString('sessions', 'date', 10, true);                         // YYYY-MM-DD
   await attrString('sessions', 'start_time', 5, true);                    // HH:MM
   await attrInt('sessions',    'duration_minutes', true);
-  await attrEnum('sessions',   'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'], false, 'pending');
-  // Existing deployments created the enum before 'no_show' existed — widen it.
-  await widenEnum('sessions', 'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'], false, 'pending');
+  await attrEnum('sessions',   'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'late_cancelled_chargeable'], false, 'pending');
+  // Existing deployments created the enum before delayed-payout outcomes existed — widen it.
+  await widenEnum('sessions', 'status', ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'late_cancelled_chargeable'], false, 'pending');
   await attrFloat('sessions',  'total_price');
   await attrEnum('sessions',   'payment_status', ['unpaid', 'paid'], false, 'unpaid');
   await attrEnum('sessions',   'payment_method', ['electronic', 'credits']);
@@ -425,6 +425,26 @@ async function provisionSessions() {
   await attrString('sessions', 'booked_by_profile_id', 64);               // who actually booked (guardian/self)
   await attrString('sessions', 'timezone', 64);                           // copied from coach at booking
   await attrDatetime('sessions', 'starts_at_utc');                        // derived, for sorting/conflicts
+  // Prepaid value-credit cutover additions. These fields are immutable
+  // server-authored snapshots for payout/reconciliation; legacy fields remain
+  // during migration but no longer drive payout math.
+  await attrString('sessions', 'credit_reservation_id', 64);
+  await attrString('sessions', 'offering_id', 64);
+  await attrInt('sessions', 'reserved_amount_cents');
+  await attrInt('sessions', 'price_snapshot_cents');
+  await attrString('sessions', 'payout_plan_snapshot', 20000);
+  await attrString('sessions', 'original_credit_coach_id', 64);
+  await attrString('sessions', 'currency', 12, false, 'usd');
+  await attrInt('sessions', 'platform_share_bps', false, 0, 10000);
+  await attrInt('sessions', 'coach_share_bps', false, 0, 10000);
+  await attrInt('sessions', 'org_share_bps', false, 0, 10000);
+  await attrString('sessions', 'organization_id', 64);
+  await attrString('sessions', 'payout_rule_id', 64);
+  await attrString('sessions', 'coach_connected_account_id_snapshot', 128);
+  await attrString('sessions', 'org_connected_account_id_snapshot', 128);
+  await attrString('sessions', 'payment_state', 40);
+  await attrString('sessions', 'payout_state', 40);
+  await attrDatetime('sessions', 'outcome_finalized_at');
 
   await waitAttributesReady('sessions');
   await ensureIndex('sessions', 'idx_coach_id',      'key', ['coach_id']);
@@ -434,6 +454,9 @@ async function provisionSessions() {
   await ensureIndex('sessions', 'idx_credit_id',     'key', ['credit_id']);
   await ensureIndex('sessions', 'idx_athlete_id',    'key', ['athlete_id']);
   await ensureIndex('sessions', 'idx_starts_at_utc', 'key', ['starts_at_utc']);
+  await ensureIndex('sessions', 'idx_credit_reservation', 'key', ['credit_reservation_id']);
+  await ensureIndex('sessions', 'idx_session_payment_state', 'key', ['payment_state']);
+  await ensureIndex('sessions', 'idx_session_payout_state', 'key', ['payout_state']);
 }
 
 async function provisionSessionCredits() {
@@ -452,14 +475,39 @@ async function provisionSessionCredits() {
   // Production cutover additions — money is always integer cents
   await attrInt('session_credits',    'amount_cents');
   await attrInt('session_credits',    'per_session_base_price_cents');
-  await attrString('session_credits', 'coach_id', 64);
+  await attrString('session_credits', 'coach_id', 64);                    // legacy attribution only after cutover
   await attrString('session_credits', 'client_profile_id', 64);
+  // Value-credit additions. These are the new authoritative balance fields.
+  await attrString('session_credits', 'owner_profile_id', 64);
+  await attrString('session_credits', 'owner_account_id', 64);
+  await attrString('session_credits', 'athlete_id', 64);
+  await attrString('session_credits', 'currency', 12, false, 'usd');
+  await attrInt('session_credits', 'original_amount_cents');
+  await attrInt('session_credits', 'remaining_amount_cents');
+  await attrInt('session_credits', 'available_amount_cents');
+  await attrInt('session_credits', 'reserved_amount_cents', false, null, null, 0);
+  await attrInt('session_credits', 'spent_amount_cents', false, null, null, 0);
+  await attrInt('session_credits', 'refunded_amount_cents');
+  await attrInt('session_credits', 'earned_amount_cents');
+  await attrString('session_credits', 'original_coach_id', 64);
+  await attrString('session_credits', 'original_organization_id', 64);
+  await attrString('session_credits', 'originating_coach_id', 64);
+  await attrString('session_credits', 'originating_organization_id', 64);
+  await attrString('session_credits', 'source_payment_record_id', 64);
+  await attrBool('session_credits', 'transferable', false, true);
+  await attrEnum('session_credits', 'status', ['active', 'frozen', 'exhausted', 'refunded', 'expired'], false, 'active');
+  await widenEnum('session_credits', 'status', ['active', 'frozen', 'exhausted', 'refunded', 'expired'], false, 'active');
+  await attrDatetime('session_credits', 'expires_at');
+  await attrString('session_credits', 'migration_source_credit_id', 64);
 
   await waitAttributesReady('session_credits');
   await ensureIndex('session_credits', 'idx_client_email',   'key', ['client_email']);
   await ensureIndex('session_credits', 'idx_package_id',     'key', ['package_id']);
   await ensureIndex('session_credits', 'idx_coach_id',       'key', ['coach_id']);
   await ensureIndex('session_credits', 'idx_client_profile', 'key', ['client_profile_id']);
+  await ensureIndex('session_credits', 'idx_credit_owner',   'key', ['owner_profile_id']);
+  await ensureIndex('session_credits', 'idx_credit_athlete', 'key', ['athlete_id']);
+  await ensureIndex('session_credits', 'idx_credit_status',  'key', ['status']);
 }
 
 async function provisionConversations() {
@@ -999,6 +1047,10 @@ const PRODUCTION_COLLECTIONS = [
     attrs: [
       { type: 'string', key: 'booking_id', size: 64 },
       { type: 'string', key: 'credit_id', size: 64 },
+      { type: 'string', key: 'credit_lot_id', size: 64 },
+      { type: 'string', key: 'athlete_id', size: 64 },
+      { type: 'string', key: 'purpose', size: 60 },
+      { type: 'string', key: 'merchant_of_record', size: 80 },
       { type: 'string', key: 'checkout_session_id', size: 160 },
       { type: 'string', key: 'payment_intent_id', size: 160 },
       { type: 'string', key: 'charge_id', size: 160 },
@@ -1012,6 +1064,8 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'string', key: 'state', size: 40 },
       { type: 'string', key: 'refund_id', size: 160 },
       { type: 'int', key: 'refunded_amount' },
+      { type: 'int', key: 'available_for_refund_cents' },
+      { type: 'int', key: 'disputed_amount_cents' },
       { type: 'string', key: 'failure_reason', size: 1000 },
       { type: 'datetime', key: 'webhook_processed_at' },
       { type: 'string', key: 'metadata', size: 20000 },
@@ -1022,6 +1076,8 @@ const PRODUCTION_COLLECTIONS = [
       { key: 'idx_pay_charge', type: 'key', attrs: ['charge_id'] },
       { key: 'idx_pay_booking', type: 'key', attrs: ['booking_id'] },
       { key: 'idx_pay_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_pay_credit_lot', type: 'key', attrs: ['credit_lot_id'] },
+      { key: 'idx_pay_purpose', type: 'key', attrs: ['purpose'] },
     ],
   },
   {
@@ -1031,8 +1087,17 @@ const PRODUCTION_COLLECTIONS = [
     docSec: true,
     attrs: [
       { type: 'string', key: 'payment_record_id', size: 64, required: true },
+      { type: 'string', key: 'session_id', size: 64 },
+      { type: 'string', key: 'credit_reservation_id', size: 64 },
+      { type: 'string', key: 'payout_obligation_id', size: 64 },
+      { type: 'enum', key: 'owner_type', elements: ['coach', 'org'] },
+      { type: 'string', key: 'owner_id', size: 64 },
       { type: 'string', key: 'destination_account_id', size: 128 },
       { type: 'int', key: 'amount' },
+      { type: 'int', key: 'amount_cents' },
+      { type: 'string', key: 'currency', size: 12, def: 'usd' },
+      { type: 'string', key: 'transfer_group', size: 160 },
+      { type: 'string', key: 'idempotency_key', size: 200 },
       { type: 'enum', key: 'status', elements: ['pending', 'paid', 'failed', 'reversed'], def: 'pending' },
       { type: 'string', key: 'transfer_id', size: 160 },
       { type: 'string', key: 'reversal_id', size: 160 },
@@ -1040,6 +1105,11 @@ const PRODUCTION_COLLECTIONS = [
     indexes: [
       { key: 'idx_transfer_payment', type: 'key', attrs: ['payment_record_id'] },
       { key: 'idx_transfer_dest', type: 'key', attrs: ['destination_account_id'] },
+      { key: 'idx_transfer_session', type: 'key', attrs: ['session_id'] },
+      { key: 'idx_transfer_obligation', type: 'key', attrs: ['payout_obligation_id'] },
+      // Legacy transfer rows lack idempotency_key; use a queryable key here.
+      // New delayed-payout code still writes deterministic keys and checks them.
+      { key: 'idx_transfer_idempotency', type: 'key', attrs: ['idempotency_key'] },
     ],
   },
   {
@@ -1114,7 +1184,14 @@ const NEW_COLLECTIONS = [
     docSec: true,
     attrs: [
       { type: 'string', key: 'payment_record_id', size: 64, required: true },
-      { type: 'enum', key: 'type', elements: ['charge', 'platform_fee', 'coach_payout', 'org_payout', 'refund', 'transfer_reversal', 'dispute'], required: true },
+      { type: 'enum', key: 'type', elements: [
+        'charge', 'platform_fee', 'coach_payout', 'org_payout', 'refund', 'transfer_reversal', 'dispute',
+        'checkout_charge', 'credit_liability_created', 'credit_refunded', 'credit_dispute_hold',
+        'credit_dispute_release', 'credit_dispute_loss', 'session_revenue_recognized',
+        'platform_fee_earned', 'coach_payout_earned', 'org_payout_earned',
+        'stripe_transfer_created', 'stripe_transfer_failed', 'stripe_transfer_reversed',
+        'legacy_advance_recovered', 'admin_adjustment',
+      ], required: true },
       { type: 'int', key: 'amount_cents', required: true },
       { type: 'string', key: 'currency', size: 12, def: 'usd' },
       { type: 'enum', key: 'owner_type', elements: ['platform', 'coach', 'org', 'client'], required: true },
@@ -1122,6 +1199,10 @@ const NEW_COLLECTIONS = [
       { type: 'string', key: 'stripe_ref', size: 160 },
       { type: 'string', key: 'coach_id', size: 64 },
       { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'string', key: 'session_id', size: 64 },
+      { type: 'string', key: 'credit_lot_id', size: 64 },
+      { type: 'string', key: 'credit_reservation_id', size: 64 },
+      { type: 'string', key: 'idempotency_key', size: 200 },
       { type: 'string', key: 'metadata', size: 20000 },
     ],
     indexes: [
@@ -1129,6 +1210,115 @@ const NEW_COLLECTIONS = [
       { key: 'idx_ledger_owner', type: 'key', attrs: ['owner_type', 'owner_id'] },
       { key: 'idx_ledger_type', type: 'key', attrs: ['type'] },
       { key: 'idx_ledger_ref', type: 'key', attrs: ['stripe_ref'] },
+      { key: 'idx_ledger_session', type: 'key', attrs: ['session_id'] },
+      { key: 'idx_ledger_credit_lot', type: 'key', attrs: ['credit_lot_id'] },
+      // Existing ledger rows predate idempotency_key; new writes enforce
+      // idempotency in function code while this remains queryable for repair.
+      { key: 'idx_ledger_idempotency', type: 'key', attrs: ['idempotency_key'] },
+    ],
+  },
+  {
+    id: 'credit_ledger_entries',
+    name: 'Credit Ledger Entries',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'credit_id', size: 64, required: true },
+      { type: 'string', key: 'payment_record_id', size: 64 },
+      { type: 'string', key: 'session_id', size: 64 },
+      { type: 'string', key: 'actor_profile_id', size: 64 },
+      { type: 'string', key: 'client_profile_id', size: 64 },
+      { type: 'string', key: 'athlete_id', size: 64 },
+      { type: 'enum', key: 'type', elements: [
+        'purchase', 'reserve', 'restore', 'release', 'transfer', 'top_up',
+        'refund', 'dispute_freeze', 'admin_adjustment',
+        // Backward-compatible aliases from the first delayed-payout cutover.
+        'checkout_grant', 'top_up_grant', 'reservation_hold', 'reservation_release',
+        'reservation_capture', 'refund_debit', 'dispute_release',
+        'dispute_loss', 'admin_grant', 'admin_debit', 'migration_import',
+        'legacy_advance_recovery',
+      ], required: true },
+      { type: 'int', key: 'amount_cents', required: true },
+      { type: 'string', key: 'currency', size: 12, def: 'usd' },
+      { type: 'string', key: 'from_coach_id', size: 64 },
+      { type: 'string', key: 'to_coach_id', size: 64 },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'string', key: 'metadata', size: 20000 },
+      // Compatibility fields retained for existing delayed-payout writers and
+      // previously provisioned collections.
+      { type: 'string', key: 'credit_lot_id', size: 64 },
+      { type: 'string', key: 'owner_profile_id', size: 64 },
+      { type: 'string', key: 'reservation_id', size: 64 },
+      { type: 'int', key: 'available_delta_cents' },
+      { type: 'int', key: 'reserved_delta_cents' },
+      { type: 'string', key: 'idempotency_key', size: 200 },
+    ],
+    indexes: [
+      { key: 'idx_credit_ledger_credit', type: 'key', attrs: ['credit_id'] },
+      { key: 'idx_credit_ledger_client', type: 'key', attrs: ['client_profile_id'] },
+      { key: 'idx_credit_ledger_athlete', type: 'key', attrs: ['athlete_id'] },
+      { key: 'idx_credit_ledger_session', type: 'key', attrs: ['session_id'] },
+      { key: 'idx_credit_ledger_type', type: 'key', attrs: ['type'] },
+      { key: 'idx_credit_ledger_lot', type: 'key', attrs: ['credit_lot_id'] },
+      { key: 'idx_credit_ledger_owner', type: 'key', attrs: ['owner_profile_id'] },
+      { key: 'idx_credit_ledger_idempotency', type: 'key', attrs: ['idempotency_key'] },
+    ],
+  },
+  {
+    id: 'credit_reservations',
+    name: 'Credit Reservations',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'credit_lot_id', size: 64, required: true },
+      { type: 'string', key: 'session_id', size: 64 },
+      { type: 'string', key: 'owner_profile_id', size: 64 },
+      { type: 'string', key: 'athlete_id', size: 64 },
+      { type: 'string', key: 'coach_id', size: 64 },
+      { type: 'string', key: 'organization_id', size: 64 },
+      { type: 'string', key: 'offering_id', size: 64 },
+      { type: 'int', key: 'reserved_amount_cents', required: true },
+      { type: 'int', key: 'captured_amount_cents' },
+      { type: 'int', key: 'released_amount_cents' },
+      { type: 'string', key: 'currency', size: 12, def: 'usd' },
+      { type: 'enum', key: 'status', elements: ['reserved', 'captured', 'released', 'partially_refunded', 'refunded', 'disputed', 'voided'], def: 'reserved' },
+      { type: 'string', key: 'idempotency_key', size: 200, required: true },
+      { type: 'string', key: 'metadata', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_reservation_credit', type: 'key', attrs: ['credit_lot_id'] },
+      { key: 'idx_reservation_session', type: 'key', attrs: ['session_id'] },
+      { key: 'idx_reservation_owner', type: 'key', attrs: ['owner_profile_id'] },
+      { key: 'idx_reservation_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_reservation_idempotency', type: 'unique', attrs: ['idempotency_key'] },
+    ],
+  },
+  {
+    id: 'payout_obligations',
+    name: 'Payout Obligations',
+    perms: ADMIN_READ,
+    docSec: true,
+    attrs: [
+      { type: 'string', key: 'session_id', size: 64, required: true },
+      { type: 'string', key: 'credit_reservation_id', size: 64 },
+      { type: 'enum', key: 'owner_type', elements: ['coach', 'org'], required: true },
+      { type: 'string', key: 'owner_id', size: 64, required: true },
+      { type: 'string', key: 'stripe_connected_account_id', size: 128 },
+      { type: 'int', key: 'gross_session_amount_cents' },
+      { type: 'int', key: 'share_bps', min: 0, max: 10000 },
+      { type: 'int', key: 'amount_cents', required: true },
+      { type: 'string', key: 'currency', size: 12, def: 'usd' },
+      { type: 'enum', key: 'status', elements: ['pending', 'held', 'processing', 'paid', 'failed', 'reversed', 'offset', 'voided'], def: 'pending' },
+      { type: 'string', key: 'stripe_transfer_record_id', size: 64 },
+      { type: 'string', key: 'transfer_id', size: 160 },
+      { type: 'string', key: 'idempotency_key', size: 200, required: true },
+      { type: 'string', key: 'metadata', size: 20000 },
+    ],
+    indexes: [
+      { key: 'idx_payout_session', type: 'key', attrs: ['session_id'] },
+      { key: 'idx_payout_owner', type: 'key', attrs: ['owner_type', 'owner_id'] },
+      { key: 'idx_payout_status', type: 'key', attrs: ['status'] },
+      { key: 'idx_payout_idempotency', type: 'unique', attrs: ['idempotency_key'] },
     ],
   },
   {
@@ -1379,6 +1569,25 @@ async function provisionFromDefs(collections) {
     // Pre-cutover deployments carry the old payout_model enum; warn if so.
     if (coll.id === 'organizations') {
       await warnIfEnumDiffers('organizations', 'payout_model', ['organization', 'coach', 'split']);
+    }
+    if (coll.id === 'payment_ledger_entries') {
+      await widenEnum('payment_ledger_entries', 'type', [
+        'charge', 'platform_fee', 'coach_payout', 'org_payout', 'refund', 'transfer_reversal', 'dispute',
+        'checkout_charge', 'credit_liability_created', 'credit_refunded', 'credit_dispute_hold',
+        'credit_dispute_release', 'credit_dispute_loss', 'session_revenue_recognized',
+        'platform_fee_earned', 'coach_payout_earned', 'org_payout_earned',
+        'stripe_transfer_created', 'stripe_transfer_failed', 'stripe_transfer_reversed',
+        'legacy_advance_recovered', 'admin_adjustment',
+      ], true);
+    }
+    if (coll.id === 'credit_ledger_entries') {
+      await widenEnum('credit_ledger_entries', 'type', [
+        'purchase', 'reserve', 'restore', 'release', 'transfer', 'top_up',
+        'refund', 'dispute_freeze', 'admin_adjustment',
+        'checkout_grant', 'top_up_grant', 'reservation_hold', 'reservation_release',
+        'reservation_capture', 'refund_debit', 'dispute_release', 'dispute_loss',
+        'admin_grant', 'admin_debit', 'migration_import', 'legacy_advance_recovery',
+      ], true);
     }
     await waitAttributesReady(coll.id);
     for (const index of coll.indexes || []) {

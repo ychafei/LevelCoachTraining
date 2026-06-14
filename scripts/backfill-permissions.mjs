@@ -11,8 +11,11 @@
 //   conversations           → read: participants (participant_emails → profiles)
 //   messages                → read: participants of the parent conversation
 //   legal_agreements        → read: signer account
-//   stripe_payment_records  → read: payer (metadata client_account_id) + payee owner
+//   stripe_payment_records  → read: payer (metadata client_account_id)
 //   stripe_transfer_records → read: payee owner (destination connected account)
+//   credit_ledger_entries   → read: owner account
+//   credit_reservations     → read: owner account
+//   payout_obligations      → read: payee owner
 //
 // Idempotent: documents already carrying every desired grant are skipped, and
 // new grants are merged into the existing $permissions (nothing is removed).
@@ -210,17 +213,35 @@ const COLLECTION_GRANTS = {
     doc.signer_account_id || (await accountForProfileId(doc.signer_profile_id)),
   ]),
 
-  // read: payer (checkout metadata) + payee owner (transfer destination)
+  // read: payer (checkout metadata)
   stripe_payment_records: async (doc) => {
     const metadata = parseMetadata(doc.metadata);
     const payer = metadata.client_account_id || (await accountForEmail(metadata.client_email));
-    const payees = await ownerAccountsForStripeAccount(doc.transfer_destination);
-    return readGrants([payer, ...payees]);
+    return readGrants([payer]);
   },
 
   // read: payee owner
   stripe_transfer_records: async (doc) =>
     readGrants(await ownerAccountsForStripeAccount(doc.destination_account_id)),
+
+  // read: credit owner
+  credit_ledger_entries: async (doc) => readGrants([
+    (await accountForProfileId(doc.client_profile_id)) || (await accountForProfileId(doc.owner_profile_id)),
+  ]),
+
+  // read: credit owner
+  credit_reservations: async (doc) => readGrants([
+    await accountForProfileId(doc.owner_profile_id),
+  ]),
+
+  // read: payee owner
+  payout_obligations: async (doc) => {
+    if (doc.owner_type === 'coach') {
+      const coach = await databases.getDocument(DB_ID, 'coaches', doc.owner_id).catch(() => null);
+      return readGrants([coach?.user_id]);
+    }
+    return readGrants(await ownerAccountsForStripeAccount(doc.stripe_connected_account_id));
+  },
 };
 
 // --- Backfill loop --------------------------------------------------------------

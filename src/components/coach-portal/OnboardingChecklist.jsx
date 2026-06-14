@@ -12,14 +12,34 @@ import { toast } from 'sonner';
 // source of truth and its gating errors are surfaced item by item.
 
 const MISSING_LABELS = {
+  linked_account: 'Link a user account',
   legal_packet: 'Sign your coach legal packet',
-  stripe_connect: 'Finish Stripe Connect onboarding',
   email_verification: 'Verify your contact email',
-  bio: 'Your bio needs at least 80 characters',
-  photo: 'Upload a profile photo',
+  stripe_connect: 'Finish Stripe Connect onboarding',
+  active: 'Ask an admin to activate this coach profile',
+  name: 'Add first and last name',
+  bio_or_quote: 'Add a bio or headline',
   sport: 'Add at least one sport',
-  availability: 'Set weekly availability',
+  sport_profile: 'Complete sport profile details',
+  service_location: 'Complete your service location',
+  timezone: 'Choose your timezone',
+  availability: 'Set availability',
   pricing: 'Create at least one active package',
+  safety_policy: 'Complete safety/background/insurance requirements',
+};
+
+const CHECKLIST_LINKS = {
+  name: '/coach/profile',
+  bio_or_quote: '/coach/profile',
+  sport: '/coach/profile',
+  sport_profile: '/coach/profile',
+  service_location: '/coach/profile',
+  timezone: '/coach/profile',
+  availability: '/coach/settings?section=availability',
+  stripe_connect: '/coach/earnings',
+  email_verification: '/coach/profile',
+  pricing: '/coach/profile',
+  legal_packet: '/coach/settings',
 };
 
 function weeklyAvailabilitySet(coach) {
@@ -28,33 +48,103 @@ function weeklyAvailabilitySet(coach) {
     && Object.values(availability).some((d) => d?.enabled);
 }
 
+function hasText(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : value !== undefined && value !== null && value !== '';
+}
+
+function serviceLocationSet(coach) {
+  const serviceType = String(coach?.service_type || '').trim();
+  if (!['facility', 'travels', 'hybrid', 'online'].includes(serviceType)) return false;
+  if (!hasText(coach?.service_city) || !hasText(coach?.service_state) || !hasText(coach?.service_zip)) return false;
+  if ((serviceType === 'facility' || serviceType === 'hybrid') && !hasText(coach?.service_venue)) return false;
+  if (serviceType === 'travels' || serviceType === 'hybrid') {
+    const radius = Number(coach?.service_radius_miles);
+    if (!Number.isFinite(radius) || radius <= 0) return false;
+  }
+  return true;
+}
+
+function timezoneSet(coach) {
+  try {
+    if (!coach?.timezone) return false;
+    new Intl.DateTimeFormat('en-US', { timeZone: coach.timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function checklistFingerprint(coach) {
+  return [
+    coach?.id,
+    coach?.published,
+    coach?.is_active,
+    coach?.first_name,
+    coach?.last_name,
+    coach?.bio,
+    coach?.quote,
+    Array.isArray(coach?.sports) ? coach.sports.join('|') : '',
+    coach?.service_city,
+    coach?.service_state,
+    coach?.service_zip,
+    coach?.service_radius_miles,
+    coach?.service_type,
+    coach?.service_venue,
+    coach?.timezone,
+    coach?.availability ? JSON.stringify(coach.availability) : '',
+    coach?.email_verified_at,
+  ].join('::');
+}
+
+function normalizeServerItem(item) {
+  const key = item?.key || '';
+  return {
+    key,
+    label: item?.label || MISSING_LABELS[key] || key,
+    blurb: item?.description || item?.blurb || '',
+    href: CHECKLIST_LINKS[key] || item?.href || null,
+    done: item?.done === true,
+    blocking: item?.blocking !== false && item?.done !== true,
+    details: Array.isArray(item?.details) ? item.details : [],
+  };
+}
+
 // extras: { connectReady?: boolean, hasSportProfiles?: boolean,
 //           legalPacketSigned?: boolean|null, hasActivePackage?: boolean|null }
-//           — null/undefined = unknown, never guessed.
+// `hasSportProfiles` means at least one profile has specialties, levels, and
+// session types. null/undefined = unknown, never guessed.
 export function computeChecklist(user, coach, extras = {}) {
   const items = [
     {
-      key: 'linked',
+      key: 'linked_account',
       label: 'Coach profile linked to your account',
       blurb: 'An admin connects your user account to a Coach record. Clients cannot book you until this is done.',
       href: null,
-      done: !!coach?.id,
-      blocking: !coach?.id,
+      done: !!coach?.id && !!coach?.user_id,
+      blocking: !(!!coach?.id && !!coach?.user_id),
     },
     {
-      key: 'bio',
-      label: 'Write your bio (80+ characters)',
-      blurb: 'Clients read this when choosing a coach. Publishing requires at least 80 characters.',
+      key: 'active',
+      label: 'Coach profile is active',
+      blurb: 'An admin must keep your coach profile active before it can be published.',
+      href: null,
+      done: coach?.is_active === true,
+      blocking: coach?.is_active !== true,
+    },
+    {
+      key: 'name',
+      label: 'Add your first and last name',
+      blurb: 'Clients need to see who they are booking with.',
       href: '/coach/profile',
-      done: String(coach?.bio || '').trim().length >= 80,
+      done: hasText(coach?.first_name) && hasText(coach?.last_name),
       blocking: false,
     },
     {
-      key: 'photo',
-      label: 'Upload a profile photo',
-      blurb: 'Required to publish — coaches with photos get picked more often.',
+      key: 'bio_or_quote',
+      label: 'Write a bio or headline',
+      blurb: 'Clients read this when choosing a coach.',
       href: '/coach/profile',
-      done: !!String(coach?.photo_url || '').trim(),
+      done: hasText(coach?.bio) || hasText(coach?.quote),
       blocking: false,
     },
     {
@@ -62,7 +152,31 @@ export function computeChecklist(user, coach, extras = {}) {
       label: 'Add at least one sport',
       blurb: 'Pick your sports and set per-sport specialties so athletes can find you.',
       href: '/coach/profile',
-      done: (Array.isArray(coach?.sports) && coach.sports.length > 0) || extras.hasSportProfiles === true,
+      done: Array.isArray(coach?.sports) && coach.sports.length > 0,
+      blocking: false,
+    },
+    {
+      key: 'sport_profile',
+      label: 'Complete sport profile details',
+      blurb: 'At least one sport needs specialties, levels, and session types.',
+      href: '/coach/profile',
+      done: extras.hasSportProfiles === true,
+      blocking: false,
+    },
+    {
+      key: 'service_location',
+      label: 'Complete service location',
+      blurb: 'Set your service type, city, state, ZIP, and required venue/radius details.',
+      href: '/coach/profile',
+      done: serviceLocationSet(coach),
+      blocking: false,
+    },
+    {
+      key: 'timezone',
+      label: 'Choose your timezone',
+      blurb: 'Availability and sessions use this timezone.',
+      href: '/coach/profile',
+      done: timezoneSet(coach),
       blocking: false,
     },
     {
@@ -129,6 +243,8 @@ export function computeChecklist(user, coach, extras = {}) {
 export default function OnboardingChecklist({ user, coach, extras = {}, compact = false, onPublished }) {
   const [publishing, setPublishing] = useState(false);
   const [serverMissing, setServerMissing] = useState([]);
+  const [serverChecklist, setServerChecklist] = useState(null);
+  const [loadingChecklist, setLoadingChecklist] = useState(false);
 
   // Active-package state mirrors the server's hasActivePackage publish gate.
   // Prefer a value supplied by the consumer; otherwise self-load it (tri-state:
@@ -153,7 +269,39 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
     ? extras
     : { ...extras, hasActivePackage: loadedHasActivePackage };
 
-  const { items, totalDone, total, hasBlocking, pct } = computeChecklist(user, coach, resolvedExtras);
+  const fingerprint = checklistFingerprint(coach);
+  useEffect(() => {
+    if (!coach?.id) {
+      setServerChecklist(null);
+      setServerMissing([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoadingChecklist(true);
+    coachRepo.publishChecklist()
+      .then((result) => {
+        if (cancelled) return;
+        setServerChecklist(result || null);
+        setServerMissing(Array.isArray(result?.missing) ? result.missing : []);
+      })
+      .catch(() => {
+        if (!cancelled) setServerChecklist(null);
+      })
+      .finally(() => { if (!cancelled) setLoadingChecklist(false); });
+    return () => { cancelled = true; };
+  }, [coach?.id, fingerprint]);
+
+  const fallback = computeChecklist(user, coach, resolvedExtras);
+  const items = Array.isArray(serverChecklist?.checklist)
+    ? serverChecklist.checklist.map(normalizeServerItem)
+    : fallback.items;
+  const totalDone = items.filter((i) => i.done).length;
+  const total = items.length || 1;
+  const hasBlocking = items.some((i) => i.blocking);
+  const pct = Math.round((totalDone / total) * 100);
+  const missingKeys = serverMissing.length
+    ? serverMissing
+    : (Array.isArray(serverChecklist?.missing) ? serverChecklist.missing : []);
 
   const published = coach?.published === true;
   if (published && totalDone === total) return null; // fully set up + live → hide
@@ -164,12 +312,17 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
     setPublishing(true);
     setServerMissing([]);
     try {
-      await coachRepo.publish();
+      const result = await coachRepo.publish();
+      if (result?.checklist) {
+        setServerChecklist(result);
+        setServerMissing(Array.isArray(result.missing) ? result.missing : []);
+      }
       toast.success('Your profile is live on the marketplace.');
       onPublished?.();
     } catch (err) {
       const missing = Array.isArray(err?.data?.missing) ? err.data.missing : [];
       setServerMissing(missing);
+      if (Array.isArray(err?.data?.checklist)) setServerChecklist(err.data);
       toast.error(err?.message || 'Could not publish your profile.');
     } finally {
       setPublishing(false);
@@ -208,6 +361,7 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
           <p className="text-xs text-muted-foreground">
             {totalDone} of {total} complete
             {published && <span className="ml-2 text-green-600">· Live on the marketplace</span>}
+            {loadingChecklist && !serverChecklist && <span className="ml-2">· Checking requirements</span>}
           </p>
         </div>
         <span className="font-display text-xl font-bold text-accent">{pct}%</span>
@@ -222,7 +376,7 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
 
       <ul className="space-y-2">
         {items.map((item) => {
-          const flaggedByServer = serverMissing.includes(item.key);
+          const flaggedByServer = missingKeys.includes(item.key);
           const Icon = item.done && !flaggedByServer
             ? CheckCircle2
             : item.blocking || flaggedByServer
@@ -242,7 +396,12 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
                   {item.label}
                 </p>
                 {(!item.done || flaggedByServer) && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.blurb}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {item.blurb}
+                    {item.details?.length > 0 && (
+                      <span className="block mt-0.5">Missing: {item.details.join(', ')}</span>
+                    )}
+                  </p>
                 )}
               </div>
             </div>
@@ -260,7 +419,7 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
             </li>
           );
         })}
-        {serverMissing
+        {missingKeys
           .filter((key) => !items.some((i) => i.key === key))
           .map((key) => (
             <li key={key} className="px-2 -mx-2 rounded-md">
@@ -279,7 +438,7 @@ export default function OnboardingChecklist({ user, coach, extras = {}, compact 
           </p>
           <Button
             onClick={publish}
-            disabled={publishing}
+            disabled={publishing || loadingChecklist}
             className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
           >
             <Rocket className="w-4 h-4 mr-2" aria-hidden="true" />

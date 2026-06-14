@@ -79,7 +79,7 @@ const FAQ = [
   },
   {
     q: 'How and when do I get paid?',
-    a: 'Through Stripe Connect. When a client completes checkout, your earnings are transferred to your connected Stripe account from that charge. You can open your Stripe Express dashboard from the coach portal at any time.',
+    a: 'Through Stripe Connect. Client checkout creates prepaid LevelCoach credit first; your payout is transferred to your connected Stripe account after the session is completed, marked as a no-show, or treated as a chargeable late cancellation under policy. You can open your Stripe Express dashboard from the coach portal at any time.',
   },
   {
     q: 'Who decides what I charge?',

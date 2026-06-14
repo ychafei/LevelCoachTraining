@@ -53,6 +53,102 @@ async function writeAudit(databases, entry) {
   await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
 }
 
+async function firstDocument(databases, collectionId, queries) {
+  const rows = await databases.listDocuments(DB_ID, collectionId, [...queries, Query.limit(1)]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function createDocumentResilient(databases, collectionId, data, permissions = undefined) {
+  const payload = { ...data };
+  for (let i = 0; i < 30; i += 1) {
+    try {
+      return await databases.createDocument(DB_ID, collectionId, ID.unique(), payload, permissions);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`Could not create ${collectionId} document.`);
+}
+
+async function updateDocumentResilient(databases, collectionId, documentId, updates) {
+  const payload = { ...updates };
+  for (let i = 0; i < 30; i += 1) {
+    if (Object.keys(payload).length === 0) return null;
+    try {
+      return await databases.updateDocument(DB_ID, collectionId, documentId, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
+async function guardianAccountsForAthlete(databases, athleteId) {
+  if (!athleteId) return [];
+  const links = await databases.listDocuments(DB_ID, 'guardian_athletes', [
+    Query.equal('athlete_id', athleteId),
+    Query.limit(50),
+  ]).catch(() => ({ documents: [] }));
+  const accounts = [];
+  for (const link of links.documents) {
+    const guardian = await databases.getDocument(DB_ID, 'profiles', link.guardian_profile_id).catch(() => null);
+    if (guardian?.account_id) accounts.push(guardian.account_id);
+  }
+  return [...new Set(accounts)];
+}
+
+async function creditOwnerPermissions(databases, credit) {
+  const accounts = new Set();
+  if (credit.owner_account_id) accounts.add(credit.owner_account_id);
+  const profileIds = [credit.client_profile_id, credit.owner_profile_id].filter(Boolean);
+  for (const profileId of new Set(profileIds)) {
+    const profile = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
+    if (profile?.account_id) accounts.add(profile.account_id);
+  }
+  for (const accountId of await guardianAccountsForAthlete(databases, credit.athlete_id)) {
+    accounts.add(accountId);
+  }
+  return [...accounts].map((accountId) => Permission.read(Role.user(accountId)));
+}
+
+async function writeCreditLedger(databases, credit, entry, permissions) {
+  const idempotencyKey = entry.idempotency_key || '';
+  if (idempotencyKey) {
+    const existing = await firstDocument(databases, 'credit_ledger_entries', [
+      Query.equal('idempotency_key', idempotencyKey),
+    ]);
+    if (existing) return existing;
+  }
+  return createDocumentResilient(databases, 'credit_ledger_entries', {
+    credit_id: credit.$id,
+    credit_lot_id: credit.$id,
+    payment_record_id: credit.source_payment_record_id || '',
+    session_id: '',
+    actor_profile_id: entry.actor_profile_id || '',
+    client_profile_id: credit.client_profile_id || credit.owner_profile_id || '',
+    owner_profile_id: credit.owner_profile_id || credit.client_profile_id || '',
+    athlete_id: credit.athlete_id || '',
+    type: entry.type,
+    amount_cents: entry.amount_cents,
+    currency: credit.currency || 'usd',
+    from_coach_id: entry.from_coach_id || '',
+    to_coach_id: entry.to_coach_id || '',
+    organization_id: credit.original_organization_id || credit.organization_id || '',
+    metadata: JSON.stringify(entry.metadata || {}),
+    idempotency_key: idempotencyKey,
+  }, permissions);
+}
+
 async function sendEmail({ to, subject, html }, error) {
   try {
     if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
@@ -271,10 +367,12 @@ async function grantCredits(ctx, payload) {
   const packageName = str(payload.package_name, 1, 200);
   const totalCredits = int(payload.total_credits, 1, 1000);
   const durationMinutes = int(payload.session_duration_minutes, 15, 480);
+  const amountCents = int(payload.amount_cents ?? payload.credit_value_cents ?? 0, 0, 10000000);
   if (!profileId) return { status: 400, body: { error: 'client_profile_id is required.' } };
   if (packageName === undefined) return { status: 400, body: { error: 'package_name is required (max 200 chars).' } };
   if (totalCredits === undefined) return { status: 400, body: { error: 'total_credits must be an integer 1-1000.' } };
   if (durationMinutes === undefined) return { status: 400, body: { error: 'session_duration_minutes must be an integer 15-480.' } };
+  if (amountCents === undefined) return { status: 400, body: { error: 'amount_cents must be a non-negative integer.' } };
 
   const profile = await databases.getDocument(DB_ID, 'profiles', profileId).catch(() => null);
   if (!profile?.email) return { status: 404, body: { error: 'Client profile not found.' } };
@@ -296,7 +394,25 @@ async function grantCredits(ctx, payload) {
     used_credits: 0,
     session_duration_minutes: durationMinutes,
     payment_processor: 'admin_grant',
-    amount_cents: 0,
+    amount_cents: amountCents,
+    per_session_base_price_cents: totalCredits > 0 ? Math.floor(amountCents / totalCredits) : 0,
+    client_profile_id: profile.$id,
+    owner_profile_id: profile.$id,
+    owner_account_id: profile.account_id || '',
+    currency: 'usd',
+    original_amount_cents: amountCents,
+    remaining_amount_cents: amountCents,
+    available_amount_cents: amountCents,
+    reserved_amount_cents: 0,
+    spent_amount_cents: 0,
+    refunded_amount_cents: 0,
+    earned_amount_cents: 0,
+    original_coach_id: coachId,
+    original_organization_id: '',
+    originating_coach_id: coachId,
+    originating_organization_id: '',
+    transferable: true,
+    status: 'active',
     ...(coachId ? { coach_id: coachId } : {}),
   }, grants);
 
@@ -306,7 +422,7 @@ async function grantCredits(ctx, payload) {
     action: 'credits.grant',
     entity_type: 'SessionCredit',
     entity_id: credit.$id,
-    after: JSON.stringify({ total_credits: totalCredits, session_duration_minutes: durationMinutes, amount_cents: 0 }),
+    after: JSON.stringify({ total_credits: totalCredits, session_duration_minutes: durationMinutes, amount_cents: amountCents }),
     metadata: JSON.stringify({ client_profile_id: profileId, coach_id: coachId }),
   });
   return { status: 200, body: { ok: true, credit_id: credit.$id } };
@@ -324,6 +440,10 @@ async function revokeCredits(ctx, payload) {
 
   await databases.updateDocument(DB_ID, 'session_credits', creditId, {
     used_credits: credit.total_credits,
+    remaining_amount_cents: 0,
+    available_amount_cents: 0,
+    reserved_amount_cents: 0,
+    status: 'exhausted',
   });
   await writeAudit(databases, {
     actor_email: actor.email,
@@ -337,6 +457,179 @@ async function revokeCredits(ctx, payload) {
     metadata: JSON.stringify({ client_email: credit.client_email }),
   });
   return { status: 200, body: { ok: true } };
+}
+
+async function setCreditFrozenState(ctx, payload, frozen) {
+  const { databases, actor } = ctx;
+  const creditId = String(payload.credit_id || '');
+  const reason = str(payload.reason, frozen ? 3 : 0, 1000);
+  if (!creditId) return { status: 400, body: { error: 'credit_id is required.' } };
+  if (reason === undefined) return { status: 400, body: { error: 'reason is required (max 1000 chars).' } };
+
+  const credit = await databases.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return { status: 404, body: { error: 'Credit not found.' } };
+
+  const beforeStatus = credit.status || 'active';
+  const afterStatus = frozen ? 'frozen' : 'active';
+  const requestId = String(payload.request_id || `${frozen ? 'freeze' : 'unfreeze'}_${creditId}_${Date.now()}`);
+  const permissions = await creditOwnerPermissions(databases, credit);
+
+  await updateDocumentResilient(databases, 'session_credits', creditId, { status: afterStatus });
+  await writeCreditLedger(databases, credit, {
+    type: 'admin_adjustment',
+    amount_cents: 0,
+    actor_profile_id: actor.profile_id || '',
+    idempotency_key: `credit_${frozen ? 'freeze' : 'unfreeze'}_${creditId}_${requestId}`,
+    metadata: {
+      action: frozen ? 'freeze' : 'unfreeze',
+      reason: reason || '',
+      before_status: beforeStatus,
+      after_status: afterStatus,
+      request_id: requestId,
+    },
+  }, permissions).catch(() => {});
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: frozen ? 'credits.freeze' : 'credits.unfreeze',
+    entity_type: 'SessionCredit',
+    entity_id: creditId,
+    before: JSON.stringify({ status: beforeStatus }),
+    after: JSON.stringify({ status: afterStatus }),
+    reason: reason || undefined,
+    metadata: JSON.stringify({ client_profile_id: credit.client_profile_id || '', request_id: requestId }),
+  });
+  return { status: 200, body: { ok: true, status: afterStatus } };
+}
+
+async function adjustCredit(ctx, payload) {
+  const { databases, actor } = ctx;
+  const creditId = String(payload.credit_id || '');
+  const requestedDelta = int(payload.amount_cents, -10000000, 10000000);
+  const reason = str(payload.reason, 3, 1000);
+  if (!creditId) return { status: 400, body: { error: 'credit_id is required.' } };
+  if (requestedDelta === undefined || requestedDelta === 0) return { status: 400, body: { error: 'amount_cents must be a non-zero integer.' } };
+  if (reason === undefined) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+
+  const credit = await databases.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return { status: 404, body: { error: 'Credit not found.' } };
+  if (credit.status === 'refunded') {
+    return { status: 409, body: { error: 'Refunded credits cannot be adjusted from here.' } };
+  }
+
+  const requestId = String(payload.request_id || `adjust_${creditId}_${Date.now()}`);
+  const idempotencyKey = `credit_admin_adjustment_${creditId}_${requestId}`;
+  if (await firstDocument(databases, 'credit_ledger_entries', [Query.equal('idempotency_key', idempotencyKey)])) {
+    return { status: 200, body: { ok: true, idempotent: true } };
+  }
+
+  const beforeRemaining = Math.max(0, Number(credit.remaining_amount_cents ?? credit.available_amount_cents ?? 0) || 0);
+  const afterRemaining = Math.max(0, beforeRemaining + requestedDelta);
+  const actualDelta = afterRemaining - beforeRemaining;
+  if (actualDelta === 0) {
+    return { status: 409, body: { error: 'This adjustment would not change the available balance.' } };
+  }
+  const beforeStatus = credit.status || 'active';
+  const afterStatus = beforeStatus === 'frozen'
+    ? 'frozen'
+    : (afterRemaining > 0 || Number(credit.reserved_amount_cents) > 0 ? 'active' : 'exhausted');
+  const permissions = await creditOwnerPermissions(databases, credit);
+
+  await updateDocumentResilient(databases, 'session_credits', creditId, {
+    remaining_amount_cents: afterRemaining,
+    available_amount_cents: afterRemaining,
+    status: afterStatus,
+  });
+  await writeCreditLedger(databases, credit, {
+    type: 'admin_adjustment',
+    amount_cents: actualDelta,
+    actor_profile_id: actor.profile_id || '',
+    idempotency_key: idempotencyKey,
+    metadata: {
+      action: 'adjust',
+      reason,
+      requested_delta_cents: requestedDelta,
+      actual_delta_cents: actualDelta,
+      before_remaining_cents: beforeRemaining,
+      after_remaining_cents: afterRemaining,
+      before_status: beforeStatus,
+      after_status: afterStatus,
+      request_id: requestId,
+    },
+  }, permissions);
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'credits.adjust',
+    entity_type: 'SessionCredit',
+    entity_id: creditId,
+    before: JSON.stringify({ remaining_amount_cents: beforeRemaining, status: beforeStatus }),
+    after: JSON.stringify({ remaining_amount_cents: afterRemaining, status: afterStatus }),
+    reason,
+    metadata: JSON.stringify({ amount_cents: actualDelta, request_id: requestId }),
+  });
+  return { status: 200, body: { ok: true, amount_cents: actualDelta, remaining_amount_cents: afterRemaining } };
+}
+
+async function restoreCredit(ctx, payload) {
+  const { databases, actor } = ctx;
+  const creditId = String(payload.credit_id || '');
+  const amountCents = int(payload.amount_cents, 1, 10000000);
+  const reason = str(payload.reason, 3, 1000);
+  if (!creditId) return { status: 400, body: { error: 'credit_id is required.' } };
+  if (amountCents === undefined) return { status: 400, body: { error: 'amount_cents must be a positive integer.' } };
+  if (reason === undefined) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+
+  const credit = await databases.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return { status: 404, body: { error: 'Credit not found.' } };
+  if (credit.status === 'refunded') {
+    return { status: 409, body: { error: 'Refunded credits cannot be restored from here.' } };
+  }
+
+  const requestId = String(payload.request_id || `restore_${creditId}_${Date.now()}`);
+  const idempotencyKey = `credit_manual_restore_${creditId}_${requestId}`;
+  if (await firstDocument(databases, 'credit_ledger_entries', [Query.equal('idempotency_key', idempotencyKey)])) {
+    return { status: 200, body: { ok: true, idempotent: true } };
+  }
+
+  const beforeRemaining = Math.max(0, Number(credit.remaining_amount_cents ?? credit.available_amount_cents ?? 0) || 0);
+  const afterRemaining = beforeRemaining + amountCents;
+  const beforeStatus = credit.status || 'active';
+  const afterStatus = beforeStatus === 'frozen' ? 'frozen' : 'active';
+  const permissions = await creditOwnerPermissions(databases, credit);
+
+  await updateDocumentResilient(databases, 'session_credits', creditId, {
+    remaining_amount_cents: afterRemaining,
+    available_amount_cents: afterRemaining,
+    status: afterStatus,
+  });
+  await writeCreditLedger(databases, credit, {
+    type: 'restore',
+    amount_cents: amountCents,
+    actor_profile_id: actor.profile_id || '',
+    idempotency_key: idempotencyKey,
+    metadata: {
+      action: 'manual_restore',
+      reason,
+      before_remaining_cents: beforeRemaining,
+      after_remaining_cents: afterRemaining,
+      before_status: beforeStatus,
+      after_status: afterStatus,
+      request_id: requestId,
+    },
+  }, permissions);
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'credits.restore',
+    entity_type: 'SessionCredit',
+    entity_id: creditId,
+    before: JSON.stringify({ remaining_amount_cents: beforeRemaining, status: beforeStatus }),
+    after: JSON.stringify({ remaining_amount_cents: afterRemaining, status: afterStatus }),
+    reason,
+    metadata: JSON.stringify({ amount_cents: amountCents, request_id: requestId }),
+  });
+  return { status: 200, body: { ok: true, amount_cents: amountCents, remaining_amount_cents: afterRemaining } };
 }
 
 async function banUser(ctx, payload) {
@@ -591,6 +884,7 @@ async function updateCoach(ctx, payload) {
   // Route PII (email / phone / email_verified_at) to coach_private and strip it
   // from the coaches update.
   const { priv, rest } = splitPrivateFields(updates);
+  if (rest.is_active === false) rest.published = false;
   if (Object.keys(priv).length > 0) {
     await upsertCoachPrivate(databases, coachId, priv).catch((err) => {
       ctx.error?.(`updateCoach: failed to write coach_private: ${err?.message || err}`);
@@ -802,7 +1096,10 @@ async function setCoachActive(ctx, payload) {
   const coach = await databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
   if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
 
-  await databases.updateDocument(DB_ID, 'coaches', coachId, { is_active: payload.is_active });
+  const updates = payload.is_active
+    ? { is_active: true }
+    : { is_active: false, published: false };
+  await updateCoachResilient(databases, coachId, updates);
   await writeAudit(databases, {
     actor_email: actor.email,
     actor_role: actor.role,
@@ -810,7 +1107,7 @@ async function setCoachActive(ctx, payload) {
     entity_type: 'Coach',
     entity_id: coachId,
     before: JSON.stringify({ is_active: coach.is_active }),
-    after: JSON.stringify({ is_active: payload.is_active }),
+    after: JSON.stringify(updates),
   });
   return { status: 200, body: { ok: true } };
 }
@@ -867,6 +1164,7 @@ export default async ({ req, res, error }) => {
     }
     const profile = await profileForAccount(databases, accountId);
     const actor = {
+      profile_id: profile?.$id || '',
       email: profile?.email || account?.email || '',
       role: labels.includes('superadmin') ? 'super_admin' : 'admin',
     };
@@ -886,6 +1184,18 @@ export default async ({ req, res, error }) => {
         break;
       case 'revokeCredits':
         result = await revokeCredits(ctx, payload);
+        break;
+      case 'freezeCredit':
+        result = await setCreditFrozenState(ctx, payload, true);
+        break;
+      case 'unfreezeCredit':
+        result = await setCreditFrozenState(ctx, payload, false);
+        break;
+      case 'adjustCredit':
+        result = await adjustCredit(ctx, payload);
+        break;
+      case 'restoreCredit':
+        result = await restoreCredit(ctx, payload);
         break;
       case 'banUser':
         result = await banUser(ctx, payload);

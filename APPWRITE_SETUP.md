@@ -94,10 +94,13 @@ Appwrite console** — deploys do not auto-prune.
    Org/coach splits are managed in-app (`payout_rules`, validated server-side
    to sum to 100%).
 
-Money model: the platform is merchant of record (no destination charges).
-The `stripeWebhook` function creates real transfers to coach/org connected
-accounts per the server-computed `payout_plan`; refunds reverse transfers
-proportionally. Every movement lands in `payment_ledger_entries`.
+Money model: LevelCoach is merchant of record. Checkout creates a platform
+charge and value-based prepaid credit only; it does not create destination
+charges, application fees, or coach/org transfers. Booking reserves credit
+value, and completed/no-show/chargeable-late-cancel outcomes create the
+coach/org Stripe transfers from the platform balance. Unused-credit refunds do
+not reverse coach/org transfers because none were sent at checkout. Every
+movement lands in `credit_ledger_entries` and/or `payment_ledger_entries`.
 
 ## 7. Master admin bootstrap
 

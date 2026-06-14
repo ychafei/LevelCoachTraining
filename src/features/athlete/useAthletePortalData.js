@@ -21,11 +21,35 @@ export function creditBelongsToViewer(credit, user) {
     : sameEmail(credit.client_email, user?.email);
 }
 
+function integerCents(value) {
+  const cents = Number(value);
+  return Number.isInteger(cents) ? cents : null;
+}
+
+export function creditRemainingCents(credit) {
+  const remaining = integerCents(credit?.remaining_amount_cents);
+  if (remaining !== null) return Math.max(0, remaining);
+  const available = integerCents(credit?.available_amount_cents);
+  if (available !== null) return Math.max(0, available);
+
+  const total = Number(credit?.total_credits) || 0;
+  const used = Number(credit?.used_credits) || 0;
+  const left = Math.max(0, total - used);
+  const perSession = integerCents(credit?.per_session_base_price_cents)
+    ?? (total > 0 ? Math.floor((Number(credit?.amount_cents) || 0) / total) : 0);
+  return left * Math.max(0, perSession);
+}
+
+export function creditReservedCents(credit) {
+  return Math.max(0, integerCents(credit?.reserved_amount_cents) ?? 0);
+}
+
+export function creditSpentCents(credit) {
+  return Math.max(0, integerCents(credit?.spent_amount_cents ?? credit?.earned_amount_cents) ?? 0);
+}
+
 export function creditsRemaining(credits) {
-  return credits.reduce(
-    (sum, credit) => sum + Math.max(0, (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0)),
-    0,
-  );
+  return credits.reduce((sum, credit) => sum + creditRemainingCents(credit), 0);
 }
 
 // All sessions readable by the caller + the coaches they reference.

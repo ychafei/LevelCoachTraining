@@ -1,10 +1,11 @@
-// Phase 3 — payments (separate charges & transfers, splits, refunds).
+// Phase 3 — payments (prepaid credits, delayed transfers, splits, refunds).
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
 const failures = [];
 const read = (p) => readFileSync(join(root, p), 'utf8');
+const codeOnly = (p) => read(p).replace(/^\s*\/\/.*$/gm, '');
 const check = (ok, msg) => { if (!ok) failures.push(msg); };
 const includes = (path, snippets) => {
   const content = read(path);
@@ -20,20 +21,33 @@ for (const file of [
 ]) check(existsSync(join(root, file)), `Missing required Phase 3 file: ${file}`);
 
 includes('functions/createStripeCheckout/src/main.js', [
-  'PLATFORM_FEE_BPS',
-  'payout_plan',
   'legalPacketComplete',
-  'coach_share_bps',
+  'merchant_of_record',
+  'prepaid_credit',
   'Coach is not ready to accept payments yet.',
 ]);
+check(!codeOnly('functions/createStripeCheckout/src/main.js').includes('payout_plan'), 'createStripeCheckout must not embed payout_plan in checkout metadata');
+check(!/transfer_data\s*:/.test(codeOnly('functions/createStripeCheckout/src/main.js')), 'createStripeCheckout must not use transfer_data');
 
 includes('functions/stripeWebhook/src/main.js', [
   'constructEvent',
-  'transfers.create',
-  'source_transaction',
+  "type: 'charge'",
+  'purchase',
   'payment_ledger_entries',
   'charge.dispute.created',
   'stripe_webhook_events',
+]);
+check(!/transfers\.create\s*\(/.test(codeOnly('functions/stripeWebhook/src/main.js')), 'stripeWebhook must not pay coach/org at checkout');
+
+includes('functions/booking/src/main.js', [
+  'price_snapshot_cents',
+  'payout_plan_snapshot',
+  'releaseSessionPayout',
+  'release_pending_retry',
+  'credit_reservations',
+  'payout_obligations',
+  'transfers.create',
+  'PLATFORM_FEE_BPS',
 ]);
 
 includes('functions/refundStripePayment/src/main.js', [

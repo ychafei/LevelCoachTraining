@@ -232,6 +232,23 @@ async function adminReconciliation(databases) {
     if (['paid', 'partially_refunded', 'refunded'].includes(payment.status)) paidCount += 1;
   }
 
+  const credits = await listAll(databases, 'session_credits', []);
+  let heldClientCredits = 0;
+  let reservedCredits = 0;
+  let spentReleasedCredits = 0;
+  for (const credit of credits) {
+    const remaining = Number(credit.remaining_amount_cents ?? credit.available_amount_cents);
+    const reserved = Number(credit.reserved_amount_cents);
+    const spent = Number(credit.spent_amount_cents ?? credit.earned_amount_cents);
+    if (Number.isInteger(remaining) && remaining > 0) heldClientCredits += remaining;
+    if (Number.isInteger(reserved) && reserved > 0) reservedCredits += reserved;
+    if (Number.isInteger(spent) && spent > 0) spentReleasedCredits += spent;
+  }
+
+  const payoutObligations = await listAll(databases, 'payout_obligations', []);
+  const failedPayoutReleases = payoutObligations.filter((row) => row.status === 'failed').length;
+  const pendingPayoutReleases = payoutObligations.filter((row) => ['pending', 'held', 'processing', 'failed'].includes(row.status)).length;
+
   const breakdown = { coaches: [], orgs: [] };
   for (const [key, cents] of byOwner.entries()) {
     const [ownerType, ownerId] = key.split(':');
@@ -246,6 +263,14 @@ async function adminReconciliation(databases) {
     Query.orderDesc('$createdAt'),
     Query.limit(50),
   ]).catch(() => ({ documents: [] }));
+  const recentCreditRows = await databases.listDocuments(DB_ID, 'credit_ledger_entries', [
+    Query.orderDesc('$createdAt'),
+    Query.limit(50),
+  ]).catch(() => ({ documents: [] }));
+  const recentPaymentRows = await databases.listDocuments(DB_ID, 'stripe_payment_records', [
+    Query.orderDesc('$createdAt'),
+    Query.limit(25),
+  ]).catch(() => ({ documents: [] }));
 
   return {
     status: 200,
@@ -258,6 +283,14 @@ async function adminReconciliation(databases) {
         refunded_cents: refunded,
         disputed_count: disputedCount,
         paid_payment_count: paidCount,
+        total_held_client_credits_cents: heldClientCredits,
+        total_reserved_cents: reservedCredits,
+        total_spent_released_cents: spentReleasedCredits,
+        failed_payout_releases: failedPayoutReleases,
+        pending_payout_releases: pendingPayoutReleases,
+        stripe_payment_record_count: payments.length,
+        payment_ledger_entry_count: ledger.length,
+        credit_ledger_entry_count: recentCreditRows.total ?? recentCreditRows.documents.length,
         by_type: totalsByType,
       },
       monthly: monthlyToArray(monthly),
@@ -271,6 +304,25 @@ async function adminReconciliation(databases) {
         amount_cents: Number.isInteger(Number(entry.amount_cents)) ? Number(entry.amount_cents) : 0,
         payment_record_id: entry.payment_record_id || '',
         created_at: entry.$createdAt,
+      })),
+      recent_credit_ledger: recentCreditRows.documents.map((entry) => ({
+        id: entry.$id,
+        entry_type: entry.type || '',
+        credit_id: entry.credit_id || entry.credit_lot_id || '',
+        payment_record_id: entry.payment_record_id || '',
+        session_id: entry.session_id || '',
+        amount_cents: Number.isInteger(Number(entry.amount_cents)) ? Number(entry.amount_cents) : 0,
+        created_at: entry.$createdAt,
+      })),
+      recent_payments: recentPaymentRows.documents.map((payment) => ({
+        id: payment.$id,
+        amount_cents: Number.isInteger(Number(payment.amount)) ? Number(payment.amount) : 0,
+        status: payment.status || payment.state || '',
+        state: payment.state || '',
+        credit_id: payment.credit_lot_id || payment.credit_id || '',
+        checkout_session_id: payment.checkout_session_id || '',
+        payment_intent_id: payment.payment_intent_id || '',
+        created_at: payment.$createdAt,
       })),
     },
   };

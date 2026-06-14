@@ -65,6 +65,9 @@ export const COL = {
   StripePaymentRecord:    'stripe_payment_records',
   StripeTransferRecord:   'stripe_transfer_records',
   StripeWebhookEvent:     'stripe_webhook_events',
+  CreditLedgerEntry:      'credit_ledger_entries',
+  CreditReservation:      'credit_reservations',
+  PayoutObligation:       'payout_obligations',
   AdminAssignment:   'admin_assignments',
 };
 

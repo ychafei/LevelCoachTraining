@@ -146,6 +146,14 @@ function legalPacketComplete(templates, agreements, coachId) {
   ));
 }
 
+function listComplete(value) {
+  return Array.isArray(value) && value.some((item) => String(item || '').trim());
+}
+
+function sportProfileComplete(row) {
+  return listComplete(row?.specialties) && listComplete(row?.levels) && listComplete(row?.session_types);
+}
+
 export default function CoachOverview() {
   const { user, isAdmin } = useAuth();
   const { coach, loading: coachLoading, reload: reloadCoach } = useMyCoach();
@@ -180,7 +188,7 @@ export default function CoachOverview() {
     setConversations((convos || []).filter((c) => !c.is_archived
       && (c.coach_id === coachId || c.participant_emails?.includes(user?.email))));
     setConnectAccount(connectRows?.[0] || null);
-    setHasSportProfiles((sportRows || []).length > 0);
+    setHasSportProfiles((sportRows || []).some(sportProfileComplete));
     setLegalSigned(legalPacketComplete(templates, agreements, coachId));
   }, [coachId, user?.id, user?.email]);
 

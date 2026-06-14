@@ -30,7 +30,9 @@ import {
   coachLocationLabel,
   isUpcomingSession,
   sessionStartMs,
+  usd,
 } from '@/features/athlete/portalShared';
+import { creditRemainingCents, creditReservedCents, creditSpentCents } from '@/features/athlete/useAthletePortalData';
 
 function NextSessionCard({ sessions, coachesById, loading, onGoToSessions }) {
   const next = useMemo(() => {
@@ -103,18 +105,25 @@ function CreditsCard({ credits, remaining, loading }) {
       ) : (
         <div>
           <p className="text-3xl font-bold tabular-nums text-foreground">
-            {remaining}
+            {usd(remaining)}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              session{remaining === 1 ? '' : 's'} remaining
+              remaining
             </span>
           </p>
           <ul className="mt-3 space-y-1.5">
             {credits.slice(0, 4).map((credit) => {
-              const left = Math.max(0, (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0));
+              const left = creditRemainingCents(credit);
+              const reserved = creditReservedCents(credit);
+              const spent = creditSpentCents(credit);
               return (
-                <li key={credit.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate text-muted-foreground">{credit.package_name || 'Training package'}</span>
-                  <span className="shrink-0 font-semibold text-foreground">{left} left</span>
+                <li key={credit.id} className="flex items-start justify-between gap-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="block truncate text-muted-foreground">{credit.package_name || 'Training package'}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {usd(reserved)} reserved · {usd(spent)} spent
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-semibold text-foreground">{usd(left)}</span>
                 </li>
               );
             })}
@@ -296,7 +305,7 @@ function buildActions({ legalStatus, remaining, creditsLoaded, homework, session
       key: 'book',
       icon: CalendarDays,
       title: 'Book your next session',
-      body: `You have ${remaining} credit${remaining === 1 ? '' : 's'} ready to use — get the next session on the calendar.`,
+      body: `You have ${usd(remaining)} in credit ready to use. Get the next session on the calendar.`,
       href: '/book',
       label: 'Book now',
     });

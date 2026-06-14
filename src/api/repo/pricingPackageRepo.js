@@ -15,6 +15,7 @@ export const pricingPackageRepo = {
     const res = await databases.listDocuments(DB_ID, COL.PricingPackage, [
       Query.equal('coach_id', coachId),
       Query.equal('is_active', true),
+      Query.equal('is_visible', true),
       Query.limit(100),
     ]).catch(() => ({ documents: [] }));
     return res.documents
@@ -30,6 +31,7 @@ export const pricingPackageRepo = {
     const res = await databases.listDocuments(DB_ID, COL.PricingPackage, [
       Query.equal('organization_id', orgId),
       Query.equal('is_active', true),
+      Query.equal('is_visible', true),
       Query.limit(100),
     ]).catch(() => ({ documents: [] }));
     return res.documents
@@ -40,6 +42,7 @@ export const pricingPackageRepo = {
   // Legacy/platform-default packages (no coach binding) — booking fallback only.
   listPlatformDefaults: async () => {
     const res = await databases.listDocuments(DB_ID, COL.PricingPackage, [
+      Query.equal('is_active', true),
       Query.equal('is_visible', true),
       Query.limit(100),
     ]).catch(() => ({ documents: [] }));

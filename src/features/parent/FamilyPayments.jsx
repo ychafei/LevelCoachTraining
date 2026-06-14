@@ -1,12 +1,17 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CircleDollarSign, CreditCard, Receipt } from 'lucide-react';
+import { CircleDollarSign, CreditCard, Receipt, Repeat2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { sessionCreditRepo, stripePaymentRecordRepo } from '@/api/repo';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { pricingPackageRepo, sessionCreditRepo, stripePaymentRecordRepo } from '@/api/repo';
 import { formatInstantInTz } from '@/lib/scheduleET';
 import { EmptyState, SectionCard, SkeletonRows, usd } from '@/features/athlete/portalShared';
+import { creditRemainingCents, creditReservedCents, creditSpentCents } from '@/features/athlete/useAthletePortalData';
+import { callFn } from '@/lib/rpc';
+import { normalizePublicCoach } from '@/lib/publicCoach';
 
 const PAYMENT_BADGES = {
   paid: 'border-green-500/20 bg-green-500/10 text-green-500',
@@ -29,18 +34,149 @@ const PAYMENT_LABELS = {
   cancelled: 'Cancelled',
 };
 
+function coachName(coach) {
+  if (!coach) return 'Coach';
+  return [coach.first_name, coach.last_name].filter(Boolean).join(' ').trim() || coach.name || 'Coach';
+}
+
+function packageSessionPriceCents(pkg) {
+  const total = Number(pkg?.price_cents);
+  if (!Number.isInteger(total) || total <= 0) return null;
+  const sessions = Math.max(1, Number(pkg?.sessions) || 1);
+  return Math.max(1, Math.floor(total / sessions));
+}
+
+function priceForCredit(packages, credit) {
+  const active = (packages || [])
+    .filter((pkg) => pkg?.is_active !== false && pkg?.is_visible !== false)
+    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0) || (packageSessionPriceCents(a) || 0) - (packageSessionPriceCents(b) || 0));
+  const duration = Number(credit?.session_duration_minutes) || 0;
+  const exact = duration
+    ? active.find((pkg) => Number(pkg.duration_minutes) === duration)
+    : null;
+  const pkg = exact || active[0] || null;
+  const price = packageSessionPriceCents(pkg);
+  return pkg && price ? { pkg, price_cents: price, exact_duration: !!exact || !duration } : null;
+}
+
+function UseAnotherCoachDialog({ credit, coaches, onClose }) {
+  const navigate = useNavigate();
+  const [coachId, setCoachId] = useState('');
+  const selectedCoach = coaches.find((coach) => coach.id === coachId) || null;
+  const packagesQuery = useQuery({
+    queryKey: ['portal', 'coach-packages', coachId],
+    enabled: !!coachId,
+    queryFn: () => pricingPackageRepo.listForCoach(coachId).catch(() => []),
+  });
+  const price = priceForCredit(packagesQuery.data || [], credit);
+  const remaining = creditRemainingCents(credit);
+  const amountDue = price ? Math.max(0, price.price_cents - remaining) : 0;
+  const canUse = !!price && amountDue === 0 && credit.status === 'active';
+  const bookHref = coachId ? `/book?coach_id=${encodeURIComponent(coachId)}&credit_id=${encodeURIComponent(credit.id)}` : '/book';
+
+  const continueToBooking = () => {
+    if (!coachId) return;
+    navigate(bookHref);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="border-border bg-card">
+        <DialogHeader>
+          <DialogTitle>Use credit with another coach</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Choose coach</p>
+            <Select value={coachId} onValueChange={setCoachId}>
+              <SelectTrigger className="mt-2 w-full border-border bg-secondary">
+                <SelectValue placeholder="Select a published coach" />
+              </SelectTrigger>
+              <SelectContent>
+                {coaches.map((coach) => (
+                  <SelectItem key={coach.id} value={coach.id}>
+                    {coachName(coach)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-md border border-border bg-background/40 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Your available balance</span>
+              <span className="font-bold text-foreground">{usd(remaining)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">
+                {selectedCoach ? `${coachName(selectedCoach)} session price` : 'Selected coach price'}
+              </span>
+              <span className="font-bold text-foreground">
+                {packagesQuery.isLoading ? 'Loading...' : price ? usd(price.price_cents) : 'No published price'}
+              </span>
+            </div>
+            {price && !price.exact_duration && (
+              <p className="mt-2 text-xs text-yellow-600">
+                This coach does not have a matching {credit.session_duration_minutes}-minute package; the booking flow will re-check the exact package.
+              </p>
+            )}
+          </div>
+
+          {coachId && !packagesQuery.isLoading && (
+            price ? (
+              <p className={`rounded-md border px-3 py-2 text-sm ${
+                canUse
+                  ? 'border-green-500/20 bg-green-500/10 text-green-600'
+                  : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-700'
+              }`}
+              >
+                {canUse
+                  ? `Covered. ${usd(Math.max(0, remaining - price.price_cents))} will remain after this booking.`
+                  : `Top-up needed: ${usd(amountDue)} before this session can be reserved.`}
+              </p>
+            ) : (
+              <p className="rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">
+                This coach does not have an active published package yet.
+              </p>
+            )
+          )}
+
+          <Button
+            onClick={continueToBooking}
+            disabled={!coachId || !price}
+            className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            {canUse ? 'Book with this coach' : 'Continue to top-up checkout'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CreditsCard({ user }) {
+  const [transferTarget, setTransferTarget] = useState(null);
   const query = useQuery({
     queryKey: ['portal', 'credits', user?.id],
     enabled: !!user?.id,
     queryFn: () => sessionCreditRepo.list('-created_date'),
   });
+  const coachesQuery = useQuery({
+    queryKey: ['portal', 'published-coaches'],
+    queryFn: async () => {
+      const res = await callFn('getPublicCoaches', {}).catch(() => ({ coaches: [] }));
+      return (res?.coaches || []).map(normalizePublicCoach);
+    },
+  });
 
   const credits = query.data || [];
-  const remaining = credits.reduce(
-    (sum, credit) => sum + Math.max(0, (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0)),
-    0,
-  );
+  const coaches = useMemo(() => coachesQuery.data || [], [coachesQuery.data]);
+  const coachById = useMemo(() => {
+    const map = {};
+    (coachesQuery.data || []).forEach((coach) => { map[coach.id] = coach; });
+    return map;
+  }, [coachesQuery.data]);
+  const remaining = credits.reduce((sum, credit) => sum + creditRemainingCents(credit), 0);
 
   return (
     <SectionCard
@@ -66,31 +202,76 @@ function CreditsCard({ user }) {
       ) : (
         <div>
           <p className="text-2xl font-bold tabular-nums text-foreground">
-            {remaining}
+            {usd(remaining)}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              session{remaining === 1 ? '' : 's'} remaining across {credits.length} package{credits.length === 1 ? '' : 's'}
+              remaining across {credits.length} credit lot{credits.length === 1 ? '' : 's'}
             </span>
           </p>
           <ul className="mt-3 space-y-2">
             {credits.map((credit) => {
-              const left = Math.max(0, (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0));
+              const left = creditRemainingCents(credit);
+              const reserved = creditReservedCents(credit);
+              const spent = creditSpentCents(credit);
+              const originalCoachId = credit.original_coach_id || credit.originating_coach_id || credit.coach_id || '';
+              const originalCoach = coachById[originalCoachId];
               return (
-                <li key={credit.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{credit.package_name || 'Training package'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {credit.session_duration_minutes ? `${credit.session_duration_minutes}-minute sessions` : 'Sessions'}
-                      {Number.isFinite(Number(credit.amount_cents)) && credit.amount_cents !== null && ` · ${usd(credit.amount_cents)}`}
-                      {credit.client_email && ` · ${credit.client_email}`}
-                    </p>
+                <li key={credit.id} className="rounded-md border border-border bg-background/40 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{credit.package_name || 'Training package'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Original coach: {originalCoach ? coachName(originalCoach) : (originalCoachId ? 'Coach record' : 'Any coach')}
+                        {credit.session_duration_minutes ? ` · ${credit.session_duration_minutes}-minute sessions` : ''}
+                        {credit.client_email && ` · ${credit.client_email}`}
+                      </p>
+                    </div>
+                    <Badge className={credit.status === 'active' ? 'border-green-500/20 bg-green-500/10 text-green-600' : 'border-border bg-secondary text-muted-foreground'}>
+                      {credit.status || 'active'}
+                    </Badge>
                   </div>
-                  <span className="shrink-0 text-sm font-bold text-foreground">
-                    {left} of {Number(credit.total_credits) || 0} left
-                  </span>
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Remaining</p>
+                      <p className="font-bold text-foreground">{usd(left)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Reserved</p>
+                      <p className="font-bold text-foreground">{usd(reserved)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Completed/spent</p>
+                      <p className="font-bold text-foreground">{usd(spent)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {Number.isInteger(Number(credit.original_amount_cents))
+                        ? `${usd(credit.original_amount_cents)} original value`
+                        : `${Number(credit.total_credits) || 0} original session credits`}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => setTransferTarget(credit)}
+                      disabled={left <= 0 || credit.status !== 'active'}
+                    >
+                      <Repeat2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                      Use with another coach
+                    </Button>
+                  </div>
                 </li>
               );
             })}
           </ul>
+          {transferTarget && (
+            <UseAnotherCoachDialog
+              credit={transferTarget}
+              coaches={coaches}
+              onClose={() => setTransferTarget(null)}
+            />
+          )}
         </div>
       )}
     </SectionCard>

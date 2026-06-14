@@ -503,6 +503,8 @@ export default function AdminCoaches() {
                     {coach.county && (
                       <span className="text-xs text-accent flex items-center gap-1"><MapPin className="w-3 h-3" />{coach.county}</span>
                     )}
+                    {coach.published === true && <Badge className="bg-green-500/10 text-green-600 border-green-500/30 border text-xs">Published</Badge>}
+                    {coach.published !== true && <Badge variant="secondary" className="text-xs">Unpublished</Badge>}
                     {coach.is_head_coach && <Badge className="bg-accent/10 text-accent border-accent/20 text-xs">Head coach</Badge>}
                     {!coach.is_active && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
                   </div>

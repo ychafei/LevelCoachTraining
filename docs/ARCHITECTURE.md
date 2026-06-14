@@ -71,6 +71,9 @@ collection permissions.
 | stripe_payment_records / stripe_transfer_records | ON | read: label(admin) | read: payer / payee owner where known |
 | stripe_webhook_events | OFF | server-only; read: label(admin) | — |
 | payment_ledger_entries (new) | ON | read: label(admin) | read: payee owner |
+| credit_ledger_entries (new) | ON | read: label(admin) | read: owner |
+| credit_reservations (new) | ON | read: label(admin) | read: owner, coach, guardian(s) where needed |
+| payout_obligations (new) | ON | read: label(admin) | read: payee owner |
 | payout_rules (new, per org-coach link) | ON | read: label(admin) | read: org admins + coach |
 | admin_assignments | OFF | server-only; read: label(admin) | — |
 | notifications (new) | ON | read: label(admin) | read+update: recipient (mark-read only) |
@@ -100,7 +103,7 @@ Multi-action functions take `{ action, ...payload }`.
 | Function | Execute | Actions / notes |
 |---|---|---|
 | `accountProfile` | users | `ensure` (create-or-get own profile, replaces client auto-create), `update` (whitelist: names, phone, dob→recompute is_minor, photo, bio, sport prefs, location, notification prefs). Never: role, coach_id, consent fields, org id, fee fields. |
-| `booking` | users | `book` (credit-based; validates: coach active+published, slot inside availability, full-duration conflict check vs sessions+blocks incl. partial-day blackouts, not past, min-notice/buffer/max-advance, legal packet signed by athlete-or-guardian, minor⇒booked/approved by linked guardian, atomic credit decrement w/ rollback), `cancel`, `reschedule` (re-validate), `complete`, `no_show`. Sessions get `athlete_id`, `booked_by_profile_id`, per-doc read grants. Sends transactional emails internally. |
+| `booking` | users | `book` (value-credit-based; validates: coach active+published, server-priced offering, payout split, Connect readiness, slot inside availability, full-duration conflict check vs sessions+blocks incl. partial-day blackouts, not past, min-notice/buffer/max-advance, legal packet signed by athlete-or-guardian, minor⇒booked/approved by linked guardian, atomic cent reservation w/ rollback), `cancel`, `reschedule` (re-validate), `complete`, `no_show`, `late_cancelled_chargeable`. Sessions get `athlete_id`, `booked_by_profile_id`, immutable price/split snapshots, per-doc read grants. Sends transactional emails internally. |
 | `messaging` | users | `start`, `send` (sender bound server-side, participant check, per-doc perms incl. guardian read for minors), `report`, `block`. |
 | `training` | users | CRUD for goals, training plans/items, homework, assessments, check-ins, session notes visibility. Validates coach↔athlete relationship (existing session or active client link). |
 | `family` | users | Parent/guardian: `addChild`, `updateChild`, `linkAthlete`, `setPermissions` (can_book/can_pay/can_message), `approveBooking`. Creates guardian_athletes rows + per-doc grants. |
@@ -118,7 +121,7 @@ Multi-action functions take `{ action, ...payload }`.
 | `stripeWebhook` | any | Signature-verified; idempotent (unique event index); see §4. |
 | `stripeConnectWebhook` | any | `account.updated` → sync `stripe_connected_accounts`. Separate webhook secret. |
 | `stripeConnect` | users | `createAccount` (idempotent per owner; caller must own coach/org), `onboardingLink`, `refresh`, `dashboardLink` (Express login link). |
-| `refundStripePayment` | users (admin label) | Full/partial refunds; **reverses transfers proportionally**; accumulates `refunded_amount`; sets `partially_refunded`/`refunded`; adjusts credits; ledger entries; audit log. |
+| `refundStripePayment` | users (admin label) | Full/partial refunds; unused-credit refunds reduce available value and do not reverse coach/org transfers; earned-session refunds reverse related transfers or create offsets where possible; accumulates `refunded_amount`; sets `partially_refunded`/`refunded`; writes credit/payment ledger entries + audit log. |
 | `signLegalAgreement` | users | Verifies caller's actual server-side role; guardian signings must reference a linked `athlete_id`; minors cannot self-sign athlete waivers (guardian must). |
 | `generateLegalAgreementPdf` | users | unchanged role-hardening as above. |
 | `bootstrapMasterAdmin` / `grantAdminRole` | users | label-verified as described in §1; `grantAdminRole` actions: set stacked roles (`roles: []`, exact set), `getRoles` (read current labels for the role editors), legacy single `role` (coach-label-preserving); writes `admin_assignments` + audit log. |
@@ -128,27 +131,34 @@ Removed functions: `send-email` (open relay), `sendBookingEmails`, `sendCoachLin
 `createStripeConnectAccount`/`createStripeConnectOnboarding`/`refreshStripeConnectAccount`
 (folded into `stripeConnect`), `getCoachClients` (folded into `reports` with proper scoping).
 
-## 4. Payments (Stripe only — separate charges & transfers)
+## 4. Payments (Stripe only — prepaid credits + delayed transfers)
 
 - **Checkout** (`createStripeCheckout`): server computes price in **cents** from
   `pricing_packages` (admin-controlled) bound to the coach (`package.coach_id` empty =
-  platform-wide package). No `transfer_data` — the platform is merchant of record.
-  Hard gate: coach (and org, if routed) must have a ready Connect account, signed legal
-  packet, and verified email — otherwise checkout is refused (no trapped funds).
-- **Split resolution** (server-only, basis points):
+  platform-wide package). No `transfer_data`, no `application_fee_amount`, and no
+  connected-account destination — LevelCoach is merchant of record and the checkout
+  creates prepaid client credit only.
+- **Credit model**: `session_credits` are value-based in integer cents. `coach_id`
+  is legacy/origin attribution only; unused value can be reserved against any eligible
+  published coach. If the new coach costs more, booking requires a top-up; if cheaper,
+  remaining value stays available.
+- **Split resolution** (server-only, basis points, at booking/finalization):
   - Platform fee: `PLATFORM_FEE_BPS` env (default **1500** = 15%), overridable per coach
     (`coaches.platform_fee_bps`, admin-set) or per org link (`payout_rules`).
   - Org-affiliated coach (active `organization_coaches` link with a `payout_rules` row):
     default coach **6000**, org **2500**, platform **1500**. Validated: shares sum to 10000.
   - Solo coach: coach `10000 − platform_bps`, org 0.
-- **Webhook** (`checkout.session.completed`): idempotent; creates `session_credits`
-  (integer `amount_cents`, per-doc read grant for the buyer), creates **real Stripe
-  transfers** (`source_transaction = charge`) to coach/org accounts, writes
-  `stripe_transfer_records` with real transfer ids + `payment_ledger_entries` rows
-  (one per leg: charge, platform_fee, coach_payout, org_payout).
-- **Refunds**: admin-only function. Creates refund on the charge, **reverses transfers
-  proportionally**, accumulates `refunded_amount`, statuses:
-  `paid → partially_refunded → refunded`. Adjusts credits, writes ledger + audit.
+- **Webhook** (`checkout.session.completed`): idempotent; creates a value-based
+  `session_credits` lot (integer cents), writes `credit_ledger_entries.checkout_grant`,
+  `payment_ledger_entries.checkout_charge`, and
+  `payment_ledger_entries.credit_liability_created`. It creates no coach/org transfers.
+- **Booking/finalization**: booking reserves credit value and snapshots price/split/payee
+  data on the session. `completed`, `no_show`, and `late_cancelled_chargeable` capture
+  the reservation, recognize earned revenue, create payout obligations, and then create
+  Stripe transfers to coach/org connected accounts.
+- **Refunds**: admin-only function. Creates refund on the platform charge. Unused-credit
+  refunds reduce available credit without reversing transfers; earned-session refunds
+  reverse related payout transfers or offset future payouts. Writes ledger + audit.
 - **Disputes**: `charge.dispute.created/closed` handled — payment marked `disputed`,
   credit frozen, admins notified.
 - **Connect status**: `stripeConnectWebhook` keeps `stripe_connected_accounts` synced.

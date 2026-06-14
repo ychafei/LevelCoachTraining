@@ -120,7 +120,18 @@ function calcPrice(pkg, dur) {
 
 function remainingCredits(credit) {
   if (!credit) return 0;
+  const remainingCents = Number(credit.remaining_amount_cents);
+  if (Number.isInteger(remainingCents)) return remainingCents > 0 ? 1 : 0;
+  const availableCents = Number(credit.available_amount_cents);
+  if (Number.isInteger(availableCents)) return availableCents > 0 ? 1 : 0;
   return (Number(credit.total_credits) || 0) - (Number(credit.used_credits) || 0);
+}
+
+function remainingCreditBalance(credit) {
+  const remainingCents = Number(credit?.remaining_amount_cents);
+  if (Number.isInteger(remainingCents)) return Math.max(0, remainingCents) / 100;
+  const availableCents = Number(credit?.available_amount_cents);
+  return Number.isInteger(availableCents) ? Math.max(0, availableCents) / 100 : null;
 }
 
 // Whole dollars stay clean ($75); fractional amounts always show two
@@ -559,6 +570,7 @@ export default function Book() {
         action: 'book',
         coach_id: coach.id,
         credit_id: activeCredit.id,
+        ...(selectedPackage?.id ? { package_id: selectedPackage.id } : {}),
         date: format(selectedDate, 'yyyy-MM-dd'),
         start_time: selectedTime,
         duration_minutes: slotDurationMinutes,
@@ -581,7 +593,11 @@ export default function Book() {
       setSelectedTime('');
     } catch (err) {
       // Server validation messages are user-friendly — surface them verbatim.
-      setBookingError(err?.data?.error || 'Could not book the session. Please try again.');
+      if (err?.data?.requires_top_up && Number.isInteger(Number(err.data.top_up_amount_cents))) {
+        setBookingError(`This coach costs $${formatMoney(Number(err.data.top_up_amount_cents) / 100)} more than your available credit balance. Add a top-up before booking.`);
+      } else {
+        setBookingError(err?.data?.error || 'Could not book the session. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -591,6 +607,7 @@ export default function Book() {
   if (paymentConfirmed || skipToSchedule) {
     if (sessionBooked) {
       const remainingOnCredit = remainingCredits(creditRecord);
+      const remainingBalance = remainingCreditBalance(creditRecord);
       const bookedWhen = lastBookedSession
         ? formatInTz(lastBookedSession.date, lastBookedSession.start_time, lastBookedSession.timezone)
         : '';
@@ -618,7 +635,9 @@ export default function Book() {
             {remainingOnCredit > 0 && (
               <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-4">
                 <p className="text-sm font-semibold text-accent mb-1">
-                  {remainingOnCredit} session{remainingOnCredit !== 1 ? 's' : ''} remaining
+                  {remainingBalance != null
+                    ? `$${formatMoney(remainingBalance)} credit balance remaining`
+                    : `${remainingOnCredit} session${remainingOnCredit !== 1 ? 's' : ''} remaining`}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {creditRecord.package_name}{creditRecord.session_duration_minutes ? ` · ${creditRecord.session_duration_minutes / 60} hr${creditRecord.session_duration_minutes > 60 ? 's' : ''} each` : ''}
@@ -1278,7 +1297,11 @@ export default function Book() {
               </div>
               {useExistingCredit ? (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Covered by your existing credits{existingCredit ? ` — ${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'} remaining on ${existingCredit.package_name || 'your package'}` : ''}.
+                  Covered by your existing credits{existingCredit
+                    ? ` — ${remainingCreditBalance(existingCredit) !== null
+                      ? `$${formatMoney(remainingCreditBalance(existingCredit))} balance remaining`
+                      : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'} remaining`} on ${existingCredit.package_name || 'your package'}`
+                    : ''}.
                 </p>
               ) : (
                 <>
