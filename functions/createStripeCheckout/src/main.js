@@ -554,7 +554,7 @@ export default async ({ req, res, error }) => {
       // before funds settle. Pin to immediate-settlement cards.
       payment_method_types: ['card'],
       success_url: `${appBaseUrl}/book?stripe_success=1&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appBaseUrl}/book?stripe_cancel=1`,
+      cancel_url: `${appBaseUrl}/coaches`,
       client_reference_id: bookingReference,
       customer_email: profile.email,
       metadata,

@@ -166,6 +166,7 @@ export default function Book() {
   const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
   const stripeSuccess = urlParams.get('stripe_success');
+  const stripeCanceled = urlParams.get('stripe_cancel') === '1';
   const { user, refetch } = useCurrentUser();
   const [showProfileGate, setShowProfileGate] = useState(false);
 
@@ -175,11 +176,13 @@ export default function Book() {
   const coachLocked = !!preCoachId;
   const minStep = coachLocked ? STEP_ATHLETE : STEP_COACH;
 
-  const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
+  const saved = (() => {
+    if (stripeCanceled) return null;
+    try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; }
+  })();
   const hasSelectedBookingContext = !!preCoachId
     || !!preCreditId
     || stripeSuccess === '1'
-    || urlParams.get('stripe_cancel') === '1'
     || !!saved?.coach?.id;
 
   const [step, setStep]                       = useState(Math.max(saved?.step ?? STEP_COACH, minStep));
@@ -564,6 +567,11 @@ export default function Book() {
     client_notes: goals.trim(),
     preferred_location: preferredLocation.trim(),
   };
+
+  if (stripeCanceled) {
+    sessionStorage.removeItem('lc_booking');
+    return <Navigate to="/coaches" replace />;
+  }
 
   if (!hasSelectedBookingContext) {
     return <Navigate to="/coaches" replace />;

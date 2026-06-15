@@ -82,6 +82,8 @@ scenario(1, 'Stripe checkout does not create transfers immediately', () => {
   mustNotMatch(checkout, /transfer_data\s*:/, 'Checkout must not create destination charges.');
   mustNotMatch(checkout, /application_fee_amount/, 'Checkout must not create Connect application fees.');
   mustNotMatch(checkout, /stripe\.transfers\.create\s*\(/, 'Checkout must not create Stripe transfers.');
+  mustInclude(checkout, 'cancel_url: `${appBaseUrl}/coaches`', 'Stripe cancel/back should return to the coach directory.');
+  mustNotInclude(checkout, '/book?stripe_cancel=1', 'Stripe cancel/back must not reopen the booking wizard.');
   mustNotMatch(webhook, /stripe\.transfers\.create\s*\(/, 'checkout.session.completed webhook path must not pay coaches/orgs.');
   mustNotMatch(webhook, /\bcoach_payout\b|\borg_payout\b/, 'checkout.session.completed must not write payout ledger entries.');
   mustInclude(webhook, "type: 'charge'", 'checkout webhook records only the platform charge.');
@@ -243,6 +245,8 @@ scenario(17, 'Client booking flow removes format and captures coach message/loca
   mustNotMatch(checkout, /\bsession_format\b/, 'checkout must not accept or store old format selections.');
   mustNotMatch(bookPage, /\bSTEP_FORMAT\b|\bselectedSessionFormat\b|\bformatOptions\b/, 'client booking wizard must not show the old format step.');
   mustInclude(bookPage, 'Details for the coach', 'client flow must ask for coach-facing details before payment/scheduling.');
+  mustInclude(bookPage, 'if (stripeCanceled)', 'old Stripe cancel URLs must redirect out of the booking wizard.');
+  mustInclude(bookPage, '<Navigate to="/coaches" replace />', 'old Stripe cancel URLs must land on the coach directory.');
   mustNotInclude(bookPage, 'booking_location_label: bookingLocation.label', 'checkout payload must not send old geocoded location fields.');
   mustInclude(bookPage, 'preferred_location: preferredLocation.trim()', 'checkout payload must carry preferred location.');
   mustInclude(checkout, "status: 'not_geocoded'", 'checkout must tolerate stale incomplete geocoded location payloads.');
