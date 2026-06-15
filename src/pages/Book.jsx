@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { pricingPackageRepo, sessionCreditRepo } from '@/api/repo';
 import { auth } from '@/lib/auth';
 import { rpc } from '@/lib/rpc';
@@ -29,7 +29,6 @@ import {
   Package,
   ShieldCheck,
   Sparkles,
-  Timer,
   User,
   Users,
 } from 'lucide-react';
@@ -43,6 +42,7 @@ import { legalSignerRoleForUser } from '@/lib/legal';
 import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 import { useMyAthlete } from '@/features/athlete/useMyAthlete';
+import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 
 // Display-only estimates; createStripeCheckout recomputes the charge in cents
 // from pricing_packages on the server using this same duration table.
@@ -79,8 +79,31 @@ const DEFAULT_AVAILABILITY_PREFERENCE = {
   latestStart: '19:00',
 };
 
-// Steps: 0=Coach, 1=Package, 2=Duration, 3=Preferences, 4=Checkout
-const STEPS = ['Coach', 'Package', 'Duration', 'Preferences', 'Checkout'];
+const STEP_COACH = 0;
+const STEP_ATHLETE = 1;
+const STEP_SPORT = 2;
+const STEP_FORMAT = 3;
+const STEP_PACKAGE = 4;
+const STEP_CHECKOUT = 5;
+
+const STEP_LABELS = {
+  [STEP_COACH]: 'Coach',
+  [STEP_ATHLETE]: 'Athlete',
+  [STEP_SPORT]: 'Sport',
+  [STEP_FORMAT]: 'Location',
+  [STEP_PACKAGE]: 'Package',
+  [STEP_CHECKOUT]: 'Checkout',
+};
+
+const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
+
+const LOCATION_FORMAT_OPTIONS = [
+  { value: 'training_facility', label: 'Training facility', body: 'Meet at the coach or facility location configured in their portal.' },
+  { value: 'coach_travels', label: 'Coach travels to you', body: 'Train at a client-side location within the coach service area.' },
+  { value: 'online', label: 'Online', body: 'Meet virtually for remote training, film review, or coaching.' },
+  { value: 'organization_facility', label: 'Organization/facility location', body: 'Train at the coach organization or partner facility.' },
+  { value: 'hybrid', label: 'Hybrid options', body: 'Coordinate the best mix of facility, travel, or remote work after booking.' },
+];
 
 // A self-contained per-coach package carries its own total (price_cents) and
 // session length (duration_minutes); the legacy per-hour multiplier no longer
@@ -134,6 +157,14 @@ function remainingCreditBalance(credit) {
   return Number.isInteger(availableCents) ? Math.max(0, availableCents) / 100 : null;
 }
 
+function remainingCreditBalanceCents(credit) {
+  const remainingCents = Number(credit?.remaining_amount_cents);
+  if (Number.isInteger(remainingCents)) return Math.max(0, remainingCents);
+  const availableCents = Number(credit?.available_amount_cents);
+  if (Number.isInteger(availableCents)) return Math.max(0, availableCents);
+  return null;
+}
+
 // Whole dollars stay clean ($75); fractional amounts always show two
 // decimals ($75.50, never $75.5).
 function formatMoney(amount) {
@@ -141,6 +172,50 @@ function formatMoney(amount) {
   return Number.isInteger(value)
     ? value.toLocaleString('en-US')
     : value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function cleanKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function sportLabel(value) {
+  return SPORT_LABELS.get(value) || String(value || '').replace(/_/g, ' ') || 'Sport';
+}
+
+function formatLabel(value) {
+  return LOCATION_FORMAT_OPTIONS.find((option) => option.value === value)?.label || String(value || '').replace(/_/g, ' ');
+}
+
+function packageApplies(pkg, { sportKey = '', sessionFormat = '' } = {}) {
+  const sportKeys = Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.filter(Boolean) : [];
+  if (sportKeys.length && (!sportKey || !sportKeys.includes(sportKey))) return false;
+  const locationFormats = Array.isArray(pkg?.location_formats) ? pkg.location_formats.filter(Boolean) : [];
+  if (locationFormats.length && (!sessionFormat || !locationFormats.includes(sessionFormat))) return false;
+  return true;
+}
+
+function coachFormatOptions(coach, orgName = '') {
+  const serviceType = cleanKey(coach?.service_type);
+  const values = new Set();
+  if (serviceType === 'facility') values.add('training_facility');
+  if (serviceType === 'travels') values.add('coach_travels');
+  if (serviceType === 'online') values.add('online');
+  if (serviceType === 'hybrid') {
+    values.add('training_facility');
+    values.add('coach_travels');
+    values.add('hybrid');
+  }
+  if (coach?.service_venue || coach?.organization?.id) values.add('organization_facility');
+  return [...values].map((value) => {
+    const base = LOCATION_FORMAT_OPTIONS.find((option) => option.value === value) || { value, label: formatLabel(value), body: '' };
+    if (value === 'training_facility' && coach?.service_venue) {
+      return { ...base, body: coach.service_venue };
+    }
+    if (value === 'organization_facility' && orgName) {
+      return { ...base, body: orgName };
+    }
+    return base;
+  });
 }
 
 export default function Book() {
@@ -156,7 +231,7 @@ export default function Book() {
   // wizard never shows the coach-selection step (step 0). The effective minimum
   // step is 1, and "Back" on step 1 returns to that coach's profile.
   const coachLocked = !!preCoachId;
-  const minStep = coachLocked ? 1 : 0;
+  const minStep = coachLocked ? STEP_ATHLETE : STEP_COACH;
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; } })();
   const hasSelectedBookingContext = !!preCoachId
@@ -165,7 +240,7 @@ export default function Book() {
     || urlParams.get('stripe_cancel') === '1'
     || !!saved?.coach?.id;
 
-  const [step, setStep]                       = useState(Math.max(saved?.step ?? 0, coachLocked ? 1 : 0));
+  const [step, setStep]                       = useState(Math.max(saved?.step ?? STEP_COACH, minStep));
   const [coach, setCoach]                     = useState(saved?.coach ? normalizePublicCoach(saved.coach) : null);
   const [coaches, setCoaches]                 = useState([]);
   const [packages, setPackages]               = useState([]);
@@ -217,6 +292,8 @@ export default function Book() {
   // Guardian-managed athletes (family function). '' = booking for myself.
   const [familyAthletes, setFamilyAthletes]   = useState([]);
   const [selectedAthleteId, setSelectedAthleteId] = useState('');
+  const [selectedSport, setSelectedSport] = useState(saved?.selectedSport || urlParams.get('sport') || '');
+  const [selectedSessionFormat, setSelectedSessionFormat] = useState(saved?.selectedSessionFormat || urlParams.get('session_format') || '');
 
   // Legal gates. Checkout uses the profile-level signer role (mirrors
   // createStripeCheckout); credit booking mirrors the booking function:
@@ -298,7 +375,7 @@ export default function Book() {
     const picked = coaches.find(c => c.id === preCoachId);
     if (!picked) return;
     setCoach(picked);
-    setStep(prev => Math.max(prev, 1));
+    setStep(prev => Math.max(prev, STEP_ATHLETE));
     // Intentionally not depending on `coach` so this only fires once per coach list load.
      
   }, [preCoachId, coaches]);
@@ -343,16 +420,15 @@ export default function Book() {
       setExistingCredit(active || null);
       setUseExistingCredit(!!active);
 
-      // Auto-skip to scheduling when arriving from Dashboard with a valid credit.
+      // Arriving with a credit preselects that balance, but still walks through
+      // sport/location/package so the selected coach price is clear before
+      // scheduling.
       if (preCreditId && active) {
         setCreditRecord(active);
-        setPaymentConfirmed(true);
-        setSkipToSchedule(true);
         if (active.session_duration_minutes) {
           const creditDur = durationFromMinutes(active.session_duration_minutes);
           if (creditDur) setDuration(creditDur);
         }
-        setScheduling(true);
       }
     })();
     return () => { cancelled = true; };
@@ -388,7 +464,7 @@ export default function Book() {
       url.searchParams.delete('stripe_success');
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.pathname);
-      setStep(4);
+      setStep(STEP_CHECKOUT);
       setStripeCheckoutMessage('Payment received. Waiting for Stripe to finish issuing your training credits.');
 
       (async () => {
@@ -439,12 +515,81 @@ export default function Book() {
     ? slotsForDate(availability, format(selectedDate, 'yyyy-MM-dd'), slotDurationMinutes)
     : [];
 
+  const coachSports = (Array.isArray(coach?.sports) ? coach.sports : [])
+    .map(cleanKey)
+    .filter(Boolean);
+  const uniqueCoachSports = [...new Set(coachSports)];
+  const formatOptions = coach ? coachFormatOptions(coach, coachOrgName) : [];
+  const needsAthleteStep = familyAthletes.length > 1;
+  const needsSportStep = uniqueCoachSports.length > 1;
+  const needsFormatStep = formatOptions.length > 1;
+  const effectiveSport = selectedSport || (!needsSportStep ? uniqueCoachSports[0] || '' : '');
+  const effectiveFormat = selectedSessionFormat || (!needsFormatStep ? formatOptions[0]?.value || '' : '');
+  const filteredPackages = useMemo(
+    () => packages.filter((pkg) => packageApplies(pkg, { sportKey: effectiveSport, sessionFormat: effectiveFormat })),
+    [packages, effectiveSport, effectiveFormat],
+  );
+  const visibleSteps = useMemo(() => {
+    const steps = [];
+    if (!coachLocked) steps.push(STEP_COACH);
+    if (needsAthleteStep) steps.push(STEP_ATHLETE);
+    if (needsSportStep) steps.push(STEP_SPORT);
+    if (needsFormatStep) steps.push(STEP_FORMAT);
+    steps.push(STEP_PACKAGE, STEP_CHECKOUT);
+    return steps;
+  }, [coachLocked, needsAthleteStep, needsSportStep, needsFormatStep]);
+
+  useEffect(() => {
+    if (familyAthletes.length === 1 && !selectedAthleteId) {
+      setSelectedAthleteId(familyAthletes[0].id);
+    }
+  }, [familyAthletes, selectedAthleteId]);
+
+  useEffect(() => {
+    if (uniqueCoachSports.length === 1 && selectedSport !== uniqueCoachSports[0]) {
+      setSelectedSport(uniqueCoachSports[0]);
+    }
+    if (uniqueCoachSports.length > 1 && selectedSport && !uniqueCoachSports.includes(selectedSport)) {
+      setSelectedSport('');
+    }
+  }, [selectedSport, uniqueCoachSports]);
+
+  useEffect(() => {
+    if (formatOptions.length === 1 && selectedSessionFormat !== formatOptions[0].value) {
+      setSelectedSessionFormat(formatOptions[0].value);
+    }
+    if (formatOptions.length > 1 && selectedSessionFormat && !formatOptions.some((option) => option.value === selectedSessionFormat)) {
+      setSelectedSessionFormat('');
+    }
+  }, [formatOptions, selectedSessionFormat]);
+
+  useEffect(() => {
+    if (selectedPackage && !filteredPackages.some((pkg) => pkg.id === selectedPackage.id)) {
+      setSelectedPackage(null);
+    }
+  }, [filteredPackages, selectedPackage]);
+
+  useEffect(() => {
+    if (!visibleSteps.includes(step)) {
+      const nextVisible = visibleSteps.find((candidate) => candidate > step) || visibleSteps[0] || STEP_PACKAGE;
+      setStep(nextVisible);
+    }
+  }, [step, visibleSteps]);
+
   const sessionPrice = calcPrice(selectedPackage, duration);
   // Total actually charged today (display-only — the server recomputes the
   // charge in cents from pricing_packages).
   const packageTotal = packagePriceCents(selectedPackage) != null
     ? packagePriceCents(selectedPackage) / 100
     : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null);
+  const sessionPriceCents = sessionPrice != null ? Math.round(sessionPrice * 100) : null;
+  const existingCreditRemainingCents = existingCredit ? remainingCreditBalanceCents(existingCredit) : null;
+  const existingCreditAmountDueCents = useExistingCredit && sessionPriceCents != null && existingCreditRemainingCents != null
+    ? Math.max(0, sessionPriceCents - existingCreditRemainingCents)
+    : 0;
+  const selectedAthleteName = selectedAthleteId
+    ? familyAthletes.find((athlete) => athlete.id === selectedAthleteId)?.name || 'Selected athlete'
+    : [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || 'Myself';
   // createStripeCheckout now verifies per-athlete legal consent (mirroring
   // booking), so the pay action is gated on BOTH the buyer's profile-level
   // packet AND — when buying for a SELECTED child — that child's athlete-scoped
@@ -467,6 +612,9 @@ export default function Book() {
     // guardian buys for a child, else the buyer's own athlete id. The server
     // requires this for guardian/parent buyers and checks its legal consent.
     athlete_id: checkoutAthleteId,
+    sport_key: effectiveSport,
+    session_format: effectiveFormat,
+    session_format_label: formatLabel(effectiveFormat),
     booking_location_label: bookingLocation.label || '',
     booking_location_lat: bookingLocation.lat ?? '',
     booking_location_lng: bookingLocation.lng ?? '',
@@ -478,6 +626,28 @@ export default function Book() {
 
   if (!hasSelectedBookingContext) {
     return <Navigate to="/coaches" replace />;
+  }
+
+  if (coachLocked && !coach) {
+    if (!publicDataLoaded) {
+      return (
+        <div className="min-h-[70vh] bg-slate-50 px-4 py-24 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" aria-hidden="true" />
+          <p className="mt-4 text-sm font-semibold text-slate-600">Loading booking options...</p>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-[70vh] bg-slate-50 px-4 py-24">
+        <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <h1 className="font-display text-2xl font-bold text-slate-950">Coach not found</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">That coach profile is no longer available.</p>
+          <Button asChild className="mt-5 rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
+            <Link to="/coaches">Find another coach</Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // Minors never book directly — a linked parent/guardian books for them.
@@ -512,6 +682,8 @@ export default function Book() {
       coach,
       selectedPackage,
       duration,
+      selectedSport: effectiveSport,
+      selectedSessionFormat: effectiveFormat,
       goals,
       bookingLocation,
       availabilityMode,
@@ -571,6 +743,9 @@ export default function Book() {
         coach_id: coach.id,
         credit_id: activeCredit.id,
         ...(selectedPackage?.id ? { package_id: selectedPackage.id } : {}),
+        sport_key: effectiveSport,
+        session_format: effectiveFormat,
+        session_format_label: formatLabel(effectiveFormat),
         date: format(selectedDate, 'yyyy-MM-dd'),
         start_time: selectedTime,
         duration_minutes: slotDurationMinutes,
@@ -797,6 +972,7 @@ export default function Book() {
     // Payment confirmed — choose to schedule now or later.
     const confirmedCredit = creditRecord || existingCredit;
     const confirmedRemaining = confirmedCredit ? remainingCredits(confirmedCredit) : (selectedPackage?.sessions || 1);
+    const confirmedRemainingBalance = confirmedCredit ? remainingCreditBalance(confirmedCredit) : packageTotal;
     const confirmedDuration = confirmedCredit?.session_duration_minutes || duration?.minutes || 60;
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
@@ -810,18 +986,31 @@ export default function Book() {
               {confirmedCredit?.package_name || selectedPackage?.name}
             </p>
             <p className="text-muted-foreground text-sm">
-              {confirmedRemaining} session{confirmedRemaining !== 1 ? 's' : ''} available
+              {confirmedRemainingBalance !== null
+                ? `$${formatMoney(confirmedRemainingBalance)} credit balance available`
+                : `${confirmedRemaining} session${confirmedRemaining !== 1 ? 's' : ''} available`}
               {confirmedDuration ? ` · ${confirmedDuration / 60} hr${confirmedDuration > 60 ? 's' : ''} each` : ''}
             </p>
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => setScheduling(true)}
               className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
-              Schedule now
+              Schedule first session
             </Button>
             <Button variant="outline" onClick={() => window.location.href = '/dashboard'}
               className="font-semibold">
               Schedule later from dashboard
+            </Button>
+            <Button asChild variant="outline" className="font-semibold">
+              <Link to="/messages">Message the coach</Link>
+            </Button>
+            <Button asChild variant="outline" className="font-semibold">
+              <Link to={checkoutSignerRole === 'guardian' ? '/parent/settings?section=children' : '/athlete/settings'}>
+                Complete athlete notes/preferences
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" className="font-semibold">
+              <Link to="/dashboard">View remaining credit balance</Link>
             </Button>
           </div>
         </div>
@@ -829,64 +1018,28 @@ export default function Book() {
     );
   }
 
-  if (preCoachId && !user) {
-    if (!coach && !publicDataLoaded) {
-      return (
-        <div className="min-h-[70vh] bg-slate-50 px-4 py-24 text-center">
-          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" aria-hidden="true" />
-          <p className="mt-4 text-sm font-semibold text-slate-600">Loading intro booking...</p>
-        </div>
-      );
-    }
-
-    if (!coach) {
-      return (
-        <div className="min-h-[70vh] bg-slate-50 px-4 py-24">
-          <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
-            <h1 className="font-display text-2xl font-bold text-slate-950">Coach not found</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-600">That coach profile is no longer available.</p>
-            <Button asChild className="mt-5 rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
-              <Link to="/coaches">Find another coach</Link>
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    const introPackage = packages.find((pkg) => Number(pkg.sessions) === 1) || packages[0] || null;
-    const introDuration = duration || DURATIONS[0];
-    const introPrice = introPackage ? calcPrice(introPackage, introDuration) : null;
-
-    return (
-      <LoggedOutBookIntro
-        coach={coach}
-        packages={packages}
-        introPackage={introPackage}
-        introDuration={introDuration}
-        introPrice={introPrice}
-        availability={availability}
-        tzAbbr={tzAbbr}
-        selectedDate={selectedDate}
-        setSelectedDate={setSelectedDate}
-        selectedTime={selectedTime}
-        setSelectedTime={setSelectedTime}
-        goals={goals}
-        setGoals={setGoals}
-        isDateDisabled={isDateDisabled}
-        saveBookingIntent={saveBookingIntent}
-      />
-    );
-  }
-
   const canProceed = () => {
     switch (step) {
-      case 0: return !!coach;
-      case 1: return !!selectedPackage;
-      case 2: return !!duration;
-      case 3: return (!user || user.profile_setup_complete) && flexibleAvailabilityValid;
-      case 4: return true;
+      case STEP_COACH: return !!coach;
+      case STEP_ATHLETE: return !!selectedAthleteId;
+      case STEP_SPORT: return !!effectiveSport;
+      case STEP_FORMAT: return !!effectiveFormat;
+      case STEP_PACKAGE: return !!selectedPackage;
+      case STEP_CHECKOUT: return true;
       default: return false;
     }
+  };
+  const currentVisibleStepIndex = Math.max(0, visibleSteps.indexOf(step));
+  const goNextStep = () => {
+    const next = visibleSteps[currentVisibleStepIndex + 1];
+    if (next !== undefined) setStep(next);
+  };
+  const goBackStep = () => {
+    if (currentVisibleStepIndex <= 0) {
+      if (coachLocked && preCoachId) navigate(`/coaches/${preCoachId}`);
+      return;
+    }
+    setStep(visibleSteps[currentVisibleStepIndex - 1]);
   };
 
   const summaryProps = {
@@ -898,10 +1051,11 @@ export default function Book() {
     packageTotal,
     usingCredit: useExistingCredit,
     creditRemaining: existingCredit ? remainingCredits(existingCredit) : null,
+    creditRemainingBalance: existingCreditRemainingCents != null ? formatMoney(existingCreditRemainingCents / 100) : null,
     creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
     creditPackageName: existingCredit?.package_name ?? null,
-    bookingLocation,
-    availabilityMode,
+    sportLabel: effectiveSport ? sportLabel(effectiveSport) : (coachModel?.primarySport || 'Any sport'),
+    sessionFormatLabel: effectiveFormat ? formatLabel(effectiveFormat) : (coachModel?.serviceTypeLabel || 'Coach training area'),
   };
 
   return (
@@ -909,16 +1063,15 @@ export default function Book() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-        {/* Progress — when the coach is locked, the Coach step is hidden so the
-            indicator never invites returning to coach-selection. */}
+        {/* Progress — hidden steps are omitted so the user only sees choices
+            that are actually needed for this coach/package flow. */}
         {(() => {
-          const visibleSteps = coachLocked ? STEPS.slice(1) : STEPS;
-          const displayIndex = coachLocked ? step - 1 : step;
+          const displayIndex = Math.max(0, visibleSteps.indexOf(step));
           return (
             <div className="mb-12">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Step {displayIndex + 1} of {visibleSteps.length}</span>
-                <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{STEPS[step]}</span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{STEP_LABELS[step]}</span>
               </div>
               <div className="h-1 bg-secondary rounded-full overflow-hidden">
                 <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((displayIndex + 1) / visibleSteps.length) * 100}%` }} />
@@ -928,7 +1081,7 @@ export default function Book() {
         })()}
 
         {/* Step 0: Coach */}
-        {step === 0 && (
+        {step === STEP_COACH && (
           <div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-8">Select your coach</h2>
             {coaches.length === 0 ? (
@@ -958,34 +1111,117 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 1: Package */}
-        {step === 1 && (
+        {/* Step 1: Athlete */}
+        {step === STEP_ATHLETE && (
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Choose athlete</h2>
+            <p className="text-muted-foreground text-sm mb-8">Select which athlete this credit and future session are for.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {familyAthletes.map((athlete) => {
+                const selected = selectedAthleteId === athlete.id;
+                return (
+                  <button
+                    key={athlete.id}
+                    type="button"
+                    onClick={() => setSelectedAthleteId(athlete.id)}
+                    aria-pressed={selected}
+                    className={`rounded-lg border p-5 text-left transition-all ${selected ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}
+                  >
+                    <Users className="mb-3 h-5 w-5" aria-hidden="true" />
+                    <p className="text-lg font-semibold text-foreground">{athlete.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Credits and scheduling will be tied to this athlete.</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Sport */}
+        {step === STEP_SPORT && (
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Choose sport</h2>
+            <p className="text-muted-foreground text-sm mb-8">
+              {coach ? `${coach.first_name || 'This coach'} offers multiple sports. Pick the one you want to train.` : 'Pick a sport to train.'}
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {uniqueCoachSports.map((sport) => {
+                const selected = effectiveSport === sport;
+                return (
+                  <button
+                    key={sport}
+                    type="button"
+                    onClick={() => setSelectedSport(sport)}
+                    aria-pressed={selected}
+                    className={`rounded-lg border p-5 text-left transition-all ${selected ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}
+                  >
+                    <Sparkles className="mb-3 h-5 w-5" aria-hidden="true" />
+                    <p className="text-lg font-semibold text-foreground">{sportLabel(sport)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Package options will be filtered to this sport.</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Location / format */}
+        {step === STEP_FORMAT && (
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Choose location or format</h2>
+            <p className="text-muted-foreground text-sm mb-8">Only the formats configured by this coach are shown.</p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {formatOptions.map((option) => {
+                const selected = effectiveFormat === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSelectedSessionFormat(option.value)}
+                    aria-pressed={selected}
+                    className={`rounded-lg border p-5 text-left transition-all ${selected ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}
+                  >
+                    <MapPin className="mb-3 h-5 w-5" aria-hidden="true" />
+                    <p className="text-lg font-semibold text-foreground">{option.label}</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{option.body}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Package */}
+        {step === STEP_PACKAGE && (
           <div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Select a package</h2>
-            <p className="text-muted-foreground text-sm mb-8">Multi-session packages give you credits to schedule sessions whenever you're ready.</p>
+            <p className="text-muted-foreground text-sm mb-8">
+              Packages create prepaid LevelCoach credit. You can schedule now after checkout, schedule later, or use remaining credit with another published coach.
+            </p>
 
             {existingCredit && (
               <div className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                <p className="text-sm font-bold text-primary mb-1">You have existing sessions</p>
+                <p className="text-sm font-bold text-primary mb-1">You have existing credit</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  <strong>{remainingCredits(existingCredit)}</strong> session(s) remaining on <strong>{existingCredit.package_name}</strong>
-                  {existingCredit.session_duration_minutes ? ` · ${existingCredit.session_duration_minutes / 60} hr each` : ''}.
+                  <strong>
+                    {remainingCreditBalance(existingCredit) !== null
+                      ? `$${formatMoney(remainingCreditBalance(existingCredit))}`
+                      : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'}`}
+                  </strong>
+                  {' '}remaining on <strong>{existingCredit.package_name || 'your prepaid balance'}</strong>.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => {
                       setUseExistingCredit(true);
-                      setSkipToSchedule(true);
-                      setPaymentConfirmed(true);
                       setCreditRecord(existingCredit);
                       if (existingCredit.session_duration_minutes) {
                         const creditDur = durationFromMinutes(existingCredit.session_duration_minutes);
                         if (creditDur) setDuration(creditDur);
                       }
-                      setScheduling(true);
                     }}
-                    className="px-4 py-2 rounded-md border text-xs font-semibold transition-all border-accent bg-accent/10 text-accent hover:bg-accent/20">
-                    Use existing sessions — schedule now
+                    className={`px-4 py-2 rounded-md border text-xs font-semibold transition-all ${useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
+                    Use existing balance
                   </button>
                   <button onClick={() => setUseExistingCredit(false)}
                     className={`px-4 py-2 rounded-md border text-xs font-semibold transition-all ${!useExistingCredit ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}>
@@ -995,16 +1231,16 @@ export default function Book() {
               </div>
             )}
 
-            {packages.length === 0 && (
+            {filteredPackages.length === 0 && (
               <div className="rounded-lg border border-dashed border-border p-8 text-center">
                 <Package className="w-6 h-6 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground">
-                  {coach ? `${coach.name || 'This coach'} hasn't published any packages yet.` : 'Select a coach to see their packages.'}
+                  {coach ? `${coach.name || 'This coach'} has no packages for this sport and format yet.` : 'Select a coach to see their packages.'}
                 </p>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {packages.map((pkg) => {
+              {filteredPackages.map((pkg) => {
                 const totalCents = packagePriceCents(pkg);
                 const totalLabel = totalCents != null
                   ? `$${(totalCents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -1018,9 +1254,9 @@ export default function Book() {
                   <button key={pkg.id} onClick={() => {
                     setSelectedPackage(pkg);
                     setUseExistingCredit(false);
-                    // A self-contained package fixes the session length; pre-set
-                    // it so the Duration step becomes a confirmation.
-                    setDuration(pkgDuration != null ? durationFromMinutes(pkgDuration) : null);
+                    // Packages carry the session length; legacy packages fall
+                    // back to a standard 60-minute session.
+                    setDuration(durationFromMinutes(pkgDuration || 60));
                   }}
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
@@ -1039,6 +1275,11 @@ export default function Book() {
                       {pkgDuration != null ? ` · ${pkgDuration} min` : ''}
                       {pkg.session_type ? ` · ${String(pkg.session_type).replace('_', ' ')}` : ''}
                     </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {Array.isArray(pkg.sport_keys) && pkg.sport_keys.length ? pkg.sport_keys.map(sportLabel).join(', ') : 'All selected sports'}
+                      {' · '}
+                      {Array.isArray(pkg.location_formats) && pkg.location_formats.length ? pkg.location_formats.map(formatLabel).join(', ') : 'All selected formats'}
+                    </p>
                     {pkg.description && <p className="text-sm text-muted-foreground mt-3">{pkg.description}</p>}
                     {pkg.includes?.length > 0 && (
                       <ul className="mt-3 space-y-1">
@@ -1056,216 +1297,19 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 2: Duration */}
-        {step === 2 && (
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Session duration</h2>
-            {isSelfContained(selectedPackage) ? (
-              <>
-                <p className="text-muted-foreground text-sm mb-8">
-                  This package sets the session length. Confirm and continue.
-                </p>
-                <div className="rounded-lg border border-accent bg-accent/10 p-6 max-w-sm">
-                  <Timer className="w-5 h-5 text-accent mb-2" aria-hidden="true" />
-                  <p className="text-lg font-semibold">
-                    {duration?.label || `${packageDurationMinutes(selectedPackage)} Minutes`}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions · ` : ''}
-                    ${(packagePriceCents(selectedPackage) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} total
-                  </p>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-muted-foreground text-sm mb-8">Longer sessions get a discount off the hourly rate.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {DURATIONS.map((d) => {
-                    const price = calcPrice(selectedPackage, d);
-                    const isSelected = duration?.minutes === d.minutes;
-                    return (
-                      <button key={d.minutes} onClick={() => setDuration(d)}
-                        className={`p-6 rounded-lg border text-center transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
-                        {d.discount > 0 && (
-                          <span className="absolute top-2 right-2 text-xs font-display bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
-                            -{Math.round(d.discount * 100)}%
-                          </span>
-                        )}
-                        <Timer className={`w-5 h-5 mx-auto mb-2 ${isSelected ? 'text-accent' : 'text-muted-foreground'}`} aria-hidden="true" />
-                        <span className="text-lg font-semibold block">{d.label}</span>
-                        {price !== null && (
-                          <span className={`text-sm font-display font-bold mt-1 block ${isSelected ? 'text-accent' : 'text-muted-foreground'}`}>${price}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Step 3: Preferences */}
-        {step === 3 && (
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Availability & notes</h2>
-            <p className="text-muted-foreground text-sm mb-8">
-              Choose a specific scheduling path or share a flexible window the coach can work with.
-            </p>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {[
-                ['exact', 'Choose exact times', 'Pick session times after checkout using the coach calendar.'],
-                ['flexible', 'I am flexible', 'Share date windows, preferred days, and start-time preferences.'],
-              ].map(([value, title, body]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setAvailabilityMode(value)}
-                  className={`rounded-lg border p-5 text-left transition-all ${
-                    availabilityMode === value
-                      ? 'border-accent bg-accent/10 text-foreground'
-                      : 'border-border bg-card text-muted-foreground hover:border-accent/30'
-                  }`}
-                >
-                  <p className="text-lg font-bold tracking-[-0.01em]">{title}</p>
-                  <p className="mt-2 text-sm leading-6">{body}</p>
-                </button>
-              ))}
-            </div>
-
-            {availabilityMode === 'flexible' && (
-              <div className="mt-6 rounded-lg border border-border bg-card p-5">
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="block">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Date window</span>
-                    <div className="mt-2">
-                      <SelectMenu
-                        value={availabilityPreference.dateWindow}
-                        onChange={(dateWindow) => setAvailabilityPreference((prev) => ({ ...prev, dateWindow }))}
-                        ariaLabel="Date window"
-                        options={DATE_WINDOWS}
-                        triggerClassName="h-11 text-sm font-semibold"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Start window</span>
-                    <div className="mt-2 grid grid-cols-2 gap-3">
-                      <input
-                        type="time"
-                        value={availabilityPreference.earliestStart}
-                        onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, earliestStart: event.target.value }))}
-                        className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
-                        aria-label="Earliest start"
-                      />
-                      <input
-                        type="time"
-                        value={availabilityPreference.latestStart}
-                        onChange={(event) => setAvailabilityPreference((prev) => ({ ...prev, latestStart: event.target.value }))}
-                        className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-accent"
-                        aria-label="Latest start"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Preferred days</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {PREFERRED_DAYS.map((day) => (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => toggleAvailabilityArray('preferredDays', day)}
-                        aria-pressed={availabilityPreference.preferredDays.includes(day)}
-                        className={`rounded-full border px-3 py-2 text-xs font-bold transition-all ${
-                          availabilityPreference.preferredDays.includes(day)
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border text-muted-foreground hover:border-accent/30'
-                        }`}
-                      >
-                        {day.slice(0, 3)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Time of day</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {TIME_OF_DAY_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => toggleAvailabilityArray('timeOfDay', option.value)}
-                        aria-pressed={availabilityPreference.timeOfDay.includes(option.value)}
-                        className={`rounded-full border px-4 py-2 text-xs font-semibold transition-all ${
-                          availabilityPreference.timeOfDay.includes(option.value)
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border text-muted-foreground hover:border-accent/30'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-lg bg-secondary/50 p-4 text-sm text-muted-foreground">
-                  Location radius: <span className="font-bold text-foreground">{bookingLocation.radius || 15} miles</span>
-                  {bookingLocation.label ? ` from ${bookingLocation.label}` : (coachModel?.locationLabel ? ` from ${coachModel.locationLabel}` : ' from the coach service area')}
-                </div>
-
-                {!flexibleAvailabilityValid && (
-                  <p className="mt-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600">
-                    Select at least one preferred day, one time of day, and a valid start window.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="mt-6">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-2">Optional notes</p>
-              <Textarea
-                placeholder="Anything the coach should know before the first session?"
-                value={goals}
-                onChange={(e) => setGoals(e.target.value)}
-                className="bg-card border-border"
-                rows={4}
-              />
-            </div>
-
-            {user && !user.profile_setup_complete && (
-              <div className="mt-6 p-4 rounded-lg bg-accent/10 border border-accent/30">
-                <p className="text-sm font-bold text-accent mb-1">Profile setup required</p>
-                <p className="text-xs text-muted-foreground mb-3">Complete your profile before proceeding to checkout.</p>
-                <Button
-                  onClick={() => setShowProfileGate(true)}
-                  size="sm"
-                  className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
-                >
-                  Set up profile
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
         {showProfileGate && user && (
           <OnboardingModal
             user={user}
             onComplete={() => {
               setShowProfileGate(false);
               refetch();
-              setStep(4);
+              setStep(STEP_CHECKOUT);
             }}
           />
         )}
 
-        {/* Step 4: Checkout */}
-        {step === 4 && (
+        {/* Step 5: Checkout */}
+        {step === STEP_CHECKOUT && (
           <div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-8">Checkout</h2>
 
@@ -1274,14 +1318,13 @@ export default function Book() {
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-4">Order summary</p>
               <div className="space-y-1">
                 {[
+                  ['Athlete', selectedAthleteName],
+                  ['Sport', effectiveSport ? sportLabel(effectiveSport) : 'Any sport'],
+                  ['Location / format', effectiveFormat ? formatLabel(effectiveFormat) : (coachModel?.serviceTypeLabel || 'Coach training area')],
                   ['Package', selectedPackage?.name],
                   ['Sessions', selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions` : '1 session'],
                   ['Session duration', duration?.label],
                   ['Coach', coach ? `${coach.first_name} ${coach.last_name}` : ''],
-                  ['Location', bookingLocation.label
-                    ? `${bookingLocation.label} (${bookingLocation.radius || 15} mi)`
-                    : (coachModel?.locationLabel || 'Coach training area')],
-                  ['Availability', availabilityMode === 'flexible' ? 'Flexible window' : 'Exact scheduling'],
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between py-2 border-b border-border last:border-0">
                     <span className="text-muted-foreground text-sm">{label}</span>
@@ -1292,17 +1335,28 @@ export default function Book() {
               <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
                 <span className="text-sm font-semibold">Total charged today</span>
                 <span className="proof-number text-3xl sm:text-4xl text-foreground">
-                  {useExistingCredit ? '$0' : (packageTotal != null ? `$${formatMoney(packageTotal)}` : '—')}
+                  {useExistingCredit
+                    ? (existingCreditAmountDueCents > 0 ? `$${formatMoney(existingCreditAmountDueCents / 100)}` : '$0')
+                    : (packageTotal != null ? `$${formatMoney(packageTotal)}` : '—')}
                 </span>
               </div>
               {useExistingCredit ? (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Covered by your existing credits{existingCredit
-                    ? ` — ${remainingCreditBalance(existingCredit) !== null
-                      ? `$${formatMoney(remainingCreditBalance(existingCredit))} balance remaining`
-                      : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'} remaining`} on ${existingCredit.package_name || 'your package'}`
-                    : ''}.
-                </p>
+                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  <p>
+                    Selected session price: <span className="font-semibold text-foreground">{sessionPriceCents != null ? `$${formatMoney(sessionPriceCents / 100)}` : 'Calculated at booking'}</span>
+                  </p>
+                  <p>
+                    Existing balance: <span className="font-semibold text-foreground">{existingCreditRemainingCents != null ? `$${formatMoney(existingCreditRemainingCents / 100)}` : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'}`}</span>
+                    {existingCredit?.package_name ? ` on ${existingCredit.package_name}` : ''}
+                  </p>
+                  {existingCreditAmountDueCents > 0 ? (
+                    <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-600">
+                      This balance is short by {`$${formatMoney(existingCreditAmountDueCents / 100)}`}. Top-up checkout will be required before this session can be confirmed.
+                    </p>
+                  ) : (
+                    <p>Covered by your existing LevelCoach credit. Any cheaper-session leftover stays on the credit balance.</p>
+                  )}
+                </div>
               ) : (
                 <>
                   {selectedPackage?.sessions > 1 && sessionPrice != null && (
@@ -1319,6 +1373,20 @@ export default function Book() {
                 </>
               )}
             </div>
+
+            {user && !user.profile_setup_complete && (
+              <div className="mb-6 rounded-lg border border-accent/30 bg-accent/10 p-4">
+                <p className="text-sm font-bold text-accent mb-1">Profile setup required</p>
+                <p className="text-xs text-muted-foreground mb-3">Complete your profile before checkout or credit booking.</p>
+                <Button
+                  onClick={() => setShowProfileGate(true)}
+                  size="sm"
+                  className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90"
+                >
+                  Set up profile
+                </Button>
+              </div>
+            )}
 
             {user && (
               <div className="mb-6">
@@ -1381,7 +1449,7 @@ export default function Book() {
                         sessionDurationMinutes={duration?.minutes}
                         extraPayload={checkoutExtraPayload}
                         onBeforeCheckout={ensureFlexiblePreferenceValid}
-                        disabled={!legalReadyForCheckout || !selectedPackage?.id || !coach?.id}
+                        disabled={!legalReadyForCheckout || !user.profile_setup_complete || !selectedPackage?.id || !coach?.id}
                       />
                     </div>
                   </div>
@@ -1401,10 +1469,15 @@ export default function Book() {
                 <p className="text-xs text-muted-foreground mb-4">
                   Use your active training credits to schedule this session.
                 </p>
-                <Button onClick={handleUseExistingCredits} disabled={submitting || !existingCredit}
+                <Button onClick={handleUseExistingCredits} disabled={submitting || !existingCredit || !user?.profile_setup_complete || existingCreditAmountDueCents > 0}
                   className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 h-12 text-base">
                   Use my credits & continue
                 </Button>
+                {existingCreditAmountDueCents > 0 && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Add a top-up for {`$${formatMoney(existingCreditAmountDueCents / 100)}`} before this credit can reserve the selected coach's session.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1416,34 +1489,27 @@ export default function Book() {
         </div>
 
         {/* Navigation */}
-        {step < 4 && (
+        {step !== STEP_CHECKOUT && (
           <div className="flex justify-between mt-6 lg:mt-10">
             <Button
               variant="outline"
               onClick={() => {
-                // When the coach is locked and we're on the first usable step,
-                // "Back" returns to the coach's profile rather than the
-                // coach-selection list the user never chose from.
-                if (coachLocked && step === minStep) {
-                  navigate(`/coaches/${preCoachId}`);
-                  return;
-                }
-                setStep(Math.max(minStep, step - 1));
+                goBackStep();
               }}
-              disabled={!coachLocked && step === 0}
+              disabled={!coachLocked && currentVisibleStepIndex === 0}
               className="font-semibold"
             >
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
-            <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}
+            <Button onClick={goNextStep} disabled={!canProceed()}
               className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
               Next <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </div>
         )}
-        {step === 4 && (
+        {step === STEP_CHECKOUT && (
           <div className="flex mt-6">
-            <Button variant="outline" onClick={() => setStep(3)} className="font-semibold">
+            <Button variant="outline" onClick={goBackStep} className="font-semibold">
               <ArrowLeft className="mr-2 w-4 h-4" /> Back
             </Button>
           </div>

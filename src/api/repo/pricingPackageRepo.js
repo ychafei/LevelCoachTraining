@@ -48,7 +48,7 @@ export const pricingPackageRepo = {
     ]).catch(() => ({ documents: [] }));
     return res.documents
       .map(mapDoc)
-      .filter((p) => !p.coach_id)
+      .filter((p) => !p.coach_id && !p.organization_id)
       .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
   },
 };

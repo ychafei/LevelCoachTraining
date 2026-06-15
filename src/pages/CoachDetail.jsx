@@ -58,6 +58,17 @@ function StarRow({ rating, className = 'h-4 w-4' }) {
   );
 }
 
+function packagePriceCents(pkg) {
+  const cents = Number(pkg?.price_cents);
+  if (Number.isInteger(cents) && cents > 0) return cents;
+  const dollars = Number(pkg?.price);
+  return Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : 0;
+}
+
+function formatCents(cents) {
+  return `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
 export default function CoachDetail() {
   const { coachId } = useParams();
   const location = useLocation();
@@ -177,10 +188,14 @@ export default function CoachDetail() {
   }));
   const org = coach.organization;
   // Pricing table pool: the coach's own packages, else the platform-default
-  // templates (no coach_id) — exactly what the booking flow will offer.
+  // templates (no coach_id/org_id) — exactly what the booking flow will offer.
   const ownPackages = packages.filter((pkg) => pkg.coach_id === coachId);
-  const packagePool = (ownPackages.length ? ownPackages : packages.filter((pkg) => !pkg.coach_id))
-    .filter((pkg) => Number(pkg.price) > 0);
+  const orgPackages = org?.id
+    ? packages.filter((pkg) => pkg.organization_id === org.id && (!pkg.coach_id || pkg.coach_id === coachId))
+    : [];
+  const defaultPackages = packages.filter((pkg) => !pkg.coach_id && !pkg.organization_id);
+  const packagePool = (ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages)
+    .filter((pkg) => packagePriceCents(pkg) > 0);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -327,9 +342,9 @@ export default function CoachDetail() {
               <div className="mt-4">
                 <p className="eyebrow text-slate-500">What happens next</p>
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-slate-600">
-                  <li>Pick a package and time</li>
-                  <li>Sign the legal packet at checkout</li>
-                  <li>Message your coach and track progress</li>
+                  <li>Choose the athlete, sport, format, and package</li>
+                  <li>Pay LevelCoach securely for prepaid credit</li>
+                  <li>Schedule now, schedule later, or use remaining credit elsewhere</li>
                 </ol>
               </div>
               <Button asChild variant="outline" className="mt-4 h-11 w-full rounded-lg border-blue-200 bg-white text-sm font-bold text-blue-700 hover:bg-blue-50">
@@ -368,13 +383,13 @@ export default function CoachDetail() {
                   <tbody>
                     {packagePool.map((pkg) => {
                       const sessions = Number(pkg.sessions) || 1;
-                      const price = Number(pkg.price) || 0;
+                      const priceCents = packagePriceCents(pkg);
                       return (
                         <tr key={pkg.id} className="border-b border-slate-100 last:border-0">
                           <td className="py-2.5 pr-4 font-semibold text-slate-950">{pkg.name}</td>
                           <td className="py-2.5 pr-4 text-slate-600">{sessions === 1 ? '1 session' : `${sessions} sessions`}</td>
-                          <td className="proof-number py-2.5 pr-4 text-right text-slate-950">${price.toLocaleString('en-US')}</td>
-                          <td className="py-2.5 text-right text-slate-600">${Math.round(price / sessions).toLocaleString('en-US')}</td>
+                          <td className="proof-number py-2.5 pr-4 text-right text-slate-950">{formatCents(priceCents)}</td>
+                          <td className="py-2.5 text-right text-slate-600">{formatCents(Math.round(priceCents / sessions))}</td>
                         </tr>
                       );
                     })}
@@ -553,17 +568,6 @@ export default function CoachDetail() {
                   <p className="text-sm font-bold text-slate-950">Signed legal packet</p>
                   <p className="mt-0.5 text-xs leading-5 text-slate-600">
                     Coaches must sign the current required legal packet before they can publish a profile.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                  <CreditCard className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-slate-950">Stripe payout onboarding</p>
-                  <p className="mt-0.5 text-xs leading-5 text-slate-600">
-                    Coaches must complete Stripe payout onboarding before they can publish; every payment is processed by Stripe.
                   </p>
                 </div>
               </div>

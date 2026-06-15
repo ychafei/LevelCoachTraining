@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { bpsToPercentLabel, formatCents } from '@/features/admin/money';
 import { logAdminAction } from '@/lib/audit';
+import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import {
   AlertTriangle,
   Building2,
@@ -45,6 +46,13 @@ const SESSION_TYPES = [
   { value: 'evaluation', label: 'Evaluation' },
   { value: 'virtual', label: 'Virtual' },
 ];
+const LOCATION_FORMATS = [
+  { value: 'training_facility', label: 'Training facility' },
+  { value: 'coach_travels', label: 'Coach travels' },
+  { value: 'online', label: 'Online' },
+  { value: 'organization_facility', label: 'Organization/facility' },
+  { value: 'hybrid', label: 'Hybrid' },
+];
 
 const empty = {
   name: '',
@@ -55,12 +63,16 @@ const empty = {
   description: '',
   includes: [],
   badge: '',
+  sport_keys: [],
+  location_formats: [],
   is_active: true,
   is_visible: true,
   display_order: '0',
   coach_id: '',
   organization_id: '',
 };
+const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
+const formatLabel = (value) => LOCATION_FORMATS.find((item) => item.value === value)?.label || value;
 
 function parseInteger(value, min, max) {
   const raw = String(value ?? '').trim();
@@ -139,6 +151,8 @@ function draftFromPackage(pkg) {
     description: pkg.description || '',
     includes: Array.isArray(pkg.includes) ? pkg.includes : [],
     badge: pkg.badge || '',
+    sport_keys: Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [],
+    location_formats: Array.isArray(pkg.location_formats) ? pkg.location_formats : [],
     is_active: pkg.is_active !== false,
     is_visible: pkg.is_visible !== false,
     display_order: String(Number(pkg.display_order) || 0),
@@ -172,6 +186,12 @@ function normalizeForSave(draft, orgLinks) {
   const includes = Array.isArray(draft.includes)
     ? draft.includes.map((item) => cleanString(item, 500)).filter(Boolean).slice(0, 20)
     : [];
+  const sportKeys = Array.isArray(draft.sport_keys)
+    ? [...new Set(draft.sport_keys.map((item) => cleanString(item, 120).toLowerCase()).filter(Boolean))].slice(0, 20)
+    : [];
+  const locationFormats = Array.isArray(draft.location_formats)
+    ? [...new Set(draft.location_formats.map((item) => cleanString(item, 120).toLowerCase()).filter((item) => LOCATION_FORMATS.some((format) => format.value === item)))].slice(0, 20)
+    : [];
 
   return {
     data: {
@@ -184,6 +204,8 @@ function normalizeForSave(draft, orgLinks) {
       description: cleanString(draft.description, 1000),
       includes,
       badge: cleanString(draft.badge, 100),
+      sport_keys: sportKeys,
+      location_formats: locationFormats,
       is_active: draft.is_active === true,
       is_visible: draft.is_visible === true,
       display_order: displayOrder,
@@ -411,6 +433,18 @@ export default function AdminPricing() {
     setIncludeInput('');
   };
 
+  const toggleEditingList = (key, value) => {
+    setEditing((draft) => {
+      const current = Array.isArray(draft?.[key]) ? draft[key] : [];
+      return {
+        ...draft,
+        [key]: current.includes(value)
+          ? current.filter((item) => item !== value)
+          : [...current, value],
+      };
+    });
+  };
+
   const save = async () => {
     const normalized = normalizeForSave(editing, orgLinks);
     if (normalized.error) {
@@ -636,6 +670,11 @@ export default function AdminPricing() {
                         {getSessions(pkg)} session{getSessions(pkg) === 1 ? '' : 's'} - {Number(pkg.duration_minutes) || 60} min
                         {pkg.session_type ? ` - ${String(pkg.session_type).replace('_', ' ')}` : ''}
                       </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {Array.isArray(pkg.sport_keys) && pkg.sport_keys.length ? pkg.sport_keys.map((sport) => SPORT_LABELS.get(sport) || sport).join(', ') : 'All sports'}
+                        {' - '}
+                        {Array.isArray(pkg.location_formats) && pkg.location_formats.length ? pkg.location_formats.map(formatLabel).join(', ') : 'All formats'}
+                      </p>
                       {pkg.description && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{pkg.description}</p>}
                     </div>
 
@@ -840,6 +879,42 @@ export default function AdminPricing() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Sports</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Leave blank for all sports.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {SPORTS_CATALOG.map((sport) => (
+                    <button
+                      key={sport.sport_key}
+                      type="button"
+                      onClick={() => toggleEditingList('sport_keys', sport.sport_key)}
+                      aria-pressed={editing.sport_keys.includes(sport.sport_key)}
+                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${editing.sport_keys.includes(sport.sport_key) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                    >
+                      {sport.display_name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Session formats</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Leave blank for every configured format.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LOCATION_FORMATS.map((format) => (
+                    <button
+                      key={format.value}
+                      type="button"
+                      onClick={() => toggleEditingList('location_formats', format.value)}
+                      aria-pressed={editing.location_formats.includes(format.value)}
+                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${editing.location_formats.includes(format.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                    >
+                      {format.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">

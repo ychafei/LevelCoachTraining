@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Loader2, Package as PackageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 
 const SESSION_TYPES = [
   { value: 'private', label: 'Private (1-on-1)' },
@@ -18,6 +19,13 @@ const SESSION_TYPES = [
 ];
 
 const DURATIONS = [30, 45, 60, 75, 90, 120];
+const LOCATION_FORMATS = [
+  { value: 'training_facility', label: 'Training facility' },
+  { value: 'coach_travels', label: 'Coach travels' },
+  { value: 'online', label: 'Online' },
+  { value: 'organization_facility', label: 'Organization/facility' },
+  { value: 'hybrid', label: 'Hybrid' },
+];
 
 const emptyDraft = {
   package_id: null,
@@ -28,13 +36,19 @@ const emptyDraft = {
   session_type: 'private',
   description: '',
   badge: '',
+  sport_keys: [],
+  location_formats: [],
   is_active: true,
 };
 
 const usd = (cents) => `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
+const formatLabel = (value) => LOCATION_FORMATS.find((item) => item.value === value)?.label || value;
 
 function PackageRow({ pkg, onEdit, onDelete, busy }) {
   const per = pkg.sessions > 1 ? ` · ${usd(Math.round(pkg.price_cents / pkg.sessions))}/session` : '';
+  const sports = Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [];
+  const formats = Array.isArray(pkg.location_formats) ? pkg.location_formats : [];
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
       <div className="min-w-0">
@@ -46,6 +60,11 @@ function PackageRow({ pkg, onEdit, onDelete, busy }) {
         <p className="text-xs text-muted-foreground mt-0.5">
           {pkg.sessions} session{pkg.sessions === 1 ? '' : 's'} · {pkg.duration_minutes} min · <span className="text-accent font-semibold">{usd(pkg.price_cents)}</span>{per}
           {pkg.session_type ? ` · ${pkg.session_type.replace('_', ' ')}` : ''}
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {sports.length ? sports.map((sport) => SPORT_LABELS.get(sport) || sport).join(', ') : 'All sports'}
+          {' · '}
+          {formats.length ? formats.map(formatLabel).join(', ') : 'All formats'}
         </p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -97,10 +116,23 @@ export default function OrgPackagesTab({ organizationId, isOrgAdmin }) {
     session_type: pkg.session_type || 'private',
     description: pkg.description || '',
     badge: pkg.badge || '',
+    sport_keys: Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [],
+    location_formats: Array.isArray(pkg.location_formats) ? pkg.location_formats : [],
     is_active: pkg.is_active !== false,
   });
 
   const update = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const toggleList = (key, value) => {
+    setDraft((d) => {
+      const current = Array.isArray(d[key]) ? d[key] : [];
+      return {
+        ...d,
+        [key]: current.includes(value)
+          ? current.filter((item) => item !== value)
+          : [...current, value],
+      };
+    });
+  };
 
   const save = async () => {
     const priceDollars = Number(draft.price_dollars);
@@ -118,6 +150,8 @@ export default function OrgPackagesTab({ organizationId, isOrgAdmin }) {
         session_type: draft.session_type,
         description: draft.description.trim(),
         badge: draft.badge.trim(),
+        sport_keys: draft.sport_keys,
+        location_formats: draft.location_formats,
         is_active: draft.is_active,
       });
       toast.success(draft.package_id ? 'Package updated' : 'Package created');
@@ -168,6 +202,11 @@ export default function OrgPackagesTab({ organizationId, isOrgAdmin }) {
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {pkg.sessions} session{pkg.sessions === 1 ? '' : 's'} · {pkg.duration_minutes} min · <span className="text-accent font-semibold">{usd(pkg.price_cents)}</span>
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {Array.isArray(pkg.sport_keys) && pkg.sport_keys.length ? pkg.sport_keys.map((sport) => SPORT_LABELS.get(sport) || sport).join(', ') : 'All sports'}
+                  {' · '}
+                  {Array.isArray(pkg.location_formats) && pkg.location_formats.length ? pkg.location_formats.map(formatLabel).join(', ') : 'All formats'}
                 </p>
               </div>
             ))}
@@ -241,6 +280,40 @@ export default function OrgPackagesTab({ organizationId, isOrgAdmin }) {
             <div className="sm:col-span-2">
               <Label htmlFor="org-pkg-desc">Description (optional)</Label>
               <Textarea id="org-pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Sports</Label>
+              <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for all roster sports.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {SPORTS_CATALOG.map((sport) => (
+                  <button
+                    key={sport.sport_key}
+                    type="button"
+                    onClick={() => toggleList('sport_keys', sport.sport_key)}
+                    aria-pressed={draft.sport_keys.includes(sport.sport_key)}
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.sport_key) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                  >
+                    {sport.display_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Session formats</Label>
+              <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for every configured format.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {LOCATION_FORMATS.map((format) => (
+                  <button
+                    key={format.value}
+                    type="button"
+                    onClick={() => toggleList('location_formats', format.value)}
+                    aria-pressed={draft.location_formats.includes(format.value)}
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.location_formats.includes(format.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                  >
+                    {format.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.is_active} onChange={(e) => update({ is_active: e.target.checked })} />

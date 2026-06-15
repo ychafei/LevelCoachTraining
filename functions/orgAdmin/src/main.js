@@ -602,8 +602,26 @@ async function removeMember(databases, profile, payload) {
 // session length.
 
 const SESSION_TYPES = ['private', 'small_group', 'team', 'evaluation', 'virtual'];
+const LOCATION_FORMATS = ['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid'];
 const MIN_PRICE_CENTS = 500;            // $5.00 floor
 const MAX_PRICE_CENTS = 5_000_00;       // $5,000 ceiling per package
+
+function cleanList(value, { maxItems = 20, maxLength = 120, allow = null } = {}) {
+  const input = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+  const out = [];
+  for (const item of input) {
+    const clean = String(item || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, maxLength);
+    if (!clean) continue;
+    if (allow && !allow.includes(clean)) continue;
+    if (!out.includes(clean)) out.push(clean);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
 
 function packageView(doc) {
   return {
@@ -617,6 +635,8 @@ function packageView(doc) {
     session_type: doc.session_type || '',
     description: doc.description || '',
     badge: doc.badge || '',
+    sport_keys: Array.isArray(doc.sport_keys) ? doc.sport_keys : [],
+    location_formats: Array.isArray(doc.location_formats) ? doc.location_formats : [],
     is_active: doc.is_active !== false,
     display_order: Number(doc.display_order) || 0,
   };
@@ -657,6 +677,8 @@ async function savePackage(databases, profile, payload) {
   const badge = payload.badge != null ? str(payload.badge, 0, 100) ?? '' : '';
   const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
   const isActive = payload.is_active !== false;
+  const sportKeys = cleanList(payload.sport_keys || payload.sports);
+  const locationFormats = cleanList(payload.location_formats || payload.session_formats, { allow: LOCATION_FORMATS });
 
   const data = {
     organization_id: orgId,
@@ -669,6 +691,8 @@ async function savePackage(databases, profile, payload) {
     session_type: sessionType,
     description,
     badge,
+    sport_keys: sportKeys,
+    location_formats: locationFormats,
     display_order: displayOrder,
     is_active: isActive,
     is_visible: isActive,                  // legacy visibility mirror

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, ChevronDown, DollarSign, MapPin, Package, Timer, User, Zap } from 'lucide-react';
+import { ChevronDown, DollarSign, MapPin, Package, Sparkles, Timer, User, WalletCards } from 'lucide-react';
 
 // Persistent summary used inside the booking flow. Same content in two layouts:
 //   - sidebar:     sticky panel for desktop (lg:)
@@ -32,32 +32,30 @@ function Body({
   packageTotal,
   usingCredit,
   creditRemaining,
+  creditRemainingBalance,
   creditDurationMinutes,
   creditPackageName,
-  bookingLocation,
-  availabilityMode,
+  sportLabel,
+  sessionFormatLabel,
 }) {
   const coachLabel = coach ? `${coach.first_name} ${coach.last_name}${coach.is_head_coach ? ' · Head' : ''}` : '';
   const pkgLabel = pkg ? pkg.name : '';
   const durationLabel = duration?.label || (creditDurationMinutes ? `${creditDurationMinutes / 60} hr${creditDurationMinutes > 60 ? 's' : ''}` : '');
-  const bookingLocationLabel = bookingLocation?.label
-    ? `${bookingLocation.label} · ${bookingLocation.radius || 15} mi`
-    : (coachLocationLabel || '');
-  const availabilityLabel = availabilityMode === 'flexible' ? 'Flexible window' : 'Exact scheduling';
+  const bookingLocationLabel = sessionFormatLabel || coachLocationLabel || '';
 
   return (
     <div className="divide-y divide-border">
-      <Row label="Location" value={bookingLocationLabel} icon={MapPin} />
-      <Row label="Availability" value={availabilityLabel} icon={CalendarDays} />
       <Row label="Coach" value={coachLabel} icon={User} />
+      <Row label="Sport" value={sportLabel} icon={Sparkles} />
+      <Row label="Format" value={bookingLocationLabel} icon={MapPin} />
       {usingCredit ? (
         <>
           <Row label="Package" value={creditPackageName} icon={Package} />
           <Row
-            label="Sessions left"
-            value={creditRemaining != null ? `${creditRemaining}` : ''}
-            icon={Zap}
-            hint={creditRemaining != null && creditRemaining > 0 ? 'using existing credits' : undefined}
+            label="Credit"
+            value={creditRemainingBalance != null ? `$${creditRemainingBalance}` : (creditRemaining != null ? `${creditRemaining}` : '')}
+            icon={WalletCards}
+            hint="using existing balance"
           />
           <Row label="Duration" value={durationLabel} icon={Timer} />
         </>
@@ -93,7 +91,8 @@ export default function BookingSummaryCard(props) {
     const parts = [];
     if (props.coach) parts.push(`${props.coach.first_name}`);
     if (props.usingCredit) {
-      if (props.creditRemaining != null) parts.push(`${props.creditRemaining} left`);
+      if (props.creditRemainingBalance != null) parts.push(`$${props.creditRemainingBalance} credit`);
+      else if (props.creditRemaining != null) parts.push(`${props.creditRemaining} left`);
     } else if (props.pkg) {
       parts.push(props.pkg.name);
     }

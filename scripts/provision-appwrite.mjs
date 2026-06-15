@@ -430,6 +430,9 @@ async function provisionSessions() {
   // during migration but no longer drive payout math.
   await attrString('sessions', 'credit_reservation_id', 64);
   await attrString('sessions', 'offering_id', 64);
+  await attrString('sessions', 'sport_key', 120);
+  await attrString('sessions', 'session_format', 120);
+  await attrString('sessions', 'session_format_label', 300);
   await attrInt('sessions', 'reserved_amount_cents');
   await attrInt('sessions', 'price_snapshot_cents');
   await attrString('sessions', 'payout_plan_snapshot', 20000);
@@ -623,6 +626,8 @@ async function provisionPricingPackages() {
   await attrInt('pricing_packages',    'price_cents');                      // authoritative total in cents
   await attrInt('pricing_packages',    'duration_minutes');                 // session length
   await attrString('pricing_packages', 'session_type', 120);
+  await attrString('pricing_packages', 'sport_keys', 120, false, null, true);       // empty = all coach sports
+  await attrString('pricing_packages', 'location_formats', 120, false, null, true); // empty = all configured formats
   await attrBool('pricing_packages',   'is_active', false, true);
 
   await waitAttributesReady('pricing_packages');
@@ -631,6 +636,8 @@ async function provisionPricingPackages() {
   await ensureIndex('pricing_packages', 'idx_pkg_coach',     'key', ['coach_id']);
   await ensureIndex('pricing_packages', 'idx_pkg_org',       'key', ['organization_id']);
   await ensureIndex('pricing_packages', 'idx_pkg_active',    'key', ['is_active']);
+  await ensureIndex('pricing_packages', 'idx_pkg_sports',    'key', ['sport_keys']);
+  await ensureIndex('pricing_packages', 'idx_pkg_formats',   'key', ['location_formats']);
 }
 
 async function provisionBlogPosts() {

@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
 const COACH_NOT_READY = 'Coach is not ready to accept payments yet.';
+const LOCATION_FORMATS = new Set(['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid']);
 
 const DURATIONS = new Map([
   [60, { hours: 1, discount: 0 }],
@@ -232,6 +233,56 @@ function truncateMetadata(value, max = 480) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function cleanKey(value, max = 120) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, max);
+}
+
+function asCleanArray(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanKey(item)).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return value.split(',').map((item) => cleanKey(item)).filter(Boolean);
+  return [];
+}
+
+function packageAppliesToSelection(pkg, { sportKey, sessionFormat }) {
+  const packageSports = asCleanArray(pkg?.sport_keys);
+  if (packageSports.length && (!sportKey || !packageSports.includes(sportKey))) {
+    return { error: 'This package is not available for the selected sport.' };
+  }
+  const packageFormats = asCleanArray(pkg?.location_formats);
+  if (packageFormats.length && (!sessionFormat || !packageFormats.includes(sessionFormat))) {
+    return { error: 'This package is not available for the selected session format.' };
+  }
+  return { ok: true };
+}
+
+function coachOffersSport(coach, sportKey) {
+  if (!sportKey) return true;
+  const sports = asCleanArray(coach?.sports);
+  return sports.length === 0 || sports.includes(sportKey);
+}
+
+function coachFormatOptions(coach) {
+  const type = cleanKey(coach?.service_type);
+  const options = new Set();
+  if (type === 'facility') options.add('training_facility');
+  if (type === 'travels') options.add('coach_travels');
+  if (type === 'online') options.add('online');
+  if (type === 'hybrid') {
+    options.add('training_facility');
+    options.add('coach_travels');
+    options.add('hybrid');
+  }
+  if (coach?.service_venue || coach?.organization_id) options.add('organization_facility');
+  return [...options];
+}
+
+function coachOffersFormat(coach, sessionFormat) {
+  if (!sessionFormat) return true;
+  if (sessionFormat === 'organization_facility') return true;
+  const options = coachFormatOptions(coach);
+  return options.length === 0 || options.includes(sessionFormat);
+}
+
 function validateBookingLocation(coach, payload) {
   const label = truncateMetadata(payload.booking_location_label || payload.location_label || payload.location || '', 120);
   const lat = finiteNumber(payload.booking_location_lat ?? payload.location_lat ?? payload.lat);
@@ -359,6 +410,19 @@ export default async ({ req, res, error }) => {
     const coach = await db.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
     if (!pkg || !coach) return res.json({ error: 'Package or coach not found.' }, 404);
     if (pkg.is_visible === false) return res.json({ error: 'This package is not available for checkout.' }, 400);
+    const sportKey = cleanKey(payload.sport_key || payload.sport || '');
+    const sessionFormat = cleanKey(payload.session_format || payload.location_format || '');
+    if (sessionFormat && !LOCATION_FORMATS.has(sessionFormat)) {
+      return res.json({ error: 'session_format is invalid.' }, 400);
+    }
+    if (!coachOffersSport(coach, sportKey)) {
+      return res.json({ error: 'This coach does not offer the selected sport.' }, 400);
+    }
+    if (!coachOffersFormat(coach, sessionFormat)) {
+      return res.json({ error: 'This coach does not offer the selected session format.' }, 400);
+    }
+    const packageSelection = packageAppliesToSelection(pkg, { sportKey, sessionFormat });
+    if (packageSelection.error) return res.json({ error: packageSelection.error }, 400);
 
     // Package binding: a coach-bound package can only be purchased for that coach.
     // Read defensively — the attribute may not exist yet during rollout.
@@ -408,6 +472,9 @@ export default async ({ req, res, error }) => {
       package_name: pkg.name || 'Training sessions',
       package_sessions: String(pkg.sessions || 1),
       session_duration_minutes: String(durationMinutes),
+      sport_key: sportKey,
+      session_format: sessionFormat,
+      session_format_label: truncateMetadata(payload.session_format_label || payload.location_format_label || '', 120),
       booking_id: bookingReference,
       coach_id: coach.$id,
       coach_name: [coach.first_name, coach.last_name].filter(Boolean).join(' '),
