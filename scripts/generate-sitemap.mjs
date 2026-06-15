@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const ORIGIN = 'https://www.levelcoachtraining.com';
+const ORIGIN = 'https://www.lctrainings.com';
 
 const STATIC_ROUTES = [
   '/',
@@ -29,11 +29,8 @@ const STATIC_ROUTES = [
   '/apply',
   '/apply/private-training-coach',
   '/apply/organization',
-  '/create-account',
-  '/sign-in',
   '/terms',
   '/privacy',
-  '/unsubscribe',
 ];
 
 // Sport keys parsed from the catalog source (no bundler available here).

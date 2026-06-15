@@ -1,11 +1,18 @@
 import { useLocation } from 'react-router-dom';
 import { auth } from '@/lib/auth';
 import { useQuery } from '@tanstack/react-query';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
 
 
 export default function PageNotFound() {
     const location = useLocation();
     const pageName = location.pathname.substring(1);
+
+    usePageMeta({
+        title: 'Page Not Found',
+        description: 'This page could not be found on LevelCoach Training.',
+        robots: 'noindex,follow',
+    });
 
     const { data: authData, isFetched } = useQuery({
         queryKey: ['user'],
