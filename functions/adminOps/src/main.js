@@ -1,8 +1,10 @@
 import { Client, Databases, Users, ID, Permission, Query, Role } from 'node-appwrite';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LEGAL_TEMPLATE_ROLES = new Set(['athlete', 'guardian', 'coach', 'organization', 'admin', 'platform']);
+const LEGAL_TEMPLATE_CONTENT_KEYS = ['template_key', 'role', 'version', 'title', 'body', 'jurisdiction'];
 
 function services() {
   const client = new Client()
@@ -175,6 +177,96 @@ function str(value, min, max) {
   const trimmed = value.trim();
   if (trimmed.length < min || trimmed.length > max) return undefined;
   return trimmed;
+}
+
+function sha256(value) {
+  return createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function legalTemplateChecksum(template) {
+  return sha256([
+    template.template_key,
+    template.role,
+    template.version,
+    template.title,
+    template.body,
+    template.jurisdiction || '',
+  ].join('\n'));
+}
+
+function cleanTemplateKey(value) {
+  const cleaned = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 160);
+  return cleaned || '';
+}
+
+function isoOrUndefined(value) {
+  if (value === undefined || value === null || value === '') return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+function legalTemplatePayload(input, existing = {}) {
+  const templateKey = Object.prototype.hasOwnProperty.call(input, 'template_key')
+    ? cleanTemplateKey(input.template_key)
+    : existing.template_key || '';
+  const role = Object.prototype.hasOwnProperty.call(input, 'role')
+    ? String(input.role || '').trim()
+    : existing.role || '';
+  const version = Object.prototype.hasOwnProperty.call(input, 'version')
+    ? str(input.version, 1, 60)
+    : existing.version || '';
+  const title = Object.prototype.hasOwnProperty.call(input, 'title')
+    ? str(input.title, 1, 300)
+    : existing.title || '';
+  const bodyText = Object.prototype.hasOwnProperty.call(input, 'body')
+    ? str(input.body, 1, 100000)
+    : existing.body || '';
+  const required = Object.prototype.hasOwnProperty.call(input, 'required')
+    ? input.required === true
+    : existing.required !== false;
+  const jurisdiction = Object.prototype.hasOwnProperty.call(input, 'jurisdiction')
+    ? str(input.jurisdiction || '', 0, 120)
+    : existing.jurisdiction || '';
+  const effectiveAt = Object.prototype.hasOwnProperty.call(input, 'effective_at')
+    ? isoOrUndefined(input.effective_at)
+    : existing.effective_at || '';
+
+  if (!templateKey) return { error: 'template_key is required.' };
+  if (!LEGAL_TEMPLATE_ROLES.has(role)) return { error: 'role must be athlete, guardian, coach, organization, admin, or platform.' };
+  if (!version) return { error: 'version is required.' };
+  if (!title) return { error: 'title is required.' };
+  if (!bodyText) return { error: 'body is required.' };
+  if (effectiveAt === undefined) return { error: 'effective_at must be a valid date/time.' };
+  if (jurisdiction === undefined) return { error: 'jurisdiction is too long.' };
+
+  const payload = {
+    template_key: templateKey,
+    role,
+    version,
+    title,
+    body: bodyText,
+    required,
+    jurisdiction,
+  };
+  if (effectiveAt) payload.effective_at = effectiveAt;
+  return { payload: { ...payload, checksum: legalTemplateChecksum(payload) } };
+}
+
+async function templateHasSignatures(databases, templateId) {
+  const row = await firstDocument(databases, 'legal_agreements', [
+    Query.equal('template_id', templateId),
+  ]);
+  return !!row;
+}
+
+function contentChanged(existing, next) {
+  return LEGAL_TEMPLATE_CONTENT_KEYS.some((key) => String(existing?.[key] ?? '') !== String(next?.[key] ?? ''));
 }
 
 function int(value, min, max) {
@@ -1149,6 +1241,143 @@ async function publishBlogPost(ctx, payload) {
   return { status: 200, body: { ok: true } };
 }
 
+async function createLegalTemplate(ctx, payload) {
+  const { databases, actor } = ctx;
+  const input = payload.template && typeof payload.template === 'object'
+    ? payload.template
+    : payload;
+  const result = legalTemplatePayload(input);
+  if (result.error) return { status: 400, body: { error: result.error } };
+
+  const template = await databases.createDocument(DB_ID, 'legal_templates', ID.unique(), {
+    ...result.payload,
+    effective_at: result.payload.effective_at || new Date().toISOString(),
+  });
+
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'legal_template.create',
+    entity_type: 'LegalTemplate',
+    entity_id: template.$id,
+    after: JSON.stringify({
+      template_key: template.template_key,
+      role: template.role,
+      version: template.version,
+      required: template.required,
+      checksum: template.checksum,
+    }),
+  });
+  return { status: 200, body: { ok: true, template } };
+}
+
+async function updateLegalTemplate(ctx, payload) {
+  const { databases, actor } = ctx;
+  const templateId = String(payload.template_id || payload.id || '');
+  const updates = payload.updates && typeof payload.updates === 'object'
+    ? payload.updates
+    : payload.template && typeof payload.template === 'object'
+      ? payload.template
+      : {};
+  if (!templateId) return { status: 400, body: { error: 'template_id is required.' } };
+  if (!updates || Array.isArray(updates) || Object.keys(updates).length === 0) {
+    return { status: 400, body: { error: 'updates must include at least one field.' } };
+  }
+
+  const existing = await databases.getDocument(DB_ID, 'legal_templates', templateId).catch(() => null);
+  if (!existing) return { status: 404, body: { error: 'Legal template not found.' } };
+
+  const result = legalTemplatePayload(updates, existing);
+  if (result.error) return { status: 400, body: { error: result.error } };
+
+  const hasSignatures = await templateHasSignatures(databases, templateId);
+  const createsNewVersion = hasSignatures && contentChanged(existing, result.payload);
+  if (createsNewVersion) {
+    if (String(result.payload.version || '') === String(existing.version || '')) {
+      return {
+        status: 409,
+        body: {
+          error: 'This template already has signatures. Change the version before saving a text/title/role update so prior signed records stay immutable.',
+        },
+      };
+    }
+    const newTemplate = await databases.createDocument(DB_ID, 'legal_templates', ID.unique(), {
+      ...result.payload,
+      effective_at: result.payload.effective_at || new Date().toISOString(),
+    });
+    const retiredAt = new Date().toISOString();
+    await updateDocumentResilient(databases, 'legal_templates', templateId, { retired_at: retiredAt }).catch(() => {});
+    await writeAudit(databases, {
+      actor_email: actor.email,
+      actor_role: actor.role,
+      action: 'legal_template.new_version',
+      entity_type: 'LegalTemplate',
+      entity_id: newTemplate.$id,
+      before: JSON.stringify({
+        template_id: templateId,
+        template_key: existing.template_key,
+        version: existing.version,
+        checksum: existing.checksum,
+      }),
+      after: JSON.stringify({
+        template_id: newTemplate.$id,
+        template_key: newTemplate.template_key,
+        version: newTemplate.version,
+        checksum: newTemplate.checksum,
+        retired_previous_at: retiredAt,
+      }),
+    });
+    return { status: 200, body: { ok: true, template: newTemplate, created_new_version: true, retired_template_id: templateId } };
+  }
+
+  const updated = await updateDocumentResilient(databases, 'legal_templates', templateId, {
+    ...result.payload,
+    effective_at: result.payload.effective_at || existing.effective_at || new Date().toISOString(),
+  });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'legal_template.update',
+    entity_type: 'LegalTemplate',
+    entity_id: templateId,
+    before: JSON.stringify({
+      template_key: existing.template_key,
+      role: existing.role,
+      version: existing.version,
+      required: existing.required,
+      checksum: existing.checksum,
+    }),
+    after: JSON.stringify({
+      template_key: updated?.template_key || result.payload.template_key,
+      role: updated?.role || result.payload.role,
+      version: updated?.version || result.payload.version,
+      required: updated?.required ?? result.payload.required,
+      checksum: updated?.checksum || result.payload.checksum,
+    }),
+  });
+  return { status: 200, body: { ok: true, template: updated || { ...existing, ...result.payload } } };
+}
+
+async function retireLegalTemplate(ctx, payload) {
+  const { databases, actor } = ctx;
+  const templateId = String(payload.template_id || payload.id || '');
+  if (!templateId) return { status: 400, body: { error: 'template_id is required.' } };
+  const template = await databases.getDocument(DB_ID, 'legal_templates', templateId).catch(() => null);
+  if (!template) return { status: 404, body: { error: 'Legal template not found.' } };
+  const retiredAt = template.retired_at || new Date().toISOString();
+  await updateDocumentResilient(databases, 'legal_templates', templateId, { retired_at: retiredAt });
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'legal_template.retire',
+    entity_type: 'LegalTemplate',
+    entity_id: templateId,
+    before: JSON.stringify({ retired_at: template.retired_at || '' }),
+    after: JSON.stringify({ retired_at: retiredAt }),
+  });
+  return { status: 200, body: { ok: true, retired_at: retiredAt } };
+}
+
 // --- Entrypoint -----------------------------------------------------------------
 
 export default async ({ req, res, error }) => {
@@ -1235,6 +1464,15 @@ export default async ({ req, res, error }) => {
         break;
       case 'publishBlogPost':
         result = await publishBlogPost(ctx, payload);
+        break;
+      case 'createLegalTemplate':
+        result = await createLegalTemplate(ctx, payload);
+        break;
+      case 'updateLegalTemplate':
+        result = await updateLegalTemplate(ctx, payload);
+        break;
+      case 'retireLegalTemplate':
+        result = await retireLegalTemplate(ctx, payload);
         break;
       default:
         result = { status: 400, body: { error: 'Unknown action.' } };

@@ -28,9 +28,28 @@ includes('functions/signLegalAgreement/src/main.js', [
   'callerAccountId',
   'guardian_athletes',
   'is_minor',
+  'legalNameCheck',
+  'legal_name_affirmed',
   'signature_hash',
   "Permission.read(Role.user(accountId))",
   "Permission.read(Role.label('admin'))",
+]);
+
+// Admin legal vault can create/version/retire templates server-side; clients
+// must not mutate legal template documents directly.
+includes('functions/adminOps/src/main.js', [
+  'createLegalTemplate',
+  'updateLegalTemplate',
+  'retireLegalTemplate',
+  'legalTemplateChecksum',
+  'legal_template.new_version',
+]);
+includes('src/pages/admin/AdminLegalDocuments.jsx', [
+  'New document',
+  'View full',
+  'Edit legal document',
+  'Signed agreements',
+  'created_new_version',
 ]);
 
 // Full template packet with attorney-review marker on every body.

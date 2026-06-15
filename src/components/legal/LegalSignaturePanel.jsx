@@ -24,6 +24,10 @@ function fullName(user) {
   return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || user?.name || '';
 }
 
+function hasFirstAndLastName(value) {
+  return String(value || '').trim().split(/\s+/).filter(Boolean).length >= 2;
+}
+
 function athleteDisplayName(athlete) {
   return [athlete?.first_name, athlete?.last_name].filter(Boolean).join(' ').trim() || 'Athlete';
 }
@@ -142,7 +146,7 @@ export default function LegalSignaturePanel({
   const guardianNeedsSelection = signerRole === 'guardian' && !effectiveAthleteId;
 
   const canSign = selectedTemplate
-    && typedName.trim().length >= 3
+    && hasFirstAndLastName(typedName)
     && !(signerRole === 'guardian' && !effectiveAthleteId)
     && affirmations.electronic_records_consent
     && affirmations.reviewed_current_template
@@ -425,7 +429,7 @@ export default function LegalSignaturePanel({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="typed-legal-name">Typed legal signature</Label>
+              <Label htmlFor="typed-legal-name">Legal first and last name</Label>
               <Input
                 id="typed-legal-name"
                 value={typedName}
@@ -433,6 +437,9 @@ export default function LegalSignaturePanel({
                 className="mt-1 bg-background"
                 placeholder="Full legal name"
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use the signer&apos;s legal name, not a nickname. The server checks this against the profile name when available.
+              </p>
             </div>
             <div>
               <Label htmlFor="signer-relationship">Relationship / authority</Label>
@@ -454,7 +461,7 @@ export default function LegalSignaturePanel({
               I reviewed the current template version and agree to sign it.
             </CheckboxRow>
             <CheckboxRow checked={affirmations.accurate_information} onChange={(value) => setAffirmations((current) => ({ ...current, accurate_information: value }))}>
-              The account, signer, and related profile information I provided is accurate.
+              The account, signer, typed legal name, and related profile information I provided is accurate.
             </CheckboxRow>
             {needsAuthority(signerRole) && (
               <CheckboxRow checked={affirmations.legal_authority} onChange={(value) => setAffirmations((current) => ({ ...current, legal_authority: value }))}>

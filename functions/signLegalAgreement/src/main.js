@@ -182,6 +182,39 @@ function sha256(value) {
   return createHash('sha256').update(String(value || '')).digest('hex');
 }
 
+function normalizeNamePart(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function legalNameCheck(profile, typedLegalName) {
+  const raw = String(typedLegalName || '').trim();
+  const typedParts = raw.split(/\s+/).map(normalizeNamePart).filter(Boolean);
+  if (typedParts.length < 2) {
+    return { error: 'Enter your legal first and last name.' };
+  }
+
+  const first = normalizeNamePart(profile?.first_name);
+  const last = normalizeNamePart(profile?.last_name);
+  if (first && last) {
+    const typedJoined = typedParts.join(' ');
+    const typedCompact = normalizeNamePart(raw);
+    if (!typedCompact.includes(first) || !typedCompact.includes(last)) {
+      return {
+        error: 'Typed legal signature must include the legal first and last name on your profile. Update your profile first if that name is incorrect.',
+      };
+    }
+    return {
+      profile_name_snapshot: [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim(),
+      typed_name_normalized: typedJoined,
+    };
+  }
+
+  return {
+    profile_name_snapshot: [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim(),
+    typed_name_normalized: typedParts.join(' '),
+  };
+}
+
 function templateChecksum(template) {
   return template.checksum || sha256([
     template.template_key,
@@ -297,6 +330,8 @@ export default async ({ req, res, error }) => {
     if (await callerIsBanned(databases, profile)) {
       return res.json({ error: 'Account access is restricted.' }, 403);
     }
+    const legalName = legalNameCheck(profile, typedLegalName);
+    if (legalName.error) return res.json({ error: legalName.error }, 400);
 
     const signerRole = await resolveSignerRole(databases, accountId, profile, payload);
     if (!signerRole) return res.json({ error: 'signer_role does not match your account permissions.' }, 403);
@@ -321,7 +356,12 @@ export default async ({ req, res, error }) => {
     const checksum = templateChecksum(template);
     const ipAddress = header(req, ['x-forwarded-for', 'x-real-ip']).split(',')[0].trim();
     const userAgent = header(req, ['user-agent']).slice(0, 1000);
-    const affirmationsJson = JSON.stringify(affirmations);
+    const affirmationsJson = JSON.stringify({
+      ...affirmations,
+      legal_name_affirmed: true,
+      profile_name_snapshot: legalName.profile_name_snapshot || '',
+      typed_name_normalized: legalName.typed_name_normalized || '',
+    });
     const drawnSignatureHash = payload.drawn_signature_data ? sha256(payload.drawn_signature_data) : '';
     const signaturePayload = {
       template_id: template.$id,
