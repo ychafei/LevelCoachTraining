@@ -30,7 +30,7 @@ import { recurringWindowsByDay, timezoneAbbreviation } from '@/lib/scheduleET';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function mergeSearch(path, currentSearch) {

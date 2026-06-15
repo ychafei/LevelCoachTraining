@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 export default function Privacy() {
   usePageMeta({

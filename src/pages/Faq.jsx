@@ -6,7 +6,7 @@ import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { Reveal } from '@/features/marketing/MarketingMotion';
 import { FAQ_GROUPS } from '@/content/faq';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 // Every answer rendered open and in the DOM: this page exists to settle
 // objections (and to be findable), not to hide copy behind accordions.

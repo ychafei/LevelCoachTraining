@@ -13,7 +13,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { postAuthRedirectPath } from '@/lib/roleHome';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 // auth.js throws { type: 'account_banned' } after dropping the session of a
 // suspended account — surface that distinctly from bad credentials. Token

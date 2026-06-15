@@ -6,7 +6,7 @@ import { ShieldAlert } from 'lucide-react';
 
 const AuthContext = createContext(null);
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 // Full-screen stop state shown when accountProfile.ensure reports the caller
 // is banned. The session has already been dropped by auth.js at this point.
