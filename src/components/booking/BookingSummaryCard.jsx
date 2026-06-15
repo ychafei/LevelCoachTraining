@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, DollarSign, MapPin, Package, Sparkles, Timer, User, WalletCards } from 'lucide-react';
+import { ChevronDown, DollarSign, Package, Sparkles, Timer, User, WalletCards } from 'lucide-react';
 
 // Persistent summary used inside the booking flow. Same content in two layouts:
 //   - sidebar:     sticky panel for desktop (lg:)
@@ -25,7 +25,6 @@ function Row({ label, value, icon: Icon, hint }) {
 
 function Body({
   coach,
-  coachLocationLabel,
   pkg,
   duration,
   sessionPrice,
@@ -36,18 +35,16 @@ function Body({
   creditDurationMinutes,
   creditPackageName,
   sportLabel,
-  sessionFormatLabel,
+  durationDiscountPercent = 0,
 }) {
   const coachLabel = coach ? `${coach.first_name} ${coach.last_name}${coach.is_head_coach ? ' · Head' : ''}` : '';
   const pkgLabel = pkg ? pkg.name : '';
   const durationLabel = duration?.label || (creditDurationMinutes ? `${creditDurationMinutes / 60} hr${creditDurationMinutes > 60 ? 's' : ''}` : '');
-  const bookingLocationLabel = sessionFormatLabel || coachLocationLabel || '';
 
   return (
     <div className="divide-y divide-border">
       <Row label="Coach" value={coachLabel} icon={User} />
       <Row label="Sport" value={sportLabel} icon={Sparkles} />
-      <Row label="Format" value={bookingLocationLabel} icon={MapPin} />
       {usingCredit ? (
         <>
           <Row label="Package" value={creditPackageName} icon={Package} />
@@ -62,7 +59,7 @@ function Body({
       ) : (
         <>
           <Row label="Package" value={pkgLabel} icon={Package} hint={pkg?.sessions > 1 ? `${pkg.sessions} sessions` : undefined} />
-          <Row label="Duration" value={durationLabel} icon={Timer} hint={duration?.discount ? `−${Math.round(duration.discount * 100)}% multi-hour` : undefined} />
+          <Row label="Duration" value={durationLabel} icon={Timer} hint={durationDiscountPercent > 0 ? `${durationDiscountPercent}% off hourly rate` : undefined} />
           <Row
             label="Per session"
             value={sessionPrice != null ? `$${sessionPrice}` : ''}

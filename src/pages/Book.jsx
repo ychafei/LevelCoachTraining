@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import SelectMenu from '@/components/forms/SelectMenu';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
@@ -43,16 +44,15 @@ import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 import { useMyAthlete } from '@/features/athlete/useMyAthlete';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
-
-// Display-only estimates; createStripeCheckout recomputes the charge in cents
-// from pricing_packages on the server using this same duration table.
-const DURATIONS = [
-  { label: '1 Hour',    minutes: 60,  hours: 1,   discount: 0 },
-  { label: '1.5 Hours', minutes: 90,  hours: 1.5, discount: 0.10 },
-  { label: '2 Hours',   minutes: 120, hours: 2,   discount: 0.15 },
-  { label: '2.5 Hours', minutes: 150, hours: 2.5, discount: 0.18 },
-  { label: '3 Hours',   minutes: 180, hours: 3,   discount: 0.20 },
-];
+import {
+  discountPercentForOption,
+  durationOptionFor,
+  formatCentsDollars,
+  formatDurationMinutes,
+  normalizeDurationOptions,
+  packagePriceCentsForDuration,
+  perSessionCentsForDuration,
+} from '@/lib/pricingDurations';
 
 const AVAILABILITY_RANGE_DAYS = 30;
 
@@ -82,63 +82,35 @@ const DEFAULT_AVAILABILITY_PREFERENCE = {
 const STEP_COACH = 0;
 const STEP_ATHLETE = 1;
 const STEP_SPORT = 2;
-const STEP_FORMAT = 3;
-const STEP_PACKAGE = 4;
+const STEP_PACKAGE = 3;
+const STEP_DURATION = 4;
 const STEP_CHECKOUT = 5;
 
 const STEP_LABELS = {
   [STEP_COACH]: 'Coach',
   [STEP_ATHLETE]: 'Athlete',
   [STEP_SPORT]: 'Sport',
-  [STEP_FORMAT]: 'Location',
   [STEP_PACKAGE]: 'Package',
+  [STEP_DURATION]: 'Duration',
   [STEP_CHECKOUT]: 'Checkout',
 };
 
 const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
 
-const LOCATION_FORMAT_OPTIONS = [
-  { value: 'training_facility', label: 'Training facility', body: 'Meet at the coach or facility location configured in their portal.' },
-  { value: 'coach_travels', label: 'Coach travels to you', body: 'Train at a client-side location within the coach service area.' },
-  { value: 'online', label: 'Online', body: 'Meet virtually for remote training, film review, or coaching.' },
-  { value: 'organization_facility', label: 'Organization/facility location', body: 'Train at the coach organization or partner facility.' },
-  { value: 'hybrid', label: 'Hybrid options', body: 'Coordinate the best mix of facility, travel, or remote work after booking.' },
-];
-
-// A self-contained per-coach package carries its own total (price_cents) and
-// session length (duration_minutes); the legacy per-hour multiplier no longer
-// applies to it.
 function packagePriceCents(pkg) {
-  const pc = Number(pkg?.price_cents);
+  const primary = normalizeDurationOptions(pkg)[0];
+  const pc = Number(primary?.price_cents || pkg?.price_cents);
   return Number.isInteger(pc) && pc > 0 ? pc : null;
 }
-function isSelfContained(pkg) {
-  return packagePriceCents(pkg) != null;
-}
-function packageDurationMinutes(pkg) {
-  const d = Number(pkg?.duration_minutes);
-  return Number.isInteger(d) && d >= 15 ? d : null;
-}
-function durationLabel(minutes) {
-  if (minutes % 60 === 0) return `${minutes / 60} Hour${minutes > 60 ? 's' : ''}`;
-  return `${minutes} Minutes`;
-}
-// DURATIONS entry for a given minute length, or a synthetic one (used for
-// per-coach packages whose length isn't in the legacy table).
 function durationFromMinutes(minutes) {
   if (!minutes) return null;
-  return DURATIONS.find(d => d.minutes === minutes)
-    || { label: durationLabel(minutes), minutes, hours: minutes / 60, discount: 0 };
+  return { label: formatDurationMinutes(minutes), minutes, hours: minutes / 60, discount: 0 };
 }
 
 // Per-session price in dollars (for display only — the server is authoritative).
 function calcPrice(pkg, dur) {
-  if (!pkg) return null;
-  const pc = packagePriceCents(pkg);
-  if (pc != null) return Math.round(pc / (pkg.sessions || 1)) / 100;
-  if (!dur) return null;
-  const perSessionBase = pkg.price / (pkg.sessions || 1);
-  return Math.round(perSessionBase * dur.hours * (1 - dur.discount));
+  const cents = perSessionCentsForDuration(pkg, dur?.minutes);
+  return Number.isInteger(cents) ? cents / 100 : null;
 }
 
 function remainingCredits(credit) {
@@ -182,40 +154,10 @@ function sportLabel(value) {
   return SPORT_LABELS.get(value) || String(value || '').replace(/_/g, ' ') || 'Sport';
 }
 
-function formatLabel(value) {
-  return LOCATION_FORMAT_OPTIONS.find((option) => option.value === value)?.label || String(value || '').replace(/_/g, ' ');
-}
-
-function packageApplies(pkg, { sportKey = '', sessionFormat = '' } = {}) {
+function packageApplies(pkg, { sportKey = '' } = {}) {
   const sportKeys = Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.filter(Boolean) : [];
   if (sportKeys.length && (!sportKey || !sportKeys.includes(sportKey))) return false;
-  const locationFormats = Array.isArray(pkg?.location_formats) ? pkg.location_formats.filter(Boolean) : [];
-  if (locationFormats.length && (!sessionFormat || !locationFormats.includes(sessionFormat))) return false;
   return true;
-}
-
-function coachFormatOptions(coach, orgName = '') {
-  const serviceType = cleanKey(coach?.service_type);
-  const values = new Set();
-  if (serviceType === 'facility') values.add('training_facility');
-  if (serviceType === 'travels') values.add('coach_travels');
-  if (serviceType === 'online') values.add('online');
-  if (serviceType === 'hybrid') {
-    values.add('training_facility');
-    values.add('coach_travels');
-    values.add('hybrid');
-  }
-  if (coach?.service_venue || coach?.organization?.id) values.add('organization_facility');
-  return [...values].map((value) => {
-    const base = LOCATION_FORMAT_OPTIONS.find((option) => option.value === value) || { value, label: formatLabel(value), body: '' };
-    if (value === 'training_facility' && coach?.service_venue) {
-      return { ...base, body: coach.service_venue };
-    }
-    if (value === 'organization_facility' && orgName) {
-      return { ...base, body: orgName };
-    }
-    return base;
-  });
 }
 
 export default function Book() {
@@ -250,6 +192,7 @@ export default function Book() {
   const [useExistingCredit, setUseExistingCredit] = useState(false);
   const [duration, setDuration]               = useState(saved?.duration || null);
   const [goals, setGoals]                     = useState(saved?.goals || '');
+  const [preferredLocation, setPreferredLocation] = useState(saved?.preferredLocation || '');
   const [availabilityMode, setAvailabilityMode] = useState(saved?.availabilityMode || 'exact');
   const [availabilityPreference, setAvailabilityPreference] = useState(() => {
     const merged = {
@@ -293,7 +236,6 @@ export default function Book() {
   const [familyAthletes, setFamilyAthletes]   = useState([]);
   const [selectedAthleteId, setSelectedAthleteId] = useState('');
   const [selectedSport, setSelectedSport] = useState(saved?.selectedSport || urlParams.get('sport') || '');
-  const [selectedSessionFormat, setSelectedSessionFormat] = useState(saved?.selectedSessionFormat || urlParams.get('session_format') || '');
 
   // Legal gates. Checkout uses the profile-level signer role (mirrors
   // createStripeCheckout); credit booking mirrors the booking function:
@@ -519,25 +461,29 @@ export default function Book() {
     .map(cleanKey)
     .filter(Boolean);
   const uniqueCoachSports = [...new Set(coachSports)];
-  const formatOptions = coach ? coachFormatOptions(coach, coachOrgName) : [];
   const needsAthleteStep = familyAthletes.length > 1;
   const needsSportStep = uniqueCoachSports.length > 1;
-  const needsFormatStep = formatOptions.length > 1;
   const effectiveSport = selectedSport || (!needsSportStep ? uniqueCoachSports[0] || '' : '');
-  const effectiveFormat = selectedSessionFormat || (!needsFormatStep ? formatOptions[0]?.value || '' : '');
   const filteredPackages = useMemo(
-    () => packages.filter((pkg) => packageApplies(pkg, { sportKey: effectiveSport, sessionFormat: effectiveFormat })),
-    [packages, effectiveSport, effectiveFormat],
+    () => packages.filter((pkg) => packageApplies(pkg, { sportKey: effectiveSport })),
+    [packages, effectiveSport],
   );
+  const selectedDurationOptions = useMemo(() => normalizeDurationOptions(selectedPackage), [selectedPackage]);
+  const selectedDurationOption = selectedPackage ? durationOptionFor(selectedPackage, duration?.minutes) : null;
+  const needsDurationStep = selectedDurationOptions.length > 1;
+  const durationDiscountPercent = selectedPackage && selectedDurationOption
+    ? discountPercentForOption(selectedPackage, selectedDurationOption)
+    : 0;
   const visibleSteps = useMemo(() => {
     const steps = [];
     if (!coachLocked) steps.push(STEP_COACH);
     if (needsAthleteStep) steps.push(STEP_ATHLETE);
     if (needsSportStep) steps.push(STEP_SPORT);
-    if (needsFormatStep) steps.push(STEP_FORMAT);
-    steps.push(STEP_PACKAGE, STEP_CHECKOUT);
+    steps.push(STEP_PACKAGE);
+    if (needsDurationStep) steps.push(STEP_DURATION);
+    steps.push(STEP_CHECKOUT);
     return steps;
-  }, [coachLocked, needsAthleteStep, needsSportStep, needsFormatStep]);
+  }, [coachLocked, needsAthleteStep, needsSportStep, needsDurationStep]);
 
   useEffect(() => {
     if (familyAthletes.length === 1 && !selectedAthleteId) {
@@ -555,19 +501,18 @@ export default function Book() {
   }, [selectedSport, uniqueCoachSports]);
 
   useEffect(() => {
-    if (formatOptions.length === 1 && selectedSessionFormat !== formatOptions[0].value) {
-      setSelectedSessionFormat(formatOptions[0].value);
-    }
-    if (formatOptions.length > 1 && selectedSessionFormat && !formatOptions.some((option) => option.value === selectedSessionFormat)) {
-      setSelectedSessionFormat('');
-    }
-  }, [formatOptions, selectedSessionFormat]);
-
-  useEffect(() => {
     if (selectedPackage && !filteredPackages.some((pkg) => pkg.id === selectedPackage.id)) {
       setSelectedPackage(null);
     }
   }, [filteredPackages, selectedPackage]);
+
+  useEffect(() => {
+    if (!selectedPackage) return;
+    const option = durationOptionFor(selectedPackage, duration?.minutes);
+    if (option && option.duration_minutes !== duration?.minutes) {
+      setDuration(durationFromMinutes(option.duration_minutes));
+    }
+  }, [selectedPackage, duration?.minutes]);
 
   useEffect(() => {
     if (!visibleSteps.includes(step)) {
@@ -579,8 +524,9 @@ export default function Book() {
   const sessionPrice = calcPrice(selectedPackage, duration);
   // Total actually charged today (display-only — the server recomputes the
   // charge in cents from pricing_packages).
-  const packageTotal = packagePriceCents(selectedPackage) != null
-    ? packagePriceCents(selectedPackage) / 100
+  const selectedPackageTotalCents = packagePriceCentsForDuration(selectedPackage, duration?.minutes);
+  const packageTotal = selectedPackageTotalCents != null
+    ? selectedPackageTotalCents / 100
     : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null);
   const sessionPriceCents = sessionPrice != null ? Math.round(sessionPrice * 100) : null;
   const existingCreditRemainingCents = existingCredit ? remainingCreditBalanceCents(existingCredit) : null;
@@ -613,8 +559,6 @@ export default function Book() {
     // requires this for guardian/parent buyers and checks its legal consent.
     athlete_id: checkoutAthleteId,
     sport_key: effectiveSport,
-    session_format: effectiveFormat,
-    session_format_label: formatLabel(effectiveFormat),
     booking_location_label: bookingLocation.label || '',
     booking_location_lat: bookingLocation.lat ?? '',
     booking_location_lng: bookingLocation.lng ?? '',
@@ -622,6 +566,7 @@ export default function Book() {
     availability_mode: availabilityMode,
     availability_preference: availabilityPreference,
     client_notes: goals.trim(),
+    preferred_location: preferredLocation.trim(),
   };
 
   if (!hasSelectedBookingContext) {
@@ -683,8 +628,8 @@ export default function Book() {
       selectedPackage,
       duration,
       selectedSport: effectiveSport,
-      selectedSessionFormat: effectiveFormat,
       goals,
+      preferredLocation,
       bookingLocation,
       availabilityMode,
       availabilityPreference,
@@ -744,13 +689,12 @@ export default function Book() {
         credit_id: activeCredit.id,
         ...(selectedPackage?.id ? { package_id: selectedPackage.id } : {}),
         sport_key: effectiveSport,
-        session_format: effectiveFormat,
-        session_format_label: formatLabel(effectiveFormat),
         date: format(selectedDate, 'yyyy-MM-dd'),
         start_time: selectedTime,
         duration_minutes: slotDurationMinutes,
         ...(selectedAthleteId ? { athlete_id: selectedAthleteId } : {}),
         ...(goals.trim() ? { notes: goals.trim() } : {}),
+        ...(preferredLocation.trim() ? { preferred_location: preferredLocation.trim() } : {}),
       });
 
       const fresh = await sessionCreditRepo.get(activeCredit.id).catch(() => null);
@@ -947,7 +891,40 @@ export default function Book() {
                   )}
                 </div>
               )}
-            </div>
+	            </div>
+
+	            <div className="mt-8 rounded-lg border border-border bg-card p-4">
+	              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-4">Details for the coach</p>
+	              <div className="space-y-4">
+	                <div>
+	                  <label htmlFor="schedule-goals" className="text-sm font-semibold text-foreground">
+	                    What do you want to get out of the session?
+	                  </label>
+	                  <Textarea
+	                    id="schedule-goals"
+	                    value={goals}
+	                    onChange={(event) => setGoals(event.target.value)}
+	                    rows={3}
+	                    maxLength={1000}
+	                    placeholder="Example: improve shooting form, conditioning, footwork, confidence..."
+	                    className="mt-2 border-border bg-secondary"
+	                  />
+	                </div>
+	                <div>
+	                  <label htmlFor="schedule-preferred-location" className="text-sm font-semibold text-foreground">
+	                    Preferred location to arrange this session
+	                  </label>
+	                  <Input
+	                    id="schedule-preferred-location"
+	                    value={preferredLocation}
+	                    onChange={(event) => setPreferredLocation(event.target.value)}
+	                    maxLength={1000}
+	                    placeholder="Example: Novi High School field, nearby facility, or flexible"
+	                    className="mt-2 border-border bg-secondary"
+	                  />
+	                </div>
+	              </div>
+	            </div>
 
             {bookingError && (
               <p role="alert" className="mt-6 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -1023,8 +1000,8 @@ export default function Book() {
       case STEP_COACH: return !!coach;
       case STEP_ATHLETE: return !!selectedAthleteId;
       case STEP_SPORT: return !!effectiveSport;
-      case STEP_FORMAT: return !!effectiveFormat;
       case STEP_PACKAGE: return !!selectedPackage;
+      case STEP_DURATION: return !!duration?.minutes;
       case STEP_CHECKOUT: return true;
       default: return false;
     }
@@ -1055,7 +1032,7 @@ export default function Book() {
     creditDurationMinutes: existingCredit?.session_duration_minutes ?? null,
     creditPackageName: existingCredit?.package_name ?? null,
     sportLabel: effectiveSport ? sportLabel(effectiveSport) : (coachModel?.primarySport || 'Any sport'),
-    sessionFormatLabel: effectiveFormat ? formatLabel(effectiveFormat) : (coachModel?.serviceTypeLabel || 'Coach training area'),
+    durationDiscountPercent,
   };
 
   return (
@@ -1165,25 +1142,38 @@ export default function Book() {
           </div>
         )}
 
-        {/* Step 3: Location / format */}
-        {step === STEP_FORMAT && (
+        {/* Step 4: Duration */}
+        {step === STEP_DURATION && (
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Choose location or format</h2>
-            <p className="text-muted-foreground text-sm mb-8">Only the formats configured by this coach are shown.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.01em] mb-2">Choose duration</h2>
+            <p className="text-muted-foreground text-sm mb-8">
+              Pick the session length for <strong>{selectedPackage?.name}</strong>. Longer sessions show any hourly discount automatically.
+            </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {formatOptions.map((option) => {
-                const selected = effectiveFormat === option.value;
+              {selectedDurationOptions.map((option) => {
+                const selected = duration?.minutes === option.duration_minutes;
+                const perSessionCents = Math.floor(option.price_cents / Math.max(1, Number(selectedPackage?.sessions) || 1));
+                const hourlyCents = Math.round(perSessionCents / (option.duration_minutes / 60));
+                const discount = discountPercentForOption(selectedPackage, option);
                 return (
                   <button
-                    key={option.value}
+                    key={option.duration_minutes}
                     type="button"
-                    onClick={() => setSelectedSessionFormat(option.value)}
+                    onClick={() => setDuration(durationFromMinutes(option.duration_minutes))}
                     aria-pressed={selected}
                     className={`rounded-lg border p-5 text-left transition-all ${selected ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-card hover:border-accent/30'}`}
                   >
-                    <MapPin className="mb-3 h-5 w-5" aria-hidden="true" />
-                    <p className="text-lg font-semibold text-foreground">{option.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{option.body}</p>
+                    <Clock className="mb-3 h-5 w-5" aria-hidden="true" />
+                    <p className="text-lg font-semibold text-foreground">{formatDurationMinutes(option.duration_minutes)}</p>
+                    <p className="mt-1 text-2xl font-display font-bold text-accent">{formatCentsDollars(option.price_cents)}</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {formatCentsDollars(perSessionCents)} per session · {formatCentsDollars(hourlyCents)}/hr
+                    </p>
+                    {discount > 0 && (
+                      <span className="mt-3 inline-flex rounded-md border border-green-500/30 bg-green-500/10 px-2 py-1 text-xs font-bold text-green-700">
+                        {discount}% off hourly rate
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1235,28 +1225,27 @@ export default function Book() {
               <div className="rounded-lg border border-dashed border-border p-8 text-center">
                 <Package className="w-6 h-6 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground">
-                  {coach ? `${coach.name || 'This coach'} has no packages for this sport and format yet.` : 'Select a coach to see their packages.'}
+                  {coach ? `${coach.name || 'This coach'} has no packages for this sport yet.` : 'Select a coach to see their packages.'}
                 </p>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredPackages.map((pkg) => {
-                const totalCents = packagePriceCents(pkg);
+                const options = normalizeDurationOptions(pkg);
+                const primaryOption = options[0] || { duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: Number(pkg.price_cents) || 0 };
+                const totalCents = primaryOption.price_cents || packagePriceCents(pkg);
                 const totalLabel = totalCents != null
                   ? `$${(totalCents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
                   : `$${pkg.price}`;
                 const perSession = totalCents != null
                   ? Math.round(totalCents / (pkg.sessions || 1)) / 100
                   : Math.round(pkg.price / (pkg.sessions || 1));
-                const pkgDuration = packageDurationMinutes(pkg);
                 const isSelected = selectedPackage?.id === pkg.id;
                 return (
                   <button key={pkg.id} onClick={() => {
                     setSelectedPackage(pkg);
                     setUseExistingCredit(false);
-                    // Packages carry the session length; legacy packages fall
-                    // back to a standard 60-minute session.
-                    setDuration(durationFromMinutes(pkgDuration || 60));
+                    setDuration(durationFromMinutes(primaryOption.duration_minutes || 60));
                   }}
                     className={`p-6 rounded-lg border text-left transition-all relative ${isSelected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/30'}`}>
                     {pkg.badge && (
@@ -1272,13 +1261,16 @@ export default function Book() {
                     <p className="text-2xl font-display font-bold text-accent mt-1">{totalLabel}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {pkg.sessions > 1 ? `${pkg.sessions} sessions · $${perSession}/session` : '1 session'}
-                      {pkgDuration != null ? ` · ${pkgDuration} min` : ''}
+                      {primaryOption.duration_minutes != null ? ` · ${formatDurationMinutes(primaryOption.duration_minutes)}` : ''}
                       {pkg.session_type ? ` · ${String(pkg.session_type).replace('_', ' ')}` : ''}
                     </p>
+                    {options.length > 1 && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {options.length} duration options available
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground mt-1">
                       {Array.isArray(pkg.sport_keys) && pkg.sport_keys.length ? pkg.sport_keys.map(sportLabel).join(', ') : 'All selected sports'}
-                      {' · '}
-                      {Array.isArray(pkg.location_formats) && pkg.location_formats.length ? pkg.location_formats.map(formatLabel).join(', ') : 'All selected formats'}
                     </p>
                     {pkg.description && <p className="text-sm text-muted-foreground mt-3">{pkg.description}</p>}
                     {pkg.includes?.length > 0 && (
@@ -1320,7 +1312,6 @@ export default function Book() {
                 {[
                   ['Athlete', selectedAthleteName],
                   ['Sport', effectiveSport ? sportLabel(effectiveSport) : 'Any sport'],
-                  ['Location / format', effectiveFormat ? formatLabel(effectiveFormat) : (coachModel?.serviceTypeLabel || 'Coach training area')],
                   ['Package', selectedPackage?.name],
                   ['Sessions', selectedPackage?.sessions > 1 ? `${selectedPackage.sessions} sessions` : '1 session'],
                   ['Session duration', duration?.label],
@@ -1364,14 +1355,47 @@ export default function Book() {
                       ${sessionPrice} per session × {selectedPackage.sessions} sessions
                     </p>
                   )}
-                  {duration?.discount > 0 && (
-                    <p className="text-xs text-green-400 mt-2">{Math.round(duration.discount * 100)}% multi-hour discount applied</p>
+                  {durationDiscountPercent > 0 && (
+                    <p className="text-xs text-green-400 mt-2">{durationDiscountPercent}% duration discount applied</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
                     Final pricing is computed securely at checkout from the platform package catalog.
                   </p>
                 </>
               )}
+            </div>
+
+            <div className="mb-6 rounded-lg border border-border bg-card p-6">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-4">Details for the coach</p>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="booking-goals" className="text-sm font-semibold text-foreground">
+                    What do you want to get out of the sessions?
+                  </label>
+                  <Textarea
+                    id="booking-goals"
+                    value={goals}
+                    onChange={(event) => setGoals(event.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Example: improve shooting form, conditioning, footwork, confidence..."
+                    className="mt-2 border-border bg-secondary"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="preferred-location" className="text-sm font-semibold text-foreground">
+                    Preferred location to arrange sessions
+                  </label>
+                  <Input
+                    id="preferred-location"
+                    value={preferredLocation}
+                    onChange={(event) => setPreferredLocation(event.target.value)}
+                    maxLength={1000}
+                    placeholder="Example: Novi High School field, nearby facility, or flexible"
+                    className="mt-2 border-border bg-secondary"
+                  />
+                </div>
+              </div>
             </div>
 
             {user && !user.profile_setup_complete && (
@@ -1467,16 +1491,32 @@ export default function Book() {
               <div className="p-4 rounded-lg bg-accent/5 border border-accent/20 mb-6">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent mb-1">Credit package available</p>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Use your active training credits to schedule this session.
+                  {existingCreditAmountDueCents > 0
+                    ? 'Your credit covers part of this session. Pay only the difference, then schedule.'
+                    : 'Use your active training credits to schedule this session.'}
                 </p>
-                <Button onClick={handleUseExistingCredits} disabled={submitting || !existingCredit || !user?.profile_setup_complete || existingCreditAmountDueCents > 0}
-                  className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 h-12 text-base">
-                  Use my credits & continue
-                </Button>
-                {existingCreditAmountDueCents > 0 && (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Add a top-up for {`$${formatMoney(existingCreditAmountDueCents / 100)}`} before this credit can reserve the selected coach's session.
-                  </p>
+                {existingCreditAmountDueCents > 0 ? (
+                  <div className="space-y-3">
+                    <StripeCheckout
+                      packageId={selectedPackage?.id}
+                      coachId={coach?.id}
+                      sessionDurationMinutes={duration?.minutes}
+                      extraPayload={{
+                        ...checkoutExtraPayload,
+                        purpose: 'credit_top_up',
+                        credit_id: existingCredit?.id,
+                      }}
+                      disabled={!legalReadyForCheckout || !user?.profile_setup_complete || !selectedPackage?.id || !coach?.id || !existingCredit?.id}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Top-up due: {`$${formatMoney(existingCreditAmountDueCents / 100)}`}. The server recomputes this amount before Stripe opens.
+                    </p>
+                  </div>
+                ) : (
+                  <Button onClick={handleUseExistingCredits} disabled={submitting || !existingCredit || !user?.profile_setup_complete}
+                    className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90 h-12 text-base">
+                    Use my credits & continue
+                  </Button>
                 )}
               </div>
             )}

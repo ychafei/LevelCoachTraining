@@ -263,6 +263,55 @@ async function createCreditIfMissing(db, paymentRecord, session, metadata) {
   return credit.$id;
 }
 
+async function applyCreditTopUpIfMissing(db, paymentRecord, session, metadata) {
+  const creditId = String(metadata.top_up_credit_id || metadata.credit_id || '').trim();
+  if (!creditId) return '';
+  if (paymentRecord.credit_lot_id || paymentRecord.credit_id) return paymentRecord.credit_lot_id || paymentRecord.credit_id;
+
+  const idempotencyKey = `credit_top_up_${paymentRecord.$id}`;
+  if (await creditLedgerEntryExists(db, idempotencyKey)) return creditId;
+
+  const credit = await db.getDocument(DB_ID, 'session_credits', creditId).catch(() => null);
+  if (!credit) return '';
+  const amountCents = Number(session.amount_total || paymentRecord.amount || 0);
+  if (!Number.isInteger(amountCents) || amountCents <= 0) return credit.$id;
+
+  await db.incrementDocumentAttribute(DB_ID, 'session_credits', credit.$id, 'remaining_amount_cents', amountCents);
+  await db.incrementDocumentAttribute(DB_ID, 'session_credits', credit.$id, 'available_amount_cents', amountCents).catch(() => {});
+  await db.incrementDocumentAttribute(DB_ID, 'session_credits', credit.$id, 'original_amount_cents', amountCents).catch(() => {});
+  await db.incrementDocumentAttribute(DB_ID, 'session_credits', credit.$id, 'amount_cents', amountCents).catch(() => {});
+  if (credit.status === 'exhausted' || credit.status === 'expired') {
+    await db.updateDocument(DB_ID, 'session_credits', credit.$id, { status: 'active' }).catch(() => {});
+  }
+
+  const permissions = ownerReadGrant(metadata);
+  await writeCreditLedgerEntry(db, {
+    credit_id: credit.$id,
+    credit_lot_id: credit.$id,
+    client_profile_id: metadata.client_profile_id || credit.client_profile_id || credit.owner_profile_id || '',
+    owner_profile_id: metadata.client_profile_id || credit.owner_profile_id || credit.client_profile_id || '',
+    athlete_id: metadata.athlete_id || credit.athlete_id || '',
+    payment_record_id: paymentRecord.$id,
+    session_id: '',
+    actor_profile_id: metadata.client_profile_id || '',
+    type: 'top_up',
+    amount_cents: amountCents,
+    available_delta_cents: amountCents,
+    reserved_delta_cents: 0,
+    currency: session.currency || paymentRecord.currency || credit.currency || 'usd',
+    from_coach_id: credit.original_coach_id || credit.coach_id || '',
+    to_coach_id: metadata.coach_id || '',
+    organization_id: metadata.originating_organization_id || credit.original_organization_id || '',
+    idempotency_key: idempotencyKey,
+    metadata: JSON.stringify({
+      checkout_session_id: session.id,
+      session_price_cents: metadata.top_up_session_price_cents || '',
+      previous_remaining_cents: metadata.top_up_previous_remaining_cents || '',
+    }),
+  }, permissions);
+  return credit.$id;
+}
+
 async function ledgerEntryExists(db, paymentRecordId, type, stripeRef = '', idempotencyKey = '') {
   if (idempotencyKey) {
     const row = await firstDocument(db, 'payment_ledger_entries', [
@@ -312,7 +361,10 @@ async function handleCheckoutCompleted(db, stripe, session) {
     : null;
   const paymentRecord = await ensurePaymentRecord(db, session, paymentIntent);
   const metadata = paymentMetadataSnapshot(session, paymentIntent, paymentRecord);
-  const creditId = await createCreditIfMissing(db, paymentRecord, session, metadata);
+  const isTopUp = metadata.purpose === 'credit_top_up' || !!metadata.top_up_credit_id;
+  const creditId = isTopUp
+    ? await applyCreditTopUpIfMissing(db, paymentRecord, session, metadata)
+    : await createCreditIfMissing(db, paymentRecord, session, metadata);
   const chargeId = typeof paymentIntent?.latest_charge === 'string' ? paymentIntent.latest_charge : paymentIntent?.latest_charge?.id || '';
   const amount = Number(session.amount_total || paymentIntent?.amount || paymentRecord.amount || 0);
   const currency = session.currency || paymentIntent?.currency || paymentRecord.currency || 'usd';
@@ -328,7 +380,7 @@ async function handleCheckoutCompleted(db, stripe, session) {
     transfer_destination: '',
     status: 'paid',
     state: 'paid',
-    purpose: paymentRecord.purpose || metadata.purpose || 'prepaid_credit',
+    purpose: metadata.purpose || paymentRecord.purpose || 'prepaid_credit',
     merchant_of_record: 'levelcoach_platform',
     athlete_id: metadata.athlete_id || paymentRecord.athlete_id || '',
     available_for_refund_cents: Math.max(0, amount - refundedAmount),
@@ -356,7 +408,7 @@ async function handleCheckoutCompleted(db, stripe, session) {
     metadata: JSON.stringify({ checkout_session_id: session.id, payout_plan: metadata.payout_plan }),
   }, clientReadGrant);
 
-  if (creditId) {
+  if (creditId && !isTopUp) {
     await writeCreditLedgerEntry(db, {
       credit_id: creditId,
       credit_lot_id: creditId,

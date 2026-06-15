@@ -65,6 +65,11 @@ const refund = 'functions/refundStripePayment/src/main.js';
 const publicCoaches = 'functions/getPublicCoaches/src/main.js';
 const publicCoachLib = 'src/lib/publicCoach.js';
 const coachSelf = 'functions/coachSelf/src/main.js';
+const orgAdmin = 'functions/orgAdmin/src/main.js';
+const signLegal = 'functions/signLegalAgreement/src/main.js';
+const bookPage = 'src/pages/Book.jsx';
+const pricingDurations = 'src/lib/pricingDurations.js';
+const provision = 'scripts/provision-appwrite.mjs';
 
 const publicCardBody = functionBody(read(publicCoaches), 'publicCard');
 const normalizeBody = functionBody(read(publicCoachLib), 'normalizePublicCoach');
@@ -216,10 +221,62 @@ scenario(15, 'Legal template version bump requires re-signing before checkout/bo
   mustInclude(coachSelf, 'coachLegalPacketComplete(databases, profile, coach)', 'publish must require current coach legal packet.');
 });
 
+scenario(16, 'Pricing packages support multiple duration/price options', () => {
+  mustInclude(provision, "await attrString('pricing_packages', 'duration_options', 20000)", 'schema must provision duration options JSON.');
+  mustInclude(pricingDurations, 'normalizeDurationOptions', 'frontend must normalize package duration options.');
+  mustInclude(pricingDurations, 'discountPercentForOption', 'frontend must calculate hourly discount display.');
+  mustInclude(coachSelf, 'duration_options: JSON.stringify(durationOptions)', 'coach package save must persist duration options.');
+  mustInclude(orgAdmin, 'duration_options: JSON.stringify(durationOptions)', 'org package save must persist duration options.');
+  mustInclude(coachSelf, 'duration_minutes: primary.duration_minutes', 'coach package save must mirror primary duration for compatibility.');
+  mustInclude(orgAdmin, 'price_cents: primary.price_cents', 'org package save must mirror primary price for compatibility.');
+  mustInclude(bookPage, 'STEP_DURATION', 'booking flow must include duration step when a package has multiple options.');
+  mustInclude(bookPage, 'selectedDurationOptions', 'booking flow must render package-specific duration options.');
+});
+
+scenario(17, 'Client booking flow removes format and captures coach message/location', () => {
+  mustNotMatch(booking, /\bsession_format\b/, 'server booking must not accept or store old format selections.');
+  mustNotMatch(checkout, /\bsession_format\b/, 'checkout must not accept or store old format selections.');
+  mustNotMatch(bookPage, /\bSTEP_FORMAT\b|\bselectedSessionFormat\b|\bformatOptions\b/, 'client booking wizard must not show the old format step.');
+  mustInclude(bookPage, 'Details for the coach', 'client flow must ask for coach-facing details before payment/scheduling.');
+  mustInclude(bookPage, 'preferred_location: preferredLocation.trim()', 'checkout payload must carry preferred location.');
+  mustInclude(booking, 'const preferredLocation = cleanText(payload.preferred_location || payload.preferredLocation || \'\', 1000)', 'booking must sanitize preferred location server-side.');
+  mustInclude(booking, 'client_message: notes', 'reservation metadata must capture the client message.');
+  mustInclude(booking, 'preferred_location: preferredLocation', 'session must store preferred location snapshot.');
+});
+
+scenario(18, 'Credit top-up charges only the difference and grants transferable value', () => {
+  mustInclude(checkout, "requestedPurpose === 'credit_top_up'", 'checkout must recognize top-up requests.');
+  mustInclude(checkout, 'amount = Math.max(0, topUpSessionPrice - topUpRemaining)', 'top-up amount must be only the selected-session difference.');
+  mustInclude(checkout, "purpose: topUpRequested ? 'credit_top_up' : 'prepaid_credit'", 'payment record and Stripe metadata must identify top-ups.');
+  mustInclude(webhook, 'applyCreditTopUpIfMissing', 'webhook must apply top-up value to the existing credit.');
+  mustInclude(webhook, "type: 'top_up'", 'top-up must write credit ledger type top_up.');
+  mustInclude(webhook, "incrementDocumentAttribute(DB_ID, 'session_credits', credit.$id, 'remaining_amount_cents', amountCents)", 'top-up must atomically increase remaining credit value.');
+});
+
+scenario(19, 'Legal signing succeeds even if PDF generation is deferred', () => {
+  mustInclude(signLegal, 'resolveSignerRole', 'server must resolve requested signer role from verified account data.');
+  mustInclude(signLegal, 'canSignAsOrganization', 'organization signing must be verified server-side.');
+  mustInclude(signLegal, 'canSignAsGuardian', 'guardian signing must be verified server-side.');
+  mustInclude(signLegal, 'isAdminRole', 'admin signing must be explicitly recognized.');
+  mustInclude(signLegal, 'PDF generation deferred', 'PDF/storage failures must not make the signature fail.');
+  mustInclude(signLegal, 'pdf_pending', 'response/audit must expose deferred PDF state.');
+  mustInclude(signLegal, "return res.json({\n      agreement_id: updated.$id", 'successful signing must still return agreement_id.');
+});
+
+scenario(20, 'Coach publish gate auto-creates starter package and public cards require package-derived price', () => {
+  mustInclude(coachSelf, 'ensureStarterPackageFromPriceHint', 'publish checklist must create a starter package from starting price.');
+  mustInclude(coachSelf, "name: 'Single Session'", 'starter package must be named Single Session.');
+  mustInclude(coachSelf, "checklistItem('starting_price'", 'publish checklist must show missing starting price explicitly.');
+  mustInclude(coachSelf, "checklistItem('pricing'", 'publish checklist must show package/pricing status explicitly.');
+  mustInclude(publicCoaches, 'durationOptions(pkg)', 'public price hints must inspect duration options.');
+  mustInclude(publicCoaches, 'const visible = visibleBase.filter((doc) => priceHints.has(doc.$id))', 'public coaches must have an active package-derived price hint.');
+  mustInclude(publicCoaches, 'publicMinimumComplete', 'public API must keep incomplete old published rows out of marketplace results.');
+});
+
 if (failures.length) {
   console.error('Phase 8 verification failed:');
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log('Phase 8 verification passed (15 prepaid-credit, payout, privacy, and legal invariants hold).');
+console.log('Phase 8 verification passed (20 prepaid-credit, payout, privacy, legal, and booking-flow invariants hold).');

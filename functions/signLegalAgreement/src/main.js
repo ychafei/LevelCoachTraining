@@ -66,6 +66,60 @@ function signerRoleForProfile(profile) {
   return 'athlete';
 }
 
+function isAdminRole(profile) {
+  return ['admin', 'super_admin', 'master_admin', 'master_admin_locked'].includes(String(profile?.role || ''));
+}
+
+async function hasCoachRecord(databases, accountId) {
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return !!rows.documents[0];
+}
+
+async function canSignAsOrganization(databases, profile, payload) {
+  const organizationId = String(payload.organization_id || profile.primary_organization_id || '');
+  if (!organizationId) return false;
+  const members = await databases.listDocuments(DB_ID, 'organization_members', [
+    Query.equal('organization_id', organizationId),
+    Query.equal('profile_id', profile.$id),
+    Query.equal('status', 'active'),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return ['org_owner', 'org_admin'].includes(members.documents[0]?.role);
+}
+
+async function canSignAsGuardian(databases, profile, payload) {
+  if (profile.onboarding_role === 'parent' || profile.onboarding_role === 'guardian') return true;
+  const athleteId = String(payload.athlete_id || '');
+  if (!athleteId) return false;
+  const links = await databases.listDocuments(DB_ID, 'guardian_athletes', [
+    Query.equal('guardian_profile_id', profile.$id),
+    Query.equal('athlete_id', athleteId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return !!links.documents[0];
+}
+
+async function resolveSignerRole(databases, accountId, profile, payload) {
+  const requested = String(payload.signer_role || '').trim();
+  if (!requested) return signerRoleForProfile(profile);
+  if (!SIGNER_TO_TEMPLATE_ROLE[requested]) return null;
+  if (requested === 'admin') return isAdminRole(profile) ? 'admin' : null;
+  if (requested === 'coach') return await hasCoachRecord(databases, accountId) ? 'coach' : null;
+  if (requested === 'organization_admin') {
+    return await canSignAsOrganization(databases, profile, payload) ? 'organization_admin' : null;
+  }
+  if (requested === 'guardian') {
+    return await canSignAsGuardian(databases, profile, payload) ? 'guardian' : null;
+  }
+  if (requested === 'athlete') {
+    return profile.is_minor === true ? null : 'athlete';
+  }
+  return null;
+}
+
 // Role-specific entity checks. Returns verified athlete/coach/org bindings or
 // an error message; client-supplied ids are only used after verification.
 async function verifySignerEntities(databases, accountId, profile, signerRole, payload) {
@@ -116,6 +170,10 @@ async function verifySignerEntities(databases, accountId, profile, signerRole, p
       return { error: 'Only organization owners or admins can sign for the organization.', status: 403 };
     }
     return { athlete_id: '', coach_id: '', organization_id: organizationId };
+  }
+  if (signerRole === 'admin') {
+    if (!isAdminRole(profile)) return { error: 'Only admins can sign admin agreements.', status: 403 };
+    return { athlete_id: '', coach_id: '', organization_id: '' };
   }
   return { error: 'Unsupported signer role.', status: 400 };
 }
@@ -240,10 +298,8 @@ export default async ({ req, res, error }) => {
       return res.json({ error: 'Account access is restricted.' }, 403);
     }
 
-    const signerRole = signerRoleForProfile(profile);
-    if (payload.signer_role && payload.signer_role !== signerRole) {
-      return res.json({ error: 'signer_role does not match your account role.' }, 403);
-    }
+    const signerRole = await resolveSignerRole(databases, accountId, profile, payload);
+    if (!signerRole) return res.json({ error: 'signer_role does not match your account permissions.' }, 403);
     const expectedTemplateRole = SIGNER_TO_TEMPLATE_ROLE[signerRole];
     if (!expectedTemplateRole) return res.json({ error: 'Unsupported signer_role.' }, 400);
     if (!affirmationsValid(signerRole, affirmations)) {
@@ -296,10 +352,16 @@ export default async ({ req, res, error }) => {
       status: 'signed',
     });
 
-    const pdf = await createPdf(storage, template, agreement, { affirmations_json: affirmationsJson });
-    const updated = await databases.updateDocument(DB_ID, 'legal_agreements', agreement.$id, {
-      pdf_file_id: pdf.$id,
-    });
+    let pdf = null;
+    let updated = agreement;
+    try {
+      pdf = await createPdf(storage, template, agreement, { affirmations_json: affirmationsJson });
+      updated = await databases.updateDocument(DB_ID, 'legal_agreements', agreement.$id, {
+        pdf_file_id: pdf.$id,
+      });
+    } catch (pdfErr) {
+      error?.(`[signLegalAgreement] signed agreement ${agreement.$id}; PDF generation deferred: ${pdfErr?.message || pdfErr}`);
+    }
 
     await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), {
       actor_email: profile.email || '',
@@ -313,7 +375,8 @@ export default async ({ req, res, error }) => {
         template_key: template.template_key,
         template_version: template.version,
         signer_role: signerRole,
-        pdf_file_id: pdf.$id,
+        pdf_file_id: pdf?.$id || '',
+        pdf_pending: !pdf,
       }),
       metadata: JSON.stringify({
         signer_profile_id: profile.$id,
@@ -325,9 +388,10 @@ export default async ({ req, res, error }) => {
 
     return res.json({
       agreement_id: updated.$id,
-      pdf_file_id: updated.pdf_file_id,
+      pdf_file_id: updated.pdf_file_id || '',
       signature_hash: updated.signature_hash,
       signed_at: updated.signed_at,
+      pdf_pending: !updated.pdf_file_id,
     });
   } catch (err) {
     error?.(err?.message || String(err));

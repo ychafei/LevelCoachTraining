@@ -12,6 +12,7 @@ export const SIGNER_ROLE_TO_TEMPLATE_ROLE = {
 
 export function legalSignerRoleForUser(user) {
   if (!user) return '';
+  if (['admin', 'super_admin', 'master_admin', 'master_admin_locked'].includes(user.role)) return 'admin';
   if (user.role === 'coach') return 'coach';
   if (user.onboarding_role === 'organization' || user.primary_organization_id) return 'organization_admin';
   if (user.onboarding_role === 'parent' || user.onboarding_role === 'guardian') return 'guardian';

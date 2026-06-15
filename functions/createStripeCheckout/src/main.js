@@ -4,7 +4,6 @@ import Stripe from 'stripe';
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
 const COACH_NOT_READY = 'Coach is not ready to accept payments yet.';
-const LOCATION_FORMATS = new Set(['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid']);
 
 const DURATIONS = new Map([
   [60, { hours: 1, discount: 0 }],
@@ -166,6 +165,9 @@ async function coachLegalPacketComplete(db, coach) {
 }
 
 function calculateAmountCents(pkg, durationMinutes) {
+  const selected = durationOptionFor(pkg, durationMinutes);
+  if (selected) return selected.price_cents;
+
   // Self-contained per-coach package: price_cents is the authoritative total.
   // The legacy global per-hour multiplier no longer applies.
   const priceCents = Number(pkg.price_cents);
@@ -184,7 +186,52 @@ function calculateAmountCents(pkg, durationMinutes) {
 
 // Is this a self-contained per-coach package (price + duration baked in)?
 function isSelfContained(pkg) {
-  return Number.isInteger(Number(pkg.price_cents)) && Number(pkg.price_cents) > 0;
+  return durationOptions(pkg).length > 0 || (Number.isInteger(Number(pkg.price_cents)) && Number(pkg.price_cents) > 0);
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function durationOptions(pkg) {
+  const parsed = parseJsonArray(pkg?.duration_options);
+  const rows = parsed.length
+    ? parsed
+    : [{
+        duration_minutes: Number(pkg?.duration_minutes) || 60,
+        price_cents: Number(pkg?.price_cents) || 0,
+      }];
+  const byDuration = new Map();
+  for (const row of rows) {
+    const duration = Number(row?.duration_minutes);
+    const priceCents = Number(row?.price_cents);
+    if (!Number.isInteger(duration) || duration < 15 || duration > 480) continue;
+    if (!Number.isInteger(priceCents) || priceCents <= 0) continue;
+    byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
+  }
+  return [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
+}
+
+function durationOptionFor(pkg, durationMinutes) {
+  const options = durationOptions(pkg);
+  if (!options.length) return null;
+  const requested = Number(durationMinutes) || options[0].duration_minutes;
+  return options.find((option) => option.duration_minutes === requested) || null;
+}
+
+function sessionPriceCents(pkg, durationMinutes) {
+  const total = calculateAmountCents(pkg, durationMinutes);
+  const sessions = Math.max(1, Number(pkg.sessions) || 1);
+  return Number.isInteger(total) && total > 0 ? Math.floor(total / sessions) : null;
 }
 
 // True when the coach has an ACTIVE organization_coaches link to this org —
@@ -243,14 +290,10 @@ function asCleanArray(value) {
   return [];
 }
 
-function packageAppliesToSelection(pkg, { sportKey, sessionFormat }) {
+function packageAppliesToSelection(pkg, { sportKey }) {
   const packageSports = asCleanArray(pkg?.sport_keys);
   if (packageSports.length && (!sportKey || !packageSports.includes(sportKey))) {
     return { error: 'This package is not available for the selected sport.' };
-  }
-  const packageFormats = asCleanArray(pkg?.location_formats);
-  if (packageFormats.length && (!sessionFormat || !packageFormats.includes(sessionFormat))) {
-    return { error: 'This package is not available for the selected session format.' };
   }
   return { ok: true };
 }
@@ -261,26 +304,28 @@ function coachOffersSport(coach, sportKey) {
   return sports.length === 0 || sports.includes(sportKey);
 }
 
-function coachFormatOptions(coach) {
-  const type = cleanKey(coach?.service_type);
-  const options = new Set();
-  if (type === 'facility') options.add('training_facility');
-  if (type === 'travels') options.add('coach_travels');
-  if (type === 'online') options.add('online');
-  if (type === 'hybrid') {
-    options.add('training_facility');
-    options.add('coach_travels');
-    options.add('hybrid');
-  }
-  if (coach?.service_venue || coach?.organization_id) options.add('organization_facility');
-  return [...options];
+async function guardianLink(db, guardianProfileId, athleteId) {
+  if (!guardianProfileId || !athleteId) return null;
+  const rows = await db.listDocuments(DB_ID, 'guardian_athletes', [
+    Query.equal('guardian_profile_id', guardianProfileId),
+    Query.equal('athlete_id', athleteId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
 }
 
-function coachOffersFormat(coach, sessionFormat) {
-  if (!sessionFormat) return true;
-  if (sessionFormat === 'organization_facility') return true;
-  const options = coachFormatOptions(coach);
-  return options.length === 0 || options.includes(sessionFormat);
+async function creditAccessibleToProfile(db, credit, profile) {
+  if (!credit || !profile) return false;
+  if (credit.client_profile_id && credit.client_profile_id === profile.$id) return true;
+  if (credit.owner_profile_id && credit.owner_profile_id === profile.$id) return true;
+  if (credit.owner_account_id && credit.owner_account_id === profile.account_id) return true;
+  if (String(credit.client_email || '').toLowerCase() && String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase()) return true;
+  const athleteId = String(credit.athlete_id || '').trim();
+  if (!athleteId) return false;
+  const athlete = await db.getDocument(DB_ID, 'athlete_profiles', athleteId).catch(() => null);
+  if (athlete?.profile_id === profile.$id) return true;
+  const link = await guardianLink(db, profile.$id, athleteId);
+  return !!link && link.can_book !== false;
 }
 
 function validateBookingLocation(coach, payload) {
@@ -382,6 +427,10 @@ export default async ({ req, res, error }) => {
     if (payload.bookingId && !validId(payload.bookingId)) {
       return res.json({ error: 'bookingId is invalid.' }, 400);
     }
+    const requestedPurpose = String(payload.purpose || '').trim();
+    const topUpCreditId = String(payload.credit_id || payload.top_up_credit_id || '').trim();
+    const topUpRequested = requestedPurpose === 'credit_top_up' || !!topUpCreditId;
+    if (topUpCreditId && !validId(topUpCreditId)) return res.json({ error: 'credit_id is invalid.' }, 400);
     // Guardian buyers purchase for a specific child; the consent gate below is
     // athlete-scoped. Accept athlete_id from the payload and validate its shape.
     const athleteId = payload.athleteId || payload.athlete_id || '';
@@ -411,17 +460,10 @@ export default async ({ req, res, error }) => {
     if (!pkg || !coach) return res.json({ error: 'Package or coach not found.' }, 404);
     if (pkg.is_visible === false) return res.json({ error: 'This package is not available for checkout.' }, 400);
     const sportKey = cleanKey(payload.sport_key || payload.sport || '');
-    const sessionFormat = cleanKey(payload.session_format || payload.location_format || '');
-    if (sessionFormat && !LOCATION_FORMATS.has(sessionFormat)) {
-      return res.json({ error: 'session_format is invalid.' }, 400);
-    }
     if (!coachOffersSport(coach, sportKey)) {
       return res.json({ error: 'This coach does not offer the selected sport.' }, 400);
     }
-    if (!coachOffersFormat(coach, sessionFormat)) {
-      return res.json({ error: 'This coach does not offer the selected session format.' }, 400);
-    }
-    const packageSelection = packageAppliesToSelection(pkg, { sportKey, sessionFormat });
+    const packageSelection = packageAppliesToSelection(pkg, { sportKey });
     if (packageSelection.error) return res.json({ error: packageSelection.error }, 400);
 
     // Package binding: a coach-bound package can only be purchased for that coach.
@@ -441,9 +483,13 @@ export default async ({ req, res, error }) => {
     // Duration: a self-contained package defines its own session length (server
     // is the source of truth). Legacy global packages still use the duration
     // table the client selected.
-    const durationMinutes = isSelfContained(pkg)
-      ? (Number.isInteger(Number(pkg.duration_minutes)) && Number(pkg.duration_minutes) >= 15 ? Number(pkg.duration_minutes) : 60)
+    const durationOptionsForPackage = durationOptions(pkg);
+    const durationMinutes = durationOptionsForPackage.length
+      ? requestedDuration
       : requestedDuration;
+    if (durationOptionsForPackage.length && !durationOptionFor(pkg, durationMinutes)) {
+      return res.json({ error: 'This package is not available for the selected duration.' }, 400);
+    }
     if (!isSelfContained(pkg) && !DURATIONS.has(durationMinutes)) {
       return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
     }
@@ -458,7 +504,30 @@ export default async ({ req, res, error }) => {
     const availability = validateAvailabilityPayload(payload);
     if (availability.error) return res.json({ error: availability.error }, 400);
 
-    const amount = calculateAmountCents(pkg, durationMinutes);
+    const fullPackageAmount = calculateAmountCents(pkg, durationMinutes);
+    let amount = fullPackageAmount;
+    let topUpCredit = null;
+    let topUpSessionPrice = 0;
+    let topUpRemaining = 0;
+    if (topUpRequested) {
+      if (!topUpCreditId) return res.json({ error: 'credit_id is required for top-up checkout.' }, 400);
+      topUpCredit = await db.getDocument(DB_ID, 'session_credits', topUpCreditId).catch(() => null);
+      if (!topUpCredit) return res.json({ error: 'Credit not found.' }, 404);
+      if (!(await creditAccessibleToProfile(db, topUpCredit, profile))) {
+        return res.json({ error: 'This credit does not belong to you or an athlete linked to you.' }, 403);
+      }
+      if (String(topUpCredit.status || 'active') !== 'active') {
+        return res.json({ error: 'This credit is not available for top-up.' }, 409);
+      }
+      topUpSessionPrice = sessionPriceCents(pkg, durationMinutes) || 0;
+      topUpRemaining = Number.isInteger(Number(topUpCredit.remaining_amount_cents))
+        ? Math.max(0, Number(topUpCredit.remaining_amount_cents))
+        : Math.max(0, Number(topUpCredit.available_amount_cents) || 0);
+      amount = Math.max(0, topUpSessionPrice - topUpRemaining);
+      if (amount <= 0) {
+        return res.json({ error: 'No top-up is needed for this credit and session.' }, 400);
+      }
+    }
     if (!amount || amount < 50) return res.json({ error: 'A valid package amount is required.' }, 400);
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
@@ -473,13 +542,14 @@ export default async ({ req, res, error }) => {
       package_sessions: String(pkg.sessions || 1),
       session_duration_minutes: String(durationMinutes),
       sport_key: sportKey,
-      session_format: sessionFormat,
-      session_format_label: truncateMetadata(payload.session_format_label || payload.location_format_label || '', 120),
       booking_id: bookingReference,
       coach_id: coach.$id,
       coach_name: [coach.first_name, coach.last_name].filter(Boolean).join(' '),
       originating_organization_id: pkgOrgId || '',
-      purpose: 'prepaid_credit',
+      purpose: topUpRequested ? 'credit_top_up' : 'prepaid_credit',
+      top_up_credit_id: topUpCredit?.$id || '',
+      top_up_session_price_cents: topUpSessionPrice ? String(topUpSessionPrice) : '',
+      top_up_previous_remaining_cents: topUpRequested ? String(topUpRemaining) : '',
       booking_location_status: bookingLocation.status,
       booking_location_label: bookingLocation.label || '',
       booking_location_lat: bookingLocation.lat !== null && bookingLocation.lat !== undefined ? String(bookingLocation.lat) : '',
@@ -496,6 +566,7 @@ export default async ({ req, res, error }) => {
         ? `${availability.preference.earliestStart}-${availability.preference.latestStart}`
         : '',
       client_notes: truncateMetadata(payload.client_notes || payload.notes || ''),
+      preferred_location: truncateMetadata(payload.preferred_location || payload.preferredLocation || '', 480),
     };
 
     // Platform is merchant of record: no Connect destination or fee fields.
@@ -516,7 +587,7 @@ export default async ({ req, res, error }) => {
         price_data: {
           currency: 'usd',
           unit_amount: amount,
-          product_data: { name: metadata.package_name },
+          product_data: { name: topUpRequested ? `Top-up for ${metadata.package_name}` : metadata.package_name },
         },
       }],
       payment_intent_data: { metadata },
@@ -532,7 +603,7 @@ export default async ({ req, res, error }) => {
       transfer_destination: '',
       status: 'created',
       state: 'created',
-      purpose: 'prepaid_credit',
+      purpose: topUpRequested ? 'credit_top_up' : 'prepaid_credit',
       merchant_of_record: 'levelcoach_platform',
       athlete_id: athleteId || '',
       available_for_refund_cents: amount,

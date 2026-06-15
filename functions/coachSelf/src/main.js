@@ -188,6 +188,41 @@ async function updateCoach(databases, coachId, updates) {
   return null;
 }
 
+async function createDocumentResilient(databases, collection, data) {
+  const payload = { ...data };
+  for (let i = 0; i < 12; i += 1) {
+    try {
+      return await databases.createDocument(DB_ID, collection, ID.unique(), payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return databases.createDocument(DB_ID, collection, ID.unique(), payload);
+}
+
+async function updateDocumentResilient(databases, collection, id, data) {
+  const payload = { ...data };
+  for (let i = 0; i < 12; i += 1) {
+    if (Object.keys(payload).length === 0) return databases.getDocument(DB_ID, collection, id);
+    try {
+      return await databases.updateDocument(DB_ID, collection, id, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return databases.updateDocument(DB_ID, collection, id, payload);
+}
+
 // Whitelisted self-service profile fields. Fee/verification/stripe/active/
 // published/rating/user_id fields are intentionally absent.
 const PROFILE_FIELDS = {
@@ -415,7 +450,6 @@ async function setBookingRules(databases, coach, payload) {
 // never dictates a coach's prices.
 
 const SESSION_TYPES = ['private', 'small_group', 'team', 'evaluation', 'virtual'];
-const LOCATION_FORMATS = ['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid'];
 const MIN_PRICE_CENTS = 500;            // $5.00 floor
 const MAX_PRICE_CENTS = 5_000_00;       // $5,000 ceiling per package
 
@@ -436,13 +470,51 @@ function cleanList(value, { maxItems = 20, maxLength = 120, allow = null } = {})
   return out;
 }
 
+function parseDurationOptions(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeDurationOptions(value, fallbackDuration, fallbackPriceCents) {
+  const rows = parseDurationOptions(value);
+  const source = rows.length
+    ? rows
+    : [{ duration_minutes: fallbackDuration, price_cents: fallbackPriceCents }];
+  const byDuration = new Map();
+  for (const row of source) {
+    const duration = int(row?.duration_minutes, 15, 480);
+    const priceCents = int(row?.price_cents, MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+    if (duration === undefined || priceCents === undefined) {
+      return { error: 'Each duration option needs a 15-480 minute duration and valid integer-cent price.' };
+    }
+    byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
+  }
+  const options = [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
+  if (!options.length) return { error: 'At least one duration option is required.' };
+  return { options, primary: options[0] };
+}
+
 function packageView(doc) {
+  const durationOptions = normalizeDurationOptions(
+    doc.duration_options,
+    Number(doc.duration_minutes) || 60,
+    Number(doc.price_cents) || 0,
+  ).options || [];
   return {
     id: doc.$id,
     coach_id: doc.coach_id || '',
     name: doc.name || '',
     sessions: Number(doc.sessions) || 1,
     duration_minutes: Number(doc.duration_minutes) || 60,
+    duration_options: durationOptions,
     price_cents: Number(doc.price_cents) || 0,
     session_type: doc.session_type || '',
     description: doc.description || '',
@@ -474,6 +546,9 @@ async function savePackage(databases, coach, payload) {
   if (sessions === undefined) return { status: 400, body: { error: 'Sessions must be an integer between 1 and 100.' } };
   if (duration === undefined) return { status: 400, body: { error: 'Session length must be 15–480 minutes.' } };
   if (priceCents === undefined) return { status: 400, body: { error: `Price must be between $${MIN_PRICE_CENTS / 100} and $${MAX_PRICE_CENTS / 100}.` } };
+  const durationOptionsResult = normalizeDurationOptions(payload.duration_options, duration, priceCents);
+  if (durationOptionsResult.error) return { status: 400, body: { error: durationOptionsResult.error } };
+  const { options: durationOptions, primary } = durationOptionsResult;
 
   const sessionType = payload.session_type ? (SESSION_TYPES.includes(payload.session_type) ? payload.session_type : undefined) : '';
   if (sessionType === undefined) return { status: 400, body: { error: 'Invalid session type.' } };
@@ -482,20 +557,20 @@ async function savePackage(databases, coach, payload) {
   const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
   const isActive = payload.is_active !== false;
   const sportKeys = cleanList(payload.sport_keys || payload.sports);
-  const locationFormats = cleanList(payload.location_formats || payload.session_formats, { allow: LOCATION_FORMATS });
 
   const data = {
     coach_id: coach.$id,
     name,
     sessions,
-    duration_minutes: duration,
-    price_cents: priceCents,
-    price: Math.round(priceCents) / 100,   // legacy dollar mirror (back-compat)
+    duration_minutes: primary.duration_minutes,
+    duration_options: JSON.stringify(durationOptions),
+    price_cents: primary.price_cents,
+    price: Math.round(primary.price_cents) / 100,   // legacy dollar mirror (back-compat)
     session_type: sessionType,
     description,
     badge,
     sport_keys: sportKeys,
-    location_formats: locationFormats,
+    location_formats: [],
     display_order: displayOrder,
     is_active: isActive,
     is_visible: isActive,                  // legacy visibility mirror
@@ -506,9 +581,9 @@ async function savePackage(databases, coach, payload) {
     const existing = await databases.getDocument(DB_ID, 'pricing_packages', String(payload.package_id)).catch(() => null);
     if (!existing) return { status: 404, body: { error: 'Package not found.' } };
     if (existing.coach_id !== coach.$id) return { status: 403, body: { error: 'You can only edit your own packages.' } };
-    doc = await databases.updateDocument(DB_ID, 'pricing_packages', existing.$id, data);
+    doc = await updateDocumentResilient(databases, 'pricing_packages', existing.$id, data);
   } else {
-    doc = await databases.createDocument(DB_ID, 'pricing_packages', ID.unique(), data);
+    doc = await createDocumentResilient(databases, 'pricing_packages', data);
   }
   return { status: 200, body: { ok: true, package: packageView(doc) } };
 }
@@ -530,6 +605,39 @@ async function hasActivePackage(databases, coach) {
     Query.limit(1),
   ]).catch(() => ({ documents: [] }));
   return rows.documents.length > 0;
+}
+
+function startingPriceCents(coach) {
+  const cents = Number(coach.price_hint_cents);
+  return Number.isInteger(cents) && cents >= MIN_PRICE_CENTS && cents <= MAX_PRICE_CENTS ? cents : null;
+}
+
+async function ensureStarterPackageFromPriceHint(databases, coach) {
+  if (await hasActivePackage(databases, coach)) return { done: true, created: false };
+  const priceCents = startingPriceCents(coach);
+  if (!priceCents) return { done: false, created: false };
+
+  const durationOptions = [{ duration_minutes: 60, price_cents: priceCents }];
+  await createDocumentResilient(databases, 'pricing_packages', {
+    coach_id: coach.$id,
+    organization_id: '',
+    name: 'Single Session',
+    sessions: 1,
+    duration_minutes: 60,
+    duration_options: JSON.stringify(durationOptions),
+    price_cents: priceCents,
+    price: priceCents / 100,
+    session_type: 'private',
+    description: 'One private training session.',
+    includes: [],
+    badge: '',
+    sport_keys: asArray(coach.sports),
+    location_formats: [],
+    display_order: 0,
+    is_active: true,
+    is_visible: true,
+  });
+  return { done: true, created: true };
 }
 
 async function requestEmailCode(databases, coach, payload, error) {
@@ -857,13 +965,14 @@ function checklistItem(key, label, done, description, details = []) {
 async function buildPublishChecklist(databases, users, profile, coach) {
   const priv = await getCoachPrivate(databases, coach.$id);
   const emailVerifiedAt = priv?.email_verified_at ?? coach.email_verified_at ?? null;
+  const starterPrice = startingPriceCents(coach);
+  const pricingStatus = await ensureStarterPackageFromPriceHint(databases, coach);
   const [
     linked,
     legal,
     connect,
     sportProfile,
     availability,
-    pricing,
     safety,
   ] = await Promise.all([
     linkedAccountExists(users, coach),
@@ -871,7 +980,6 @@ async function buildPublishChecklist(databases, users, profile, coach) {
     connectReady(databases, coach),
     hasCompleteSportProfile(databases, coach),
     hasAvailability(databases, coach),
-    hasActivePackage(databases, coach),
     safetyPolicyStatus(databases, coach, profile, priv),
   ]);
 
@@ -888,7 +996,10 @@ async function buildPublishChecklist(databases, users, profile, coach) {
     checklistItem('service_location', 'Service location complete', serviceLocationComplete(coach), 'Set service type, city, state, ZIP, and required venue/radius details.'),
     checklistItem('timezone', 'Timezone set', !!validTimezone(coach.timezone), 'Choose the timezone used for availability and bookings.'),
     checklistItem('availability', 'Availability exists', availability, 'Add weekly availability or active availability blocks.'),
-    checklistItem('pricing', 'Active pricing package exists', pricing, 'Create at least one active pricing package.'),
+    checklistItem('starting_price', 'Starting price set', !!starterPrice, 'Set Starting price (USD per session) in the coach profile.'),
+    checklistItem('pricing', 'Active pricing package exists', pricingStatus.done, pricingStatus.created
+      ? 'A Single Session package was created automatically from the starting price.'
+      : 'Create at least one active pricing package, or set a starting price so one can be created automatically.'),
     checklistItem('safety_policy', 'Safety, background, and insurance policy complete', safety.done, 'Configured site policy requirements must be complete.', safety.details),
   ];
   const missing = items.filter((item) => !item.done).map((item) => item.key);

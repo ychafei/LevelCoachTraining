@@ -9,6 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Pencil, Trash2, Loader2, Package as PackageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
+import {
+  DEFAULT_PACKAGE_DURATIONS,
+  discountPercentForOption,
+  formatDurationMinutes,
+  normalizeDurationOptions,
+} from '@/lib/pricingDurations';
 
 const SESSION_TYPES = [
   { value: 'private', label: 'Private (1-on-1)' },
@@ -18,37 +24,28 @@ const SESSION_TYPES = [
   { value: 'virtual', label: 'Virtual' },
 ];
 
-const DURATIONS = [30, 45, 60, 75, 90, 120];
-const LOCATION_FORMATS = [
-  { value: 'training_facility', label: 'Training facility' },
-  { value: 'coach_travels', label: 'Coach travels' },
-  { value: 'online', label: 'Online' },
-  { value: 'organization_facility', label: 'Organization/facility' },
-  { value: 'hybrid', label: 'Hybrid' },
-];
-
 const emptyDraft = {
   package_id: null,
   name: '',
   sessions: '1',
   duration_minutes: '60',
   price_dollars: '',
+  duration_options: [{ duration_minutes: 60, price_cents: 0 }],
   session_type: 'private',
   description: '',
   badge: '',
   sport_keys: [],
-  location_formats: [],
   is_active: true,
 };
 
 const usd = (cents) => `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
-const formatLabel = (value) => LOCATION_FORMATS.find((item) => item.value === value)?.label || value;
 
 function PackageRow({ pkg, onEdit, onDelete, busy }) {
-  const per = pkg.sessions > 1 ? ` · ${usd(Math.round(pkg.price_cents / pkg.sessions))}/session` : '';
+  const options = normalizeDurationOptions(pkg);
+  const primary = options[0] || { duration_minutes: pkg.duration_minutes || 60, price_cents: pkg.price_cents || 0 };
+  const per = pkg.sessions > 1 ? ` · ${usd(Math.round(primary.price_cents / pkg.sessions))}/session` : '';
   const sports = Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [];
-  const formats = Array.isArray(pkg.location_formats) ? pkg.location_formats : [];
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
       <div className="min-w-0">
@@ -58,13 +55,16 @@ function PackageRow({ pkg, onEdit, onDelete, busy }) {
           {!pkg.is_active ? <Badge variant="outline" className="text-[10px]">Hidden</Badge> : null}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {pkg.sessions} session{pkg.sessions === 1 ? '' : 's'} · {pkg.duration_minutes} min · <span className="text-accent font-semibold">{usd(pkg.price_cents)}</span>{per}
+          {pkg.sessions} session{pkg.sessions === 1 ? '' : 's'} · {formatDurationMinutes(primary.duration_minutes)} · <span className="text-accent font-semibold">{usd(primary.price_cents)}</span>{per}
           {pkg.session_type ? ` · ${pkg.session_type.replace('_', ' ')}` : ''}
         </p>
+        {options.length > 1 && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Durations: {options.map((option) => `${formatDurationMinutes(option.duration_minutes)} ${usd(option.price_cents)}`).join(' · ')}
+          </p>
+        )}
         <p className="text-[11px] text-muted-foreground mt-1">
           {sports.length ? sports.map((sport) => SPORT_LABELS.get(sport) || sport).join(', ') : 'All sports'}
-          {' · '}
-          {formats.length ? formats.map(formatLabel).join(', ') : 'All formats'}
         </p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -99,17 +99,21 @@ export default function PackagesManager() {
   useEffect(() => { load(); }, []);
 
   const startNew = () => setDraft({ ...emptyDraft });
+  const optionDrafts = (pkg) => {
+    const options = normalizeDurationOptions(pkg);
+    return options.length ? options : [{ duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: Number(pkg.price_cents) || 0 }];
+  };
   const startEdit = (pkg) => setDraft({
     package_id: pkg.id,
     name: pkg.name,
     sessions: String(pkg.sessions),
     duration_minutes: String(pkg.duration_minutes),
     price_dollars: String(pkg.price_cents / 100),
+    duration_options: optionDrafts(pkg),
     session_type: pkg.session_type || 'private',
     description: pkg.description || '',
     badge: pkg.badge || '',
     sport_keys: Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [],
-    location_formats: Array.isArray(pkg.location_formats) ? pkg.location_formats : [],
     is_active: pkg.is_active !== false,
   });
 
@@ -126,23 +130,57 @@ export default function PackagesManager() {
     });
   };
 
+  const updateDurationOption = (index, patch) => {
+    setDraft((d) => ({
+      ...d,
+      duration_options: (Array.isArray(d.duration_options) ? d.duration_options : []).map((option, idx) =>
+        idx === index ? { ...option, ...patch } : option),
+    }));
+  };
+
+  const addDurationOption = () => {
+    setDraft((d) => ({
+      ...d,
+      duration_options: [
+        ...(Array.isArray(d.duration_options) ? d.duration_options : []),
+        { duration_minutes: 90, price_cents: Number(d.price_dollars) > 0 ? Math.round(Number(d.price_dollars) * 100 * 1.5) : 0 },
+      ],
+    }));
+  };
+
+  const removeDurationOption = (index) => {
+    setDraft((d) => {
+      const next = (Array.isArray(d.duration_options) ? d.duration_options : []).filter((_, idx) => idx !== index);
+      return { ...d, duration_options: next.length ? next : [{ duration_minutes: 60, price_cents: 0 }] };
+    });
+  };
+
   const save = async () => {
-    const priceDollars = Number(draft.price_dollars);
+    const durationOptions = (Array.isArray(draft.duration_options) ? draft.duration_options : [])
+      .map((option) => ({
+        duration_minutes: Number(option.duration_minutes),
+        price_cents: Number(option.price_cents),
+      }))
+      .filter((option) => Number.isInteger(option.duration_minutes) && Number.isInteger(option.price_cents));
+    const primary = durationOptions[0];
     if (!draft.name.trim()) return toast.error('Give your package a name.');
-    if (!(priceDollars >= 5)) return toast.error('Price must be at least $5.');
+    if (!primary) return toast.error('Add at least one duration option.');
+    if (!durationOptions.every((option) => option.duration_minutes >= 15 && option.duration_minutes <= 480 && option.price_cents >= 500)) {
+      return toast.error('Each duration needs 15-480 minutes and a price of at least $5.');
+    }
     setSaving(true);
     try {
       await coachRepo.savePackage({
         package_id: draft.package_id || undefined,
         name: draft.name.trim(),
         sessions: Number(draft.sessions) || 1,
-        duration_minutes: Number(draft.duration_minutes) || 60,
-        price_cents: Math.round(priceDollars * 100),
+        duration_minutes: primary.duration_minutes,
+        price_cents: primary.price_cents,
+        duration_options: durationOptions,
         session_type: draft.session_type,
         description: draft.description.trim(),
         badge: draft.badge.trim(),
         sport_keys: draft.sport_keys,
-        location_formats: draft.location_formats,
         is_active: draft.is_active,
       });
       toast.success(draft.package_id ? 'Package updated' : 'Package created');
@@ -209,22 +247,6 @@ export default function PackagesManager() {
               <Input id="pkg-sessions" type="number" min="1" max="100" value={draft.sessions} onChange={(e) => update({ sessions: e.target.value })} className="mt-1" />
             </div>
             <div>
-              <Label htmlFor="pkg-duration">Session length</Label>
-              <Select value={draft.duration_minutes} onValueChange={(v) => update({ duration_minutes: v })}>
-                <SelectTrigger id="pkg-duration" className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DURATIONS.map((m) => <SelectItem key={m} value={String(m)}>{m} minutes</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="pkg-price">Total price (USD)</Label>
-              <Input id="pkg-price" type="number" min="5" step="1" value={draft.price_dollars} onChange={(e) => update({ price_dollars: e.target.value })} placeholder="250" className="mt-1" />
-              {Number(draft.price_dollars) > 0 && Number(draft.sessions) > 1 ? (
-                <p className="text-[11px] text-muted-foreground mt-1">{usd(Math.round((Number(draft.price_dollars) * 100) / Number(draft.sessions)))} per session</p>
-              ) : null}
-            </div>
-            <div>
               <Label htmlFor="pkg-type">Session type</Label>
               <Select value={draft.session_type} onValueChange={(v) => update({ session_type: v })}>
                 <SelectTrigger id="pkg-type" className="mt-1"><SelectValue /></SelectTrigger>
@@ -236,6 +258,50 @@ export default function PackagesManager() {
             <div>
               <Label htmlFor="pkg-badge">Badge (optional)</Label>
               <Input id="pkg-badge" value={draft.badge} onChange={(e) => update({ badge: e.target.value })} placeholder="Most popular" className="mt-1" />
+            </div>
+            <div className="sm:col-span-2 rounded-lg border border-border bg-secondary/30 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>Duration options</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">Set the total package price for each session length. Discounts calculate from the shortest option.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addDurationOption}>Add duration</Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(draft.duration_options || []).map((option, index) => {
+                  const pkgPreview = { sessions: Number(draft.sessions) || 1, duration_options: draft.duration_options };
+                  const discount = discountPercentForOption(pkgPreview, option);
+                  return (
+                    <div key={`${option.duration_minutes}-${index}`} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                      <div>
+                        <Label className="text-[11px]">Duration</Label>
+                        <Select value={String(option.duration_minutes || 60)} onValueChange={(v) => updateDurationOption(index, { duration_minutes: Number(v) })}>
+                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {DEFAULT_PACKAGE_DURATIONS.map((m) => <SelectItem key={m} value={String(m)}>{formatDurationMinutes(m)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px]">Total price cents</Label>
+                        <Input
+                          inputMode="numeric"
+                          value={option.price_cents || ''}
+                          onChange={(e) => updateDurationOption(index, { price_cents: Number(e.target.value) || 0 })}
+                          placeholder="10000"
+                          className="mt-1"
+                        />
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {option.price_cents > 0 ? `${usd(option.price_cents)} total${discount > 0 ? ` · ${discount}% off hourly rate` : ''}` : 'Use integer cents only'}
+                        </p>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeDurationOption(index)} aria-label="Remove duration option">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div className="sm:col-span-2">
               <Label htmlFor="pkg-desc">Description (optional)</Label>
@@ -254,23 +320,6 @@ export default function PackagesManager() {
                     className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
                   >
                     {sport.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <Label>Session formats</Label>
-              <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for every format you have configured.</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {LOCATION_FORMATS.map((format) => (
-                  <button
-                    key={format.value}
-                    type="button"
-                    onClick={() => toggleList('location_formats', format.value)}
-                    aria-pressed={draft.location_formats.includes(format.value)}
-                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.location_formats.includes(format.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                  >
-                    {format.label}
                   </button>
                 ))}
               </div>

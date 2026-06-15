@@ -20,6 +20,12 @@ import { bpsToPercentLabel, formatCents } from '@/features/admin/money';
 import { logAdminAction } from '@/lib/audit';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import {
+  DEFAULT_PACKAGE_DURATIONS,
+  discountPercentForOption,
+  formatDurationMinutes,
+  normalizeDurationOptions,
+} from '@/lib/pricingDurations';
+import {
   AlertTriangle,
   Building2,
   CircleDollarSign,
@@ -46,25 +52,17 @@ const SESSION_TYPES = [
   { value: 'evaluation', label: 'Evaluation' },
   { value: 'virtual', label: 'Virtual' },
 ];
-const LOCATION_FORMATS = [
-  { value: 'training_facility', label: 'Training facility' },
-  { value: 'coach_travels', label: 'Coach travels' },
-  { value: 'online', label: 'Online' },
-  { value: 'organization_facility', label: 'Organization/facility' },
-  { value: 'hybrid', label: 'Hybrid' },
-];
-
 const empty = {
   name: '',
   sessions: '1',
   duration_minutes: '60',
   price_cents: '',
+  duration_options: [{ duration_minutes: 60, price_cents: 0 }],
   session_type: 'private',
   description: '',
   includes: [],
   badge: '',
   sport_keys: [],
-  location_formats: [],
   is_active: true,
   is_visible: true,
   display_order: '0',
@@ -72,7 +70,6 @@ const empty = {
   organization_id: '',
 };
 const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
-const formatLabel = (value) => LOCATION_FORMATS.find((item) => item.value === value)?.label || value;
 
 function parseInteger(value, min, max) {
   const raw = String(value ?? '').trim();
@@ -92,6 +89,8 @@ function cleanString(value, max = 1000) {
 }
 
 function getPackagePriceCents(pkg) {
+  const primary = normalizeDurationOptions(pkg)[0];
+  if (primary?.price_cents) return primary.price_cents;
   const cents = Number(pkg?.price_cents);
   if (Number.isSafeInteger(cents) && cents > 0) return cents;
   const dollars = Number(pkg?.price);
@@ -141,18 +140,20 @@ function packageScope(pkg, coachesById, orgsById) {
 }
 
 function draftFromPackage(pkg) {
+  const durationOptions = normalizeDurationOptions(pkg);
+  const primary = durationOptions[0] || { duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: getPackagePriceCents(pkg) || 0 };
   return {
     ...empty,
     ...pkg,
     sessions: String(getSessions(pkg)),
-    duration_minutes: String(Number(pkg.duration_minutes) || 60),
-    price_cents: String(getPackagePriceCents(pkg) || ''),
+    duration_minutes: String(primary.duration_minutes),
+    price_cents: String(primary.price_cents || ''),
+    duration_options: durationOptions.length ? durationOptions : [primary],
     session_type: pkg.session_type || 'private',
     description: pkg.description || '',
     includes: Array.isArray(pkg.includes) ? pkg.includes : [],
     badge: pkg.badge || '',
     sport_keys: Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [],
-    location_formats: Array.isArray(pkg.location_formats) ? pkg.location_formats : [],
     is_active: pkg.is_active !== false,
     is_visible: pkg.is_visible !== false,
     display_order: String(Number(pkg.display_order) || 0),
@@ -175,6 +176,20 @@ function normalizeForSave(draft, orgLinks) {
   if (sessions === null) return { error: 'Sessions must be an integer from 1 to 100.' };
   if (duration === null) return { error: 'Duration must be an integer from 15 to 480 minutes.' };
   if (priceCents === null) return { error: 'Price must be integer cents from 500 to 500000.' };
+  const rawOptions = Array.isArray(draft.duration_options) && draft.duration_options.length
+    ? draft.duration_options
+    : [{ duration_minutes: duration, price_cents: priceCents }];
+  const byDuration = new Map();
+  for (const option of rawOptions) {
+    const optionDuration = parseInteger(option.duration_minutes, 15, 480);
+    const optionPrice = parseInteger(option.price_cents, MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+    if (optionDuration === null || optionPrice === null) {
+      return { error: 'Every duration option needs valid minutes and integer cents.' };
+    }
+    byDuration.set(optionDuration, { duration_minutes: optionDuration, price_cents: optionPrice });
+  }
+  const durationOptions = [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
+  const primary = durationOptions[0];
   if (displayOrder === null) return { error: 'Display order must be an integer from 0 to 9999.' };
   if (sessionType && !SESSION_TYPES.some((type) => type.value === sessionType)) {
     return { error: 'Invalid session type.' };
@@ -189,23 +204,21 @@ function normalizeForSave(draft, orgLinks) {
   const sportKeys = Array.isArray(draft.sport_keys)
     ? [...new Set(draft.sport_keys.map((item) => cleanString(item, 120).toLowerCase()).filter(Boolean))].slice(0, 20)
     : [];
-  const locationFormats = Array.isArray(draft.location_formats)
-    ? [...new Set(draft.location_formats.map((item) => cleanString(item, 120).toLowerCase()).filter((item) => LOCATION_FORMATS.some((format) => format.value === item)))].slice(0, 20)
-    : [];
 
   return {
     data: {
       name,
       sessions,
-      duration_minutes: duration,
-      price_cents: priceCents,
-      price: priceCents / 100,
+      duration_minutes: primary.duration_minutes,
+      duration_options: JSON.stringify(durationOptions),
+      price_cents: primary.price_cents,
+      price: primary.price_cents / 100,
       session_type: sessionType,
       description: cleanString(draft.description, 1000),
       includes,
       badge: cleanString(draft.badge, 100),
       sport_keys: sportKeys,
-      location_formats: locationFormats,
+      location_formats: [],
       is_active: draft.is_active === true,
       is_visible: draft.is_visible === true,
       display_order: displayOrder,
@@ -445,6 +458,31 @@ export default function AdminPricing() {
     });
   };
 
+  const updateDurationOption = (index, patch) => {
+    setEditing((draft) => ({
+      ...draft,
+      duration_options: (Array.isArray(draft?.duration_options) ? draft.duration_options : []).map((option, idx) =>
+        idx === index ? { ...option, ...patch } : option),
+    }));
+  };
+
+  const addDurationOption = () => {
+    setEditing((draft) => ({
+      ...draft,
+      duration_options: [
+        ...(Array.isArray(draft?.duration_options) ? draft.duration_options : []),
+        { duration_minutes: 90, price_cents: Number(draft?.price_cents) > 0 ? Math.round(Number(draft.price_cents) * 1.5) : 0 },
+      ],
+    }));
+  };
+
+  const removeDurationOption = (index) => {
+    setEditing((draft) => {
+      const next = (Array.isArray(draft?.duration_options) ? draft.duration_options : []).filter((_, idx) => idx !== index);
+      return { ...draft, duration_options: next.length ? next : [{ duration_minutes: 60, price_cents: 0 }] };
+    });
+  };
+
   const save = async () => {
     const normalized = normalizeForSave(editing, orgLinks);
     if (normalized.error) {
@@ -667,13 +705,16 @@ export default function AdminPricing() {
                         {active && !visible && <Badge variant="outline" className="text-xs">Hidden</Badge>}
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {getSessions(pkg)} session{getSessions(pkg) === 1 ? '' : 's'} - {Number(pkg.duration_minutes) || 60} min
+                        {getSessions(pkg)} session{getSessions(pkg) === 1 ? '' : 's'} - {formatDurationMinutes((normalizeDurationOptions(pkg)[0] || {}).duration_minutes || Number(pkg.duration_minutes) || 60)}
                         {pkg.session_type ? ` - ${String(pkg.session_type).replace('_', ' ')}` : ''}
                       </p>
+                      {normalizeDurationOptions(pkg).length > 1 && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Durations: {normalizeDurationOptions(pkg).map((option) => `${formatDurationMinutes(option.duration_minutes)} ${formatCents(option.price_cents)}`).join(' - ')}
+                        </p>
+                      )}
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         {Array.isArray(pkg.sport_keys) && pkg.sport_keys.length ? pkg.sport_keys.map((sport) => SPORT_LABELS.get(sport) || sport).join(', ') : 'All sports'}
-                        {' - '}
-                        {Array.isArray(pkg.location_formats) && pkg.location_formats.length ? pkg.location_formats.map(formatLabel).join(', ') : 'All formats'}
                       </p>
                       {pkg.description && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{pkg.description}</p>}
                     </div>
@@ -777,24 +818,6 @@ export default function AdminPricing() {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs font-semibold">Duration</Label>
-                  <Input
-                    inputMode="numeric"
-                    value={editing.duration_minutes}
-                    onChange={(event) => setEditing({ ...editing, duration_minutes: event.target.value })}
-                    className="mt-1 border-border bg-secondary"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Price cents</Label>
-                  <Input
-                    inputMode="numeric"
-                    value={editing.price_cents}
-                    onChange={(event) => setEditing({ ...editing, price_cents: event.target.value })}
-                    className="mt-1 border-border bg-secondary"
-                  />
-                </div>
-                <div>
                   <Label className="text-xs font-semibold">Order</Label>
                   <Input
                     inputMode="numeric"
@@ -802,6 +825,50 @@ export default function AdminPricing() {
                     onChange={(event) => setEditing({ ...editing, display_order: event.target.value })}
                     className="mt-1 border-border bg-secondary"
                   />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-secondary/30 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-xs font-semibold">Duration options</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Use integer cents. Discounts calculate from the shortest option.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addDurationOption}>Add duration</Button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(editing.duration_options || []).map((option, index) => {
+                    const pkgPreview = { sessions: Number(editing.sessions) || 1, duration_options: editing.duration_options };
+                    const discount = discountPercentForOption(pkgPreview, option);
+                    return (
+                      <div key={`${option.duration_minutes}-${index}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                        <div>
+                          <Label className="text-[11px]">Duration</Label>
+                          <Select value={String(option.duration_minutes || 60)} onValueChange={(value) => updateDurationOption(index, { duration_minutes: Number(value) })}>
+                            <SelectTrigger className="mt-1 border-border bg-secondary"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {DEFAULT_PACKAGE_DURATIONS.map((m) => <SelectItem key={m} value={String(m)}>{formatDurationMinutes(m)}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-[11px]">Total price cents</Label>
+                          <Input
+                            inputMode="numeric"
+                            value={option.price_cents || ''}
+                            onChange={(event) => updateDurationOption(index, { price_cents: Number(event.target.value) || 0 })}
+                            className="mt-1 border-border bg-secondary"
+                          />
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {option.price_cents > 0 ? `${formatCents(option.price_cents)} total${discount > 0 ? ` - ${discount}% off hourly rate` : ''}` : 'Minimum 500 cents'}
+                          </p>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDurationOption(index)} aria-label="Remove duration option">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -894,24 +961,6 @@ export default function AdminPricing() {
                       className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${editing.sport_keys.includes(sport.sport_key) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
                     >
                       {sport.display_name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-xs font-semibold">Session formats</Label>
-                <p className="mt-1 text-xs text-muted-foreground">Leave blank for every configured format.</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {LOCATION_FORMATS.map((format) => (
-                    <button
-                      key={format.value}
-                      type="button"
-                      onClick={() => toggleEditingList('location_formats', format.value)}
-                      aria-pressed={editing.location_formats.includes(format.value)}
-                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${editing.location_formats.includes(format.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                    >
-                      {format.label}
                     </button>
                   ))}
                 </div>

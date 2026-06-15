@@ -433,6 +433,7 @@ async function provisionSessions() {
   await attrString('sessions', 'sport_key', 120);
   await attrString('sessions', 'session_format', 120);
   await attrString('sessions', 'session_format_label', 300);
+  await attrString('sessions', 'preferred_location', 1000);
   await attrInt('sessions', 'reserved_amount_cents');
   await attrInt('sessions', 'price_snapshot_cents');
   await attrString('sessions', 'payout_plan_snapshot', 20000);
@@ -625,6 +626,7 @@ async function provisionPricingPackages() {
   await attrString('pricing_packages', 'organization_id', 64);
   await attrInt('pricing_packages',    'price_cents');                      // authoritative total in cents
   await attrInt('pricing_packages',    'duration_minutes');                 // session length
+  await attrString('pricing_packages', 'duration_options', 20000);          // JSON [{duration_minutes, price_cents}]
   await attrString('pricing_packages', 'session_type', 120);
   await attrString('pricing_packages', 'sport_keys', 120, false, null, true);       // empty = all coach sports
   await attrString('pricing_packages', 'location_formats', 120, false, null, true); // empty = all configured formats

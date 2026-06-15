@@ -5,7 +5,6 @@ const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const DEFAULT_TIMEZONE = 'America/Detroit';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const LOCATION_FORMATS = new Set(['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid']);
 const DURATIONS = new Map([
   [60, { hours: 1, discount: 0 }],
   [90, { hours: 1.5, discount: 0.10 }],
@@ -133,11 +132,9 @@ function asCleanArray(value) {
   return [];
 }
 
-function packageAppliesToSelection(pkg, { sportKey, sessionFormat }) {
+function packageAppliesToSelection(pkg, { sportKey }) {
   const packageSports = asCleanArray(pkg?.sport_keys);
   if (packageSports.length && (!sportKey || !packageSports.includes(sportKey))) return false;
-  const packageFormats = asCleanArray(pkg?.location_formats);
-  if (packageFormats.length && (!sessionFormat || !packageFormats.includes(sessionFormat))) return false;
   return true;
 }
 
@@ -147,29 +144,10 @@ function coachOffersSport(coach, sportKey) {
   return sports.length === 0 || sports.includes(sportKey);
 }
 
-function coachFormatOptions(coach) {
-  const type = cleanKey(coach?.service_type);
-  const options = new Set();
-  if (type === 'facility') options.add('training_facility');
-  if (type === 'travels') options.add('coach_travels');
-  if (type === 'online') options.add('online');
-  if (type === 'hybrid') {
-    options.add('training_facility');
-    options.add('coach_travels');
-    options.add('hybrid');
-  }
-  if (coach?.service_venue || coach?.organization_id) options.add('organization_facility');
-  return [...options];
-}
-
-function coachOffersFormat(coach, sessionFormat) {
-  if (!sessionFormat) return true;
-  if (sessionFormat === 'organization_facility') return true;
-  const options = coachFormatOptions(coach);
-  return options.length === 0 || options.includes(sessionFormat);
-}
-
 function calculateAmountCents(pkg, durationMinutes) {
+  const selected = durationOptionFor(pkg, durationMinutes);
+  if (selected) return selected.price_cents;
+
   const priceCents = Number(pkg.price_cents);
   if (Number.isInteger(priceCents) && priceCents > 0) return priceCents;
 
@@ -181,6 +159,50 @@ function calculateAmountCents(pkg, durationMinutes) {
   const perSessionBase = basePrice / sessions;
   const perSessionPrice = Math.round(perSessionBase * duration.hours * (1 - duration.discount));
   return Math.round(perSessionPrice * sessions * 100);
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function durationOptions(pkg) {
+  const parsed = parseJsonArray(pkg?.duration_options);
+  const rows = parsed.length
+    ? parsed
+    : [{
+        duration_minutes: Number(pkg?.duration_minutes) || 60,
+        price_cents: Number(pkg?.price_cents) || 0,
+      }];
+  const byDuration = new Map();
+  for (const row of rows) {
+    const duration = Number(row?.duration_minutes);
+    const priceCents = Number(row?.price_cents);
+    if (!Number.isInteger(duration) || duration < 15 || duration > 480) continue;
+    if (!Number.isInteger(priceCents) || priceCents <= 0) continue;
+    byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
+  }
+  return [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
+}
+
+function durationOptionFor(pkg, durationMinutes) {
+  const options = durationOptions(pkg);
+  if (!options.length) return null;
+  const requested = Number(durationMinutes) || options[0].duration_minutes;
+  return options.find((option) => option.duration_minutes === requested) || null;
+}
+
+function packageHasRequestedDuration(pkg, durationMinutes) {
+  const options = durationOptions(pkg);
+  return options.length === 0 || options.some((option) => option.duration_minutes === Number(durationMinutes));
 }
 
 function calculateSessionPriceCents(pkg, durationMinutes) {
@@ -359,19 +381,17 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
   const requestedSessionType = normalizedSessionType(payload.session_type || payload.sessionType);
   const context = {
     sportKey: cleanKey(payload.sport_key || payload.sport || ''),
-    sessionFormat: cleanKey(payload.session_format || payload.location_format || ''),
   };
   if (requestedPackageId && validId(requestedPackageId)) {
     const pkg = await db.getDocument(DB_ID, 'pricing_packages', requestedPackageId).catch(() => null);
     if (!(await packageBookableForCoach(db, pkg, coach.$id, context))) {
-      return { error: 'This package is not available for the selected coach, sport, or session format.' };
+      return { error: 'This package is not available for the selected coach or sport.' };
     }
     const pkgSessionType = normalizedSessionType(pkg.session_type);
     if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) {
       return { error: 'This package is not available for the selected session type.' };
     }
-    const pkgDuration = Number(pkg.duration_minutes) || durationMinutes;
-    if (pkgDuration !== durationMinutes) return { error: 'This package is not available for the selected duration.' };
+    if (!packageHasRequestedDuration(pkg, durationMinutes)) return { error: 'This package is not available for the selected duration.' };
     const amount = calculateSessionPriceCents(pkg, durationMinutes);
     if (Number.isInteger(amount) && amount > 0) {
       return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
@@ -386,8 +406,7 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
     if (await packageBookableForCoach(db, pkg, coach.$id, context)) {
       const pkgSessionType = normalizedSessionType(pkg.session_type);
       if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
-      const pkgDuration = Number(pkg.duration_minutes) || durationMinutes;
-      if (pkgDuration !== durationMinutes) continue;
+      if (!packageHasRequestedDuration(pkg, durationMinutes)) continue;
       const amount = calculateSessionPriceCents(pkg, durationMinutes);
       if (Number.isInteger(amount) && amount > 0) {
         return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
@@ -403,8 +422,7 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
     const rows = await db.listDocuments(DB_ID, 'pricing_packages', queries).catch(() => ({ documents: [] }));
     for (const pkg of rows.documents) {
       if (!(await packageBookableForCoach(db, pkg, coach.$id, context))) continue;
-      const pkgDuration = Number(pkg.duration_minutes) || durationMinutes;
-      if (pkgDuration !== durationMinutes) continue;
+      if (!packageHasRequestedDuration(pkg, durationMinutes)) continue;
       const pkgSessionType = normalizedSessionType(pkg.session_type);
       if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
       const amount = calculateSessionPriceCents(pkg, durationMinutes);
@@ -1397,9 +1415,8 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   const durationMinutes = Number(payload.duration_minutes);
   const athleteId = String(payload.athlete_id || '').trim();
   const notes = cleanText(payload.notes, 20000);
+  const preferredLocation = cleanText(payload.preferred_location || payload.preferredLocation || '', 1000);
   const sportKey = cleanKey(payload.sport_key || payload.sport || '');
-  const sessionFormat = cleanKey(payload.session_format || payload.location_format || '');
-  const sessionFormatLabel = cleanText(payload.session_format_label || payload.location_format_label || '', 300);
 
   if (!coachId || coachId.length > 64) return res.json({ error: 'coach_id is required.' }, 400);
   if (!creditId || creditId.length > 64) return res.json({ error: 'credit_id is required.' }, 400);
@@ -1409,15 +1426,11 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || durationMinutes > 480) {
     return res.json({ error: 'duration_minutes must be an integer between 15 and 480.' }, 400);
   }
-  if (sessionFormat && !LOCATION_FORMATS.has(sessionFormat)) {
-    return res.json({ error: 'session_format is invalid.' }, 400);
-  }
 
   const coach = await db.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
   if (!coach) return res.json({ error: 'Coach not found.' }, 404);
   if (!coachAccepting(coach)) return res.json({ error: 'This coach is not accepting bookings.' }, 400);
   if (!coachOffersSport(coach, sportKey)) return res.json({ error: 'This coach does not offer the selected sport.' }, 400);
-  if (!coachOffersFormat(coach, sessionFormat)) return res.json({ error: 'This coach does not offer the selected session format.' }, 400);
 
   // Minors never book directly — a linked guardian books for them.
   if (profile.is_minor === true) {
@@ -1513,12 +1526,12 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     organization_id: payoutPlan.organization_id || '',
     offering_id: offering.pkg.$id,
     currency: 'usd',
-      metadata: {
-        price_snapshot_cents: priceSnapshotCents,
-        sport_key: sportKey,
-        session_format: sessionFormat,
-        session_format_label: sessionFormatLabel,
-        platform_share_bps: payoutPlan.platform_bps,
+    metadata: {
+      price_snapshot_cents: priceSnapshotCents,
+      sport_key: sportKey,
+      preferred_location: preferredLocation,
+      client_message: notes,
+      platform_share_bps: payoutPlan.platform_bps,
       coach_share_bps: payoutPlan.coach_bps,
       org_share_bps: payoutPlan.org_bps,
       original_credit_coach_id: originalCoachId,
@@ -1577,8 +1590,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       credit_reservation_id: reservation.$id,
       offering_id: offering.pkg.$id,
       sport_key: sportKey,
-      session_format: sessionFormat,
-      session_format_label: sessionFormatLabel,
+      preferred_location: preferredLocation,
       reserved_amount_cents: priceSnapshotCents,
       price_snapshot_cents: priceSnapshotCents,
       payout_plan_snapshot: JSON.stringify(payoutSnapshot),
@@ -1608,7 +1620,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     session, coach, profile,
     type: 'booking_confirmed',
     title: 'Session confirmed',
-    coachMessage: `${session.client_name} booked a ${durationMinutes}-minute session on ${when}.`,
+    coachMessage: `${session.client_name} booked a ${durationMinutes}-minute session on ${when}.${preferredLocation ? ` Preferred location: ${preferredLocation}.` : ''}`,
     clientMessage: `Your ${durationMinutes}-minute session with ${coachName} is confirmed for ${when}.`,
   });
 

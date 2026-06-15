@@ -18,6 +18,37 @@ function parseAvailability(raw) {
   try { return JSON.parse(raw); } catch { return {}; }
 }
 
+function hasText(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : value !== undefined && value !== null && value !== '';
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function hasAnyAvailability(doc) {
+  const availability = parseAvailability(doc.availability);
+  if (Array.isArray(availability)) return availability.length > 0;
+  if (availability && typeof availability === 'object') {
+    return Object.values(availability).some((day) => day?.enabled === true);
+  }
+  return false;
+}
+
+function publicMinimumComplete(doc, hasAvailabilityBlock = false) {
+  return hasText(doc.first_name)
+    && hasText(doc.last_name)
+    && (hasText(doc.bio) || hasText(doc.quote))
+    && asArray(doc.sports).length > 0
+    && hasText(doc.service_city)
+    && hasText(doc.service_state)
+    && hasText(doc.service_zip)
+    && hasText(doc.timezone)
+    && (hasAnyAvailability(doc) || hasAvailabilityBlock);
+}
+
 // Explicit allowlist — anything not listed here never leaves the server.
 function publicCard(doc, organization) {
   return {
@@ -103,11 +134,62 @@ async function orgAffiliations(databases, coachIds) {
   return byCoach;
 }
 
+async function availabilityPresence(databases, coachIds) {
+  const available = new Set();
+  for (let i = 0; i < coachIds.length; i += 100) {
+    const page = await databases.listDocuments(DB_ID, 'availability_blocks', [
+      Query.equal('coach_id', coachIds.slice(i, i + 100)),
+      Query.equal('active', true),
+      Query.limit(500),
+    ]).catch(() => ({ documents: [] }));
+    for (const row of page.documents) {
+      if (row.block_type !== 'blackout') available.add(row.coach_id);
+    }
+  }
+  return available;
+}
+
 function perSessionPriceCents(pkg) {
-  const cents = Number(pkg.price_cents);
   const sessions = Math.max(1, Number(pkg.sessions) || 1);
+  const options = durationOptions(pkg);
+  if (options.length) {
+    return Math.min(...options.map((option) => Math.round(option.price_cents / sessions)));
+  }
+  const cents = Number(pkg.price_cents);
   if (!Number.isInteger(cents) || cents <= 0) return null;
   return Math.round(cents / sessions);
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function durationOptions(pkg) {
+  const parsed = parseJsonArray(pkg?.duration_options);
+  const rows = parsed.length
+    ? parsed
+    : [{
+        duration_minutes: Number(pkg?.duration_minutes) || 60,
+        price_cents: Number(pkg?.price_cents) || 0,
+      }];
+  const byDuration = new Map();
+  for (const row of rows) {
+    const duration = Number(row?.duration_minutes);
+    const priceCents = Number(row?.price_cents);
+    if (!Number.isInteger(duration) || duration < 15 || duration > 480) continue;
+    if (!Number.isInteger(priceCents) || priceCents <= 0) continue;
+    byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
+  }
+  return [...byDuration.values()];
 }
 
 function setLowestHint(hints, coachId, perSession) {
@@ -185,11 +267,14 @@ export default async ({ res, error }) => {
     const databases = db();
     const all = await listCoaches(databases);
 
-    const visible = all.filter((doc) => doc.published === true && doc.is_active === true);
+    const activePublished = all.filter((doc) => doc.published === true && doc.is_active === true);
+    const availability = await availabilityPresence(databases, activePublished.map((doc) => doc.$id));
+    const visibleBase = activePublished.filter((doc) => publicMinimumComplete(doc, availability.has(doc.$id)));
 
-    const visibleIds = visible.map((doc) => doc.$id);
+    const visibleIds = visibleBase.map((doc) => doc.$id);
     const orgs = await orgAffiliations(databases, visibleIds);
     const priceHints = await packagePriceHints(databases, visibleIds, orgs);
+    const visible = visibleBase.filter((doc) => priceHints.has(doc.$id));
     return res.json({
       coaches: visible.map((doc) => {
         const card = publicCard(doc, orgs.get(doc.$id));

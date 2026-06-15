@@ -54,6 +54,41 @@ async function writeAudit(databases, entry) {
   await databases.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
 }
 
+async function createDocumentResilient(databases, collection, data, permissions) {
+  const payload = { ...data };
+  for (let i = 0; i < 12; i += 1) {
+    try {
+      return await databases.createDocument(DB_ID, collection, ID.unique(), payload, permissions);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return databases.createDocument(DB_ID, collection, ID.unique(), payload, permissions);
+}
+
+async function updateDocumentResilient(databases, collection, id, data) {
+  const payload = { ...data };
+  for (let i = 0; i < 12; i += 1) {
+    if (Object.keys(payload).length === 0) return databases.getDocument(DB_ID, collection, id);
+    try {
+      return await databases.updateDocument(DB_ID, collection, id, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return databases.updateDocument(DB_ID, collection, id, payload);
+}
+
 async function sendEmail({ to, subject, html }, error) {
   try {
     if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
@@ -602,7 +637,6 @@ async function removeMember(databases, profile, payload) {
 // session length.
 
 const SESSION_TYPES = ['private', 'small_group', 'team', 'evaluation', 'virtual'];
-const LOCATION_FORMATS = ['training_facility', 'coach_travels', 'online', 'organization_facility', 'hybrid'];
 const MIN_PRICE_CENTS = 500;            // $5.00 floor
 const MAX_PRICE_CENTS = 5_000_00;       // $5,000 ceiling per package
 
@@ -623,7 +657,44 @@ function cleanList(value, { maxItems = 20, maxLength = 120, allow = null } = {})
   return out;
 }
 
+function parseDurationOptions(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeDurationOptions(value, fallbackDuration, fallbackPriceCents) {
+  const rows = parseDurationOptions(value);
+  const source = rows.length
+    ? rows
+    : [{ duration_minutes: fallbackDuration, price_cents: fallbackPriceCents }];
+  const byDuration = new Map();
+  for (const row of source) {
+    const duration = int(row?.duration_minutes, 15, 480);
+    const priceCents = int(row?.price_cents, MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+    if (duration === undefined || priceCents === undefined) {
+      return { error: 'Each duration option needs a 15-480 minute duration and valid integer-cent price.' };
+    }
+    byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
+  }
+  const options = [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
+  if (!options.length) return { error: 'At least one duration option is required.' };
+  return { options, primary: options[0] };
+}
+
 function packageView(doc) {
+  const durationOptions = normalizeDurationOptions(
+    doc.duration_options,
+    Number(doc.duration_minutes) || 60,
+    Number(doc.price_cents) || 0,
+  ).options || [];
   return {
     id: doc.$id,
     coach_id: doc.coach_id || '',
@@ -631,6 +702,7 @@ function packageView(doc) {
     name: doc.name || '',
     sessions: Number(doc.sessions) || 1,
     duration_minutes: Number(doc.duration_minutes) || 60,
+    duration_options: durationOptions,
     price_cents: Number(doc.price_cents) || 0,
     session_type: doc.session_type || '',
     description: doc.description || '',
@@ -670,6 +742,9 @@ async function savePackage(databases, profile, payload) {
   if (sessions === undefined) return { status: 400, body: { error: 'Sessions must be an integer between 1 and 100.' } };
   if (duration === undefined) return { status: 400, body: { error: 'Session length must be 15–480 minutes.' } };
   if (priceCents === undefined) return { status: 400, body: { error: `Price must be between $${MIN_PRICE_CENTS / 100} and $${MAX_PRICE_CENTS / 100}.` } };
+  const durationOptionsResult = normalizeDurationOptions(payload.duration_options, duration, priceCents);
+  if (durationOptionsResult.error) return { status: 400, body: { error: durationOptionsResult.error } };
+  const { options: durationOptions, primary } = durationOptionsResult;
 
   const sessionType = payload.session_type ? (SESSION_TYPES.includes(payload.session_type) ? payload.session_type : undefined) : '';
   if (sessionType === undefined) return { status: 400, body: { error: 'Invalid session type.' } };
@@ -678,21 +753,21 @@ async function savePackage(databases, profile, payload) {
   const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
   const isActive = payload.is_active !== false;
   const sportKeys = cleanList(payload.sport_keys || payload.sports);
-  const locationFormats = cleanList(payload.location_formats || payload.session_formats, { allow: LOCATION_FORMATS });
 
   const data = {
     organization_id: orgId,
     coach_id: '',
     name,
     sessions,
-    duration_minutes: duration,
-    price_cents: priceCents,
-    price: Math.round(priceCents) / 100,   // legacy dollar mirror (back-compat)
+    duration_minutes: primary.duration_minutes,
+    duration_options: JSON.stringify(durationOptions),
+    price_cents: primary.price_cents,
+    price: Math.round(primary.price_cents) / 100,   // legacy dollar mirror (back-compat)
     session_type: sessionType,
     description,
     badge,
     sport_keys: sportKeys,
-    location_formats: locationFormats,
+    location_formats: [],
     display_order: displayOrder,
     is_active: isActive,
     is_visible: isActive,                  // legacy visibility mirror
@@ -705,9 +780,9 @@ async function savePackage(databases, profile, payload) {
     if ((existing.organization_id || '') !== orgId) {
       return { status: 403, body: { error: 'You can only edit your organization’s packages.' } };
     }
-    doc = await databases.updateDocument(DB_ID, 'pricing_packages', existing.$id, data);
+    doc = await updateDocumentResilient(databases, 'pricing_packages', existing.$id, data);
   } else {
-    doc = await databases.createDocument(DB_ID, 'pricing_packages', ID.unique(), data);
+    doc = await createDocumentResilient(databases, 'pricing_packages', data);
   }
   return { status: 200, body: { ok: true, package: packageView(doc) } };
 }
