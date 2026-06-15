@@ -24,8 +24,10 @@ includes('functions/createStripeCheckout/src/main.js', [
   'legalPacketComplete',
   'merchant_of_record',
   'prepaid_credit',
-  'Coach is not ready to accept payments yet.',
+  'Coach payout/legal readiness is enforced at publish time',
 ]);
+check(!codeOnly('functions/createStripeCheckout/src/main.js').includes('Coach is not ready to accept payments yet.'), 'createStripeCheckout must not block platform checkout on coach payout readiness');
+check(!codeOnly('functions/createStripeCheckout/src/main.js').includes('coachLegalPacketComplete(db, coach)'), 'createStripeCheckout must not require coach legal packet before platform checkout');
 check(!codeOnly('functions/createStripeCheckout/src/main.js').includes('payout_plan'), 'createStripeCheckout must not embed payout_plan in checkout metadata');
 check(!/transfer_data\s*:/.test(codeOnly('functions/createStripeCheckout/src/main.js')), 'createStripeCheckout must not use transfer_data');
 

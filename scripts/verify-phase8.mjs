@@ -30,6 +30,10 @@ function mustInclude(rel, snippet, why) {
   if (!read(rel).includes(snippet)) failures.push(`${rel} must include ${JSON.stringify(snippet)} — ${why}`);
 }
 
+function mustNotInclude(rel, snippet, why) {
+  if (read(rel).includes(snippet)) failures.push(`${rel} must NOT include ${JSON.stringify(snippet)} — ${why}`);
+}
+
 function mustNotMatch(rel, regex, why) {
   if (regex.test(codeOnly(rel))) failures.push(`${rel} must NOT match ${regex} — ${why}`);
 }
@@ -216,7 +220,8 @@ scenario(15, 'Legal template version bump requires re-signing before checkout/bo
     mustInclude(rel, 'agreement.template_checksum === template.checksum', 'template checksum changes must invalidate older signatures.');
   }
   mustInclude(checkout, 'legalPacketComplete(db, profile, athleteId)', 'checkout must require current buyer legal packet.');
-  mustInclude(checkout, 'coachLegalPacketComplete(db, coach)', 'checkout must require current coach legal packet.');
+  mustNotInclude(checkout, 'coachLegalPacketComplete(db, coach)', 'checkout must not require coach legal packet before platform payment.');
+  mustNotInclude(checkout, 'Coach is not ready to accept payments yet.', 'checkout must not block platform payment on coach payout readiness.');
   mustInclude(booking, 'legalPacketCompleteFor(db, profile, signerRole, athlete?.$id)', 'booking must require current athlete/guardian legal packet.');
   mustInclude(coachSelf, 'coachLegalPacketComplete(databases, profile, coach)', 'publish must require current coach legal packet.');
 });

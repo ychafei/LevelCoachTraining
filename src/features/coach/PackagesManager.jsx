@@ -40,6 +40,10 @@ const emptyDraft = {
 
 const usd = (cents) => `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 const SPORT_LABELS = new Map(SPORTS_CATALOG.map((sport) => [sport.sport_key, sport.display_name]));
+const cleanPackageId = (value) => {
+  const id = String(value || '').trim();
+  return id && id !== 'null' && id !== 'undefined' ? id : '';
+};
 
 function PackageRow({ pkg, onEdit, onDelete, busy }) {
   const options = normalizeDurationOptions(pkg);
@@ -104,7 +108,7 @@ export default function PackagesManager() {
     return options.length ? options : [{ duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: Number(pkg.price_cents) || 0 }];
   };
   const startEdit = (pkg) => setDraft({
-    package_id: pkg.id,
+    package_id: cleanPackageId(pkg.id || pkg.$id),
     name: pkg.name,
     sessions: String(pkg.sessions),
     duration_minutes: String(pkg.duration_minutes),
@@ -171,7 +175,7 @@ export default function PackagesManager() {
     setSaving(true);
     try {
       await coachRepo.savePackage({
-        package_id: draft.package_id || undefined,
+        ...(cleanPackageId(draft.package_id) ? { package_id: cleanPackageId(draft.package_id) } : {}),
         name: draft.name.trim(),
         sessions: Number(draft.sessions) || 1,
         duration_minutes: primary.duration_minutes,

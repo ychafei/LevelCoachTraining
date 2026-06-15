@@ -526,6 +526,12 @@ function packageView(doc) {
   };
 }
 
+function cleanPackageId(value) {
+  const id = String(value || '').trim();
+  if (!id || id === 'null' || id === 'undefined') return '';
+  return id;
+}
+
 async function listPackages(databases, coach) {
   const rows = await databases.listDocuments(DB_ID, 'pricing_packages', [
     Query.equal('coach_id', coach.$id),
@@ -538,6 +544,7 @@ async function listPackages(databases, coach) {
 }
 
 async function savePackage(databases, coach, payload) {
+  const packageId = cleanPackageId(payload.package_id || payload.id);
   const name = str(payload.name, 1, 200);
   const sessions = int(payload.sessions, 1, 100);
   const duration = int(payload.duration_minutes, 15, 480);
@@ -577,11 +584,25 @@ async function savePackage(databases, coach, payload) {
   };
 
   let doc;
-  if (payload.package_id) {
-    const existing = await databases.getDocument(DB_ID, 'pricing_packages', String(payload.package_id)).catch(() => null);
-    if (!existing) return { status: 404, body: { error: 'Package not found.' } };
-    if (existing.coach_id !== coach.$id) return { status: 403, body: { error: 'You can only edit your own packages.' } };
-    doc = await updateDocumentResilient(databases, 'pricing_packages', existing.$id, data);
+  if (packageId) {
+    let existing = await databases.getDocument(DB_ID, 'pricing_packages', packageId).catch(() => null);
+    if (existing && existing.coach_id !== coach.$id) {
+      return { status: 403, body: { error: 'You can only edit your own packages.' } };
+    }
+    if (!existing) {
+      const rows = await databases.listDocuments(DB_ID, 'pricing_packages', [
+        Query.equal('coach_id', coach.$id),
+        Query.limit(100),
+      ]).catch(() => ({ documents: [] }));
+      existing = rows.documents.find((pkg) =>
+        String(pkg.name || '').trim().toLowerCase() === name.toLowerCase()
+        && Number(pkg.sessions || 1) === sessions
+        && String(pkg.session_type || '') === sessionType
+      ) || null;
+    }
+    doc = existing
+      ? await updateDocumentResilient(databases, 'pricing_packages', existing.$id, data)
+      : await createDocumentResilient(databases, 'pricing_packages', data);
   } else {
     doc = await createDocumentResilient(databases, 'pricing_packages', data);
   }

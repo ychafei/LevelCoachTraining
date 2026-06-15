@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2026-02-25.clover';
-const COACH_NOT_READY = 'Coach is not ready to accept payments yet.';
+const COACH_NOT_BOOKABLE = 'This coach is not available for booking yet.';
 
 const DURATIONS = new Map([
   [60, { hours: 1, discount: 0 }],
@@ -129,37 +129,6 @@ async function legalPacketComplete(db, profile, athleteId) {
       && agreementMatchesTemplate(agreement, template)
       // Guardian signings should bind to the athlete; accept legacy unbound rows.
       && (signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
-    )
-  );
-}
-
-// Coach payout gate: coach-role templates signed by the coach's linked profile.
-// No linked profile means the coach is not ready to be paid.
-async function coachLegalPacketComplete(db, coach) {
-  if (!coach.user_id) return false;
-  const profile = await profileForAccount(db, coach.user_id).catch(() => null);
-  if (!profile) return false;
-
-  const [templateRows, agreementRows] = await Promise.all([
-    db.listDocuments(DB_ID, 'legal_templates', [
-      Query.equal('role', 'coach'),
-      Query.equal('required', true),
-      Query.limit(100),
-    ]),
-    db.listDocuments(DB_ID, 'legal_agreements', [
-      Query.equal('signer_profile_id', profile.$id),
-      Query.equal('signer_role', 'coach'),
-      Query.equal('status', 'signed'),
-      Query.limit(200),
-    ]),
-  ]);
-
-  const templates = templateRows.documents.filter(activeRequired);
-  if (templates.length === 0) return false;
-  return templates.every((template) =>
-    agreementRows.documents.some((agreement) =>
-      (!agreement.coach_id || agreement.coach_id === coach.$id)
-      && agreementMatchesTemplate(agreement, template)
     )
   );
 }
@@ -494,10 +463,10 @@ export default async ({ req, res, error }) => {
       return res.json({ error: 'sessionDurationMinutes is not a supported duration.' }, 400);
     }
 
-    // Publish gate: the public marketplace only allows active, explicitly
-    // published coaches. No rollout fallback to is_active.
-    if (coach.published !== true || coach.is_active !== true) return res.json({ error: COACH_NOT_READY }, 400);
-    if (!(await coachLegalPacketComplete(db, coach))) return res.json({ error: COACH_NOT_READY }, 400);
+    // Checkout charges LCTrainings as merchant of record and creates prepaid
+    // platform credit. Coach payout/legal readiness is enforced at publish time
+    // and again when releasing earned payouts, not during client payment.
+    if (coach.is_active !== true) return res.json({ error: COACH_NOT_BOOKABLE }, 400);
 
     const bookingLocation = validateBookingLocation(coach, payload);
     if (bookingLocation.error) return res.json({ error: bookingLocation.error }, 400);

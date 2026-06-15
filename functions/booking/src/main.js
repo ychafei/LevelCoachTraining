@@ -284,14 +284,16 @@ async function activePayoutRule(db, organizationId, coachId) {
   return rows.documents[0] || null;
 }
 
-async function readyConnectedAccount(db, ownerType, ownerId) {
+async function payoutDestinationAccount(db, ownerType, ownerId) {
   if (!ownerId) return null;
   const rows = await db.listDocuments(DB_ID, 'stripe_connected_accounts', [
     Query.equal('owner_type', ownerType),
     Query.equal('owner_id', ownerId),
     Query.limit(10),
   ]).catch(() => ({ documents: [] }));
-  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled) || null;
+  return rows.documents.find((row) => row.charges_enabled && row.payouts_enabled)
+    || rows.documents[0]
+    || null;
 }
 
 async function resolvePayoutPlan(db, coach, preferredOrgId = '') {
@@ -1493,10 +1495,13 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
 
   const payoutPlan = await resolvePayoutPlan(db, coach, offering.organization_id || '');
   if (payoutPlan.error) return res.json({ error: 'This coach is not ready for payout routing.' }, 400);
-  const coachAccount = payoutPlan.coach_bps > 0 ? await readyConnectedAccount(db, 'coach', coach.$id) : null;
-  if (payoutPlan.coach_bps > 0 && !coachAccount) return res.json({ error: 'This coach is not ready for payouts yet.' }, 400);
-  const orgAccount = payoutPlan.org_bps > 0 ? await readyConnectedAccount(db, 'org', payoutPlan.organization_id) : null;
-  if (payoutPlan.org_bps > 0 && !orgAccount) return res.json({ error: 'This organization is not ready for payouts yet.' }, 400);
+  // LCTrainings is merchant of record. Booking only reserves prepaid client
+  // credit and snapshots the payout split. Missing or incomplete Connect
+  // destinations must not block booking; releaseSessionPayout will mark the
+  // payout release pending retry and notify admins if Stripe cannot transfer
+  // after the session is actually earned.
+  const coachAccount = payoutPlan.coach_bps > 0 ? await payoutDestinationAccount(db, 'coach', coach.$id) : null;
+  const orgAccount = payoutPlan.org_bps > 0 ? await payoutDestinationAccount(db, 'org', payoutPlan.organization_id) : null;
   const originalCoachId = originalCreditCoachId(credit);
   const payoutSnapshot = payoutPlanSnapshot({
     payoutPlan,

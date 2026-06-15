@@ -42,8 +42,7 @@ export default function StripeCheckout({
         setError(res.data?.error || 'Stripe did not return a checkout link. Please try again.');
       }
     } catch (err) {
-      // Server validation messages are user-friendly — surface them verbatim
-      // (e.g. "Coach is not ready to accept payments yet.").
+      // Server validation messages are user-friendly; surface them verbatim.
       setError(err?.data?.error || err?.message || 'Payment could not be started. Please try again.');
     } finally {
       setLoading(false);

@@ -1463,8 +1463,8 @@ export default function Book() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Checkout requires the coach to be fully set up for payouts. If the coach isn't
-                      ready yet, you'll see a clear message here instead of being charged.
+                      Your payment goes to LCTrainings and becomes prepaid credit. Coaches are paid
+                      later by LCTrainings only after a completed, no-show, or chargeable late-cancelled session.
                     </p>
                     <div className="border-t border-border pt-4">
                       <StripeCheckout
