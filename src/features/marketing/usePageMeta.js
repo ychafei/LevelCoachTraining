@@ -24,6 +24,20 @@ function upsertCanonical(href) {
   el.setAttribute('href', href);
 }
 
+function upsertRobots(content) {
+  let el = document.head.querySelector('meta[name="robots"]');
+  if (!content) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute('name', 'robots');
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+}
+
 const JSONLD_ID = 'page-jsonld';
 
 function setJsonLd(data) {
@@ -43,9 +57,10 @@ function setJsonLd(data) {
 
 // Tiny per-page SEO hook (no dependencies). Sets document.title, the meta
 // description, matching OpenGraph tags, a canonical URL on the single
-// canonical domain, and optional page-level JSON-LD. Values reset to the
-// site defaults on unmount so navigation never leaks stale metadata.
-export function usePageMeta({ title, description, jsonLd } = {}) {
+// canonical domain, optional robots directives, and optional page-level
+// JSON-LD. Values reset to the site defaults on unmount so navigation never
+// leaks stale metadata.
+export function usePageMeta({ title, description, jsonLd, robots } = {}) {
   const { pathname } = useLocation();
 
   useEffect(() => {
@@ -59,6 +74,7 @@ export function usePageMeta({ title, description, jsonLd } = {}) {
     upsertMeta('property', 'og:description', desc);
     upsertMeta('property', 'og:url', canonical);
     upsertCanonical(canonical);
+    upsertRobots(robots || null);
     setJsonLd(jsonLd || null);
 
     return () => {
@@ -66,9 +82,10 @@ export function usePageMeta({ title, description, jsonLd } = {}) {
       upsertMeta('name', 'description', DEFAULT_DESCRIPTION);
       upsertMeta('property', 'og:title', SITE_NAME);
       upsertMeta('property', 'og:description', DEFAULT_DESCRIPTION);
+      upsertRobots(null);
       setJsonLd(null);
     };
-  }, [title, description, jsonLd, pathname]);
+  }, [title, description, jsonLd, pathname, robots]);
 }
 
 export default usePageMeta;

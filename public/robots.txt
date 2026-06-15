@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.levelcoachtraining.com/sitemap.xml
+Sitemap: https://www.lctrainings.com/sitemap.xml

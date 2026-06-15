@@ -1,41 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { blogPostRepo } from '@/api/repo';
 import ReactMarkdown from 'react-markdown';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
 
 export default function BlogPost() {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { slug } = useParams();
 
-  const slug = window.location.pathname.split('/blog/')[1];
+  const jsonLd = useMemo(() => (post ? {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.seo_description || post.excerpt,
+    datePublished: post.created_date,
+    author: post.author_name ? { '@type': 'Person', name: post.author_name } : undefined,
+    image: post.cover_image || undefined,
+  } : null), [post]);
+
+  usePageMeta({
+    title: post ? post.title : (loading ? 'Blog Post' : 'Post not found'),
+    description: post
+      ? (post.seo_description || post.excerpt || 'Read training articles and coaching insights from LevelCoach Training.')
+      : 'This blog post could not be found on LevelCoach Training.',
+    jsonLd,
+    robots: loading || !post ? 'noindex,follow' : undefined,
+  });
 
   useEffect(() => {
-    if (!slug) return;
+    if (!slug) {
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
+    setPost(null);
     blogPostRepo.filter({ slug }).then(res => {
       if (res.length > 0) {
         setPost(res[0]);
-        // Inject SEO meta tags
-        const p = res[0];
-        document.title = `${p.title} — LevelCoach Training`;
-        const setMeta = (name, content) => {
-          if (!content) return;
-          let el = document.querySelector(`meta[name="${name}"]`) || document.querySelector(`meta[property="${name}"]`);
-          if (!el) {
-            el = document.createElement('meta');
-            el.setAttribute(name.startsWith('og:') ? 'property' : 'name', name);
-            document.head.appendChild(el);
-          }
-          el.setAttribute('content', content);
-        };
-        setMeta('description', p.seo_description || p.excerpt);
-        setMeta('keywords', p.seo_keywords);
-        setMeta('og:title', p.title);
-        setMeta('og:description', p.seo_description || p.excerpt);
-        if (p.cover_image) setMeta('og:image', p.cover_image);
       }
+      setLoading(false);
+    }).catch((err) => {
+      console.error('Blog post load failed', err);
       setLoading(false);
     });
   }, [slug]);

@@ -7,12 +7,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle2 } from 'lucide-react';
+import { usePageMeta } from '@/features/marketing/usePageMeta';
 
 // Two supported flows, both handled by the emailDispatch function:
 // 1. Email links carry ?email=…&token=… (HMAC token proves address ownership).
 // 2. Signed-in members can manage their own address with no token — the
 //    server verifies the session email matches.
 export default function Unsubscribe() {
+  usePageMeta({
+    title: 'Unsubscribe',
+    description: 'Manage your LevelCoach Training email preferences.',
+    robots: 'noindex,nofollow',
+  });
+
   const [params] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
 

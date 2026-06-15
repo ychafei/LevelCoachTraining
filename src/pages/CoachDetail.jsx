@@ -112,10 +112,11 @@ export default function CoachDetail() {
   );
 
   usePageMeta({
-    title: model ? `${model.displayName} — ${model.primarySport} Coach` : 'Coach Profile',
+    title: model ? `${model.displayName} - ${model.primarySport} Coach` : (notFound ? 'Coach not found' : 'Coach Profile'),
     description: model
       ? `${model.displayName} offers ${model.primarySport.toLowerCase()} training${model.locationLabel && model.locationLabel !== 'Location coming soon' ? ` in ${model.locationLabel}` : ''}. View specialties, availability, and published reviews, then book on LevelCoach Training.`
       : 'View coach specialties, availability, and published reviews on LevelCoach Training.',
+    robots: loading || notFound || loadError ? 'noindex,follow' : undefined,
   });
 
   if (loading) {

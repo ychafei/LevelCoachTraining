@@ -23,6 +23,7 @@ import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { CtaBand } from '@/features/marketing/MarketingBlocks';
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import { Reveal, Stagger, HeroPattern } from '@/features/marketing/MarketingMotion';
+import { SITE_ORIGIN } from '@/lib/site';
 
 const HOW_IT_WORKS = [
   {
@@ -383,8 +384,8 @@ export default function Landing() {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'LevelCoach Training',
-    url: 'https://www.levelcoachtraining.com/',
-    logo: 'https://www.levelcoachtraining.com/levelcoach-mark.png',
+    url: `${SITE_ORIGIN}/`,
+    logo: `${SITE_ORIGIN}/levelcoach-mark.png`,
     email: 'contact@levelcoachtraining.com',
     description: 'Multi-sport coaching marketplace: athletes and families find and book vetted coaches; coaches and training organizations run sessions, progress, messaging, and Stripe payouts from one platform.',
   }), []);

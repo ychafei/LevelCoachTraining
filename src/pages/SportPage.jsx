@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, CalendarCheck, ClipboardList, ShieldCheck, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { callFn } from '@/lib/rpc';
@@ -60,9 +60,22 @@ export default function SportPage() {
       ? `Book vetted private ${sport.display_name.toLowerCase()} coaches near you. ${sport.specialties.slice(0, 4).join(', ')} — real reviews, live availability, and secure Stripe booking.`
       : undefined,
     jsonLd,
+    robots: sport ? undefined : 'noindex,follow',
   });
 
-  if (!sport) return <Navigate to="/sports" replace />;
+  if (!sport) {
+    return (
+      <div className="min-h-[60vh] bg-slate-50 px-4 py-20 text-center">
+        <h1 className="font-display text-3xl font-bold text-slate-950">Sport not found</h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-600">
+          This training category is not available. Browse the current sports catalog to find active training options.
+        </p>
+        <Button asChild className="mt-6 rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+          <Link to="/sports">Browse sports</Link>
+        </Button>
+      </div>
+    );
+  }
 
   const Icon = sportIcon(sport.icon);
   const searchHref = `/coaches?sport=${encodeURIComponent(sport.sport_key)}`;

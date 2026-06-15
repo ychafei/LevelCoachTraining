@@ -27,6 +27,7 @@ import { storage } from '@/lib/storage';
 import { SPORT_SELECT_OPTIONS } from '@/lib/athleteOnboardingFields';
 import { onboardingPath } from '@/lib/roleHome';
 import USLocationFields from '@/components/forms/USLocationFields';
+import { SITE_ORIGIN } from '@/lib/site';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/.+\..+/i;
@@ -427,7 +428,7 @@ export default function CreateOrganization() {
 
                     <p className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
                       <LinkIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      Portal URL preview: levelcoachtraining.com/organizations/{slugify(form.organizationName) || 'your-organization'}
+                      Portal URL preview: {new URL(SITE_ORIGIN).host}/organizations/{slugify(form.organizationName) || 'your-organization'}
                       <span className="font-normal text-blue-700/80">(final URL is assigned when the organization is created)</span>
                     </p>
 

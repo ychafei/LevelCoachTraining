@@ -60,10 +60,11 @@ export default function OrganizationDetail() {
   useEffect(() => { load(); }, [load]);
 
   usePageMeta({
-    title: org ? org.name : 'Organization',
+    title: org ? org.name : (notFound ? 'Organization not found' : 'Organization'),
     description: org
       ? `${org.name} on LevelCoach Training${org.service_area_label ? ` — serving ${org.service_area_label}` : ''}. View the published coach roster and book training.`
       : 'View this training organization and its published coach roster on LevelCoach Training.',
+    robots: loading || notFound || loadError ? 'noindex,follow' : undefined,
   });
 
   if (loading) {
