@@ -322,6 +322,32 @@ export default function AdminLegalDocuments() {
     }
   };
 
+  const templateActions = (template) => {
+    if (!template) return null;
+    const signedCount = agreementCountByTemplate.get(template.id) || 0;
+    const isRetired = !templateActive(template);
+
+    if (signedCount > 0) {
+      return isRetired ? null : (
+        <Button size="sm" variant="ghost" disabled={retiringId === template.id} onClick={() => retireTemplate(template)} className="h-8 text-xs">
+          <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {retiringId === template.id ? 'Retiring' : 'Retire'}
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={deletingId === template.id}
+        onClick={() => deleteTemplate(template)}
+        className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+      >
+        <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {deletingId === template.id ? 'Deleting' : 'Delete'}
+      </Button>
+    );
+  };
+
   if (!isAdmin) {
     return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
   }
@@ -422,20 +448,7 @@ export default function AdminLegalDocuments() {
                       <Button size="sm" variant="outline" onClick={() => startEditTemplate(template)} className="h-8 text-xs">
                         <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Edit
                       </Button>
-                      {templateActive(template) && (
-                        <Button size="sm" variant="ghost" disabled={retiringId === template.id} onClick={() => retireTemplate(template)} className="h-8 text-xs">
-                          <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {retiringId === template.id ? 'Retiring' : 'Retire'}
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={deletingId === template.id}
-                        onClick={() => deleteTemplate(template)}
-                        className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                      >
-                        <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {deletingId === template.id ? 'Deleting' : 'Delete'}
-                      </Button>
+                      {templateActions(template)}
                     </div>
                   </div>
                 );
@@ -516,9 +529,7 @@ export default function AdminLegalDocuments() {
             <Button variant="outline" onClick={() => setViewTemplate(null)}>Close</Button>
             {viewTemplate && (
               <>
-                <Button variant="ghost" onClick={() => deleteTemplate(viewTemplate)} className="text-red-600 hover:bg-red-50 hover:text-red-700">
-                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" /> Delete
-                </Button>
+                {templateActions(viewTemplate)}
                 <Button onClick={() => { const template = viewTemplate; setViewTemplate(null); startEditTemplate(template); }} className="bg-accent text-accent-foreground hover:bg-accent/90">
                   <Pencil className="mr-2 h-4 w-4" aria-hidden="true" /> Edit
                 </Button>
