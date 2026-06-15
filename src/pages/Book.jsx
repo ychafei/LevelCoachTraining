@@ -559,10 +559,6 @@ export default function Book() {
     // requires this for guardian/parent buyers and checks its legal consent.
     athlete_id: checkoutAthleteId,
     sport_key: effectiveSport,
-    booking_location_label: bookingLocation.label || '',
-    booking_location_lat: bookingLocation.lat ?? '',
-    booking_location_lng: bookingLocation.lng ?? '',
-    booking_location_radius: bookingLocation.radius || 15,
     availability_mode: availabilityMode,
     availability_preference: availabilityPreference,
     client_notes: goals.trim(),

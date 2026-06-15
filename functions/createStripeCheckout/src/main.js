@@ -310,7 +310,14 @@ function validateBookingLocation(coach, payload) {
     return { status: 'not_provided', label: '', radius };
   }
   if (!label || lat === null || lng === null) {
-    return { error: 'A booking location label, latitude, and longitude are required.' };
+    return {
+      status: 'not_geocoded',
+      label: label || '',
+      lat: null,
+      lng: null,
+      radius,
+      distance: null,
+    };
   }
 
   const selected = { label, lat, lng };

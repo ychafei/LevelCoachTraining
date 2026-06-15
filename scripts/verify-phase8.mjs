@@ -243,7 +243,9 @@ scenario(17, 'Client booking flow removes format and captures coach message/loca
   mustNotMatch(checkout, /\bsession_format\b/, 'checkout must not accept or store old format selections.');
   mustNotMatch(bookPage, /\bSTEP_FORMAT\b|\bselectedSessionFormat\b|\bformatOptions\b/, 'client booking wizard must not show the old format step.');
   mustInclude(bookPage, 'Details for the coach', 'client flow must ask for coach-facing details before payment/scheduling.');
+  mustNotInclude(bookPage, 'booking_location_label: bookingLocation.label', 'checkout payload must not send old geocoded location fields.');
   mustInclude(bookPage, 'preferred_location: preferredLocation.trim()', 'checkout payload must carry preferred location.');
+  mustInclude(checkout, "status: 'not_geocoded'", 'checkout must tolerate stale incomplete geocoded location payloads.');
   mustInclude(booking, 'const preferredLocation = cleanText(payload.preferred_location || payload.preferredLocation || \'\', 1000)', 'booking must sanitize preferred location server-side.');
   mustInclude(booking, 'client_message: notes', 'reservation metadata must capture the client message.');
   mustInclude(booking, 'preferred_location: preferredLocation', 'session must store preferred location snapshot.');
