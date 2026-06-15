@@ -9,6 +9,7 @@ export const legalTemplateRepo = {
   createAdmin: (template) => callFn('adminOps', { action: 'createLegalTemplate', template }),
   updateAdmin: (template_id, updates) => callFn('adminOps', { action: 'updateLegalTemplate', template_id, updates }),
   retireAdmin: (template_id) => callFn('adminOps', { action: 'retireLegalTemplate', template_id }),
+  deleteAdmin: (template_id) => callFn('adminOps', { action: 'deleteLegalTemplate', template_id }),
 };
 export const legalAgreementRepo = makeRepo(COL.LegalAgreement);
 export const legalAdminNoteRepo = makeRepo(COL.LegalAdminNote);

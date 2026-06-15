@@ -1378,6 +1378,40 @@ async function retireLegalTemplate(ctx, payload) {
   return { status: 200, body: { ok: true, retired_at: retiredAt } };
 }
 
+async function deleteLegalTemplate(ctx, payload) {
+  const { databases, actor } = ctx;
+  const templateId = String(payload.template_id || payload.id || '');
+  if (!templateId) return { status: 400, body: { error: 'template_id is required.' } };
+  const template = await databases.getDocument(DB_ID, 'legal_templates', templateId).catch(() => null);
+  if (!template) return { status: 404, body: { error: 'Legal template not found.' } };
+  if (await templateHasSignatures(databases, templateId)) {
+    return {
+      status: 409,
+      body: {
+        error: 'This legal document has signed agreements. Retire it instead so signed records stay available.',
+      },
+    };
+  }
+
+  await databases.deleteDocument(DB_ID, 'legal_templates', templateId);
+  await writeAudit(databases, {
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action: 'legal_template.delete',
+    entity_type: 'LegalTemplate',
+    entity_id: templateId,
+    before: JSON.stringify({
+      template_key: template.template_key,
+      role: template.role,
+      version: template.version,
+      title: template.title,
+      checksum: template.checksum,
+      retired_at: template.retired_at || '',
+    }),
+  });
+  return { status: 200, body: { ok: true, deleted_template_id: templateId } };
+}
+
 // --- Entrypoint -----------------------------------------------------------------
 
 export default async ({ req, res, error }) => {
@@ -1473,6 +1507,9 @@ export default async ({ req, res, error }) => {
         break;
       case 'retireLegalTemplate':
         result = await retireLegalTemplate(ctx, payload);
+        break;
+      case 'deleteLegalTemplate':
+        result = await deleteLegalTemplate(ctx, payload);
         break;
       default:
         result = { status: 400, body: { error: 'Unknown action.' } };

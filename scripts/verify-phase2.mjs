@@ -41,13 +41,16 @@ includes('functions/adminOps/src/main.js', [
   'createLegalTemplate',
   'updateLegalTemplate',
   'retireLegalTemplate',
+  'deleteLegalTemplate',
   'legalTemplateChecksum',
   'legal_template.new_version',
+  'legal_template.delete',
 ]);
 includes('src/pages/admin/AdminLegalDocuments.jsx', [
   'New document',
   'View full',
   'Edit legal document',
+  'Delete',
   'Signed agreements',
   'created_new_version',
 ]);

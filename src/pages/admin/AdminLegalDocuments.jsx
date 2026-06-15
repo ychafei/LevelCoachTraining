@@ -22,6 +22,7 @@ import {
   RotateCw,
   Save,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -149,6 +150,7 @@ export default function AdminLegalDocuments() {
   const [templateForm, setTemplateForm] = useState(emptyTemplateForm);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [retiringId, setRetiringId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
   const [agreementDialog, setAgreementDialog] = useState(null);
 
   const load = async () => {
@@ -300,6 +302,26 @@ export default function AdminLegalDocuments() {
     }
   };
 
+  const deleteTemplate = async (template) => {
+    const signedCount = agreementCountByTemplate.get(template.id) || 0;
+    if (signedCount > 0) {
+      toast.error('This document has signed agreements. Retire it instead so the legal history stays available.');
+      return;
+    }
+    if (!window.confirm(`Delete "${template.title}" from Appwrite? This only works for documents with no signed agreements.`)) return;
+    setDeletingId(template.id);
+    try {
+      await legalTemplateRepo.deleteAdmin(template.id);
+      toast.success('Legal document deleted');
+      if (viewTemplate?.id === template.id) setViewTemplate(null);
+      await load();
+    } catch (err) {
+      toast.error(err?.message || 'Could not delete legal document.');
+    } finally {
+      setDeletingId('');
+    }
+  };
+
   if (!isAdmin) {
     return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
   }
@@ -405,6 +427,15 @@ export default function AdminLegalDocuments() {
                           <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {retiringId === template.id ? 'Retiring' : 'Retire'}
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={deletingId === template.id}
+                        onClick={() => deleteTemplate(template)}
+                        className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {deletingId === template.id ? 'Deleting' : 'Delete'}
+                      </Button>
                     </div>
                   </div>
                 );
@@ -484,9 +515,14 @@ export default function AdminLegalDocuments() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewTemplate(null)}>Close</Button>
             {viewTemplate && (
-              <Button onClick={() => { const template = viewTemplate; setViewTemplate(null); startEditTemplate(template); }} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                <Pencil className="mr-2 h-4 w-4" aria-hidden="true" /> Edit
-              </Button>
+              <>
+                <Button variant="ghost" onClick={() => deleteTemplate(viewTemplate)} className="text-red-600 hover:bg-red-50 hover:text-red-700">
+                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" /> Delete
+                </Button>
+                <Button onClick={() => { const template = viewTemplate; setViewTemplate(null); startEditTemplate(template); }} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                  <Pencil className="mr-2 h-4 w-4" aria-hidden="true" /> Edit
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>
