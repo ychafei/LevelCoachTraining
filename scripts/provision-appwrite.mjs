@@ -244,9 +244,17 @@ async function waitAttributesReady(coll, timeoutMs = 90000) {
 }
 
 async function ensureIndex(coll, key, type, attributes, orders = []) {
-  await safe(`  ${coll} index ${key} (${type} on ${attributes.join(',')})`, () =>
-    databases.createIndex(DB_ID, coll, key, type, attributes, orders)
-  );
+  try {
+    await safe(`  ${coll} index ${key} (${type} on ${attributes.join(',')})`, () =>
+      databases.createIndex(DB_ID, coll, key, type, attributes, orders)
+    );
+  } catch (err) {
+    if (err?.type === 'index_invalid' && /array attributes/i.test(err?.message || '')) {
+      console.warn(`  ! ${coll} index ${key} skipped: Appwrite does not support indexes on array attributes.`);
+      return;
+    }
+    throw err;
+  }
 }
 
 async function ensureBucket(id, name, perms, opts = {}) {
