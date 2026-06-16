@@ -43,7 +43,7 @@ const navItems = [
   { label: 'Athletes', to: '/coach/clients', icon: Users, isActive: ({ pathname }) => pathname.startsWith('/coach/clients') },
   { label: 'Messages', to: '/coach/messages', icon: MessageSquare, isActive: ({ pathname }) => pathname === '/coach/messages' },
   { label: 'Payments', to: '/coach/earnings', icon: DollarSign, isActive: ({ pathname }) => pathname === '/coach/earnings' },
-  { label: 'Reviews', to: '/coach#reviews', icon: Star, isActive: ({ pathname, hash }) => pathname === '/coach' && hash === '#reviews' },
+  { label: 'Reviews', to: '/coach/reviews', icon: Star, isActive: ({ pathname }) => pathname === '/coach/reviews' },
   { label: 'Settings', to: '/coach/settings', icon: Settings, isActive: ({ pathname }) => pathname === '/coach/settings' },
 ];
 

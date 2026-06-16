@@ -169,6 +169,7 @@ export default function Book() {
   const urlParams = new URLSearchParams(window.location.search);
   const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
+  const directSchedule = preCreditId && urlParams.get('schedule') === '1';
   const stripeSuccess = urlParams.get('stripe_success');
   const stripeCanceled = urlParams.get('stripe_cancel') === '1';
   const { user, refetch } = useCurrentUser();
@@ -221,12 +222,12 @@ export default function Book() {
     };
   });
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
-  const [skipToSchedule, setSkipToSchedule] = useState(false);
+  const [skipToSchedule, setSkipToSchedule] = useState(!!directSchedule);
   const [creditRecord, setCreditRecord]       = useState(null);
   const [stripeCheckoutMessage, setStripeCheckoutMessage] = useState('');
 
   // Scheduling state
-  const [scheduling, setScheduling]           = useState(false);
+  const [scheduling, setScheduling]           = useState(!!directSchedule);
   const [availability, setAvailability]       = useState(null); // {windows, busy, availability, timezone, start_date, end_date}
   const [selectedDate, setSelectedDate]       = useState(saved?.selectedDate ? parseISO(saved.selectedDate) : null);
   const [selectedTime, setSelectedTime]       = useState(saved?.selectedTime || '');
@@ -367,11 +368,10 @@ export default function Book() {
     (async () => {
       const credits = await sessionCreditRepo.list().catch(() => []);
       if (cancelled) return;
-      let active;
+      let active = null;
       if (preCreditId) {
         active = credits.find(c => c.id === preCreditId && remainingCredits(c) > 0);
-      }
-      if (!active) {
+      } else {
         active = credits.find(c => remainingCredits(c) > 0);
       }
       setExistingCredit(active || null);
@@ -384,10 +384,17 @@ export default function Book() {
       // scheduling.
       if (preCreditId && active) {
         setCreditRecord(active);
+        if (directSchedule) {
+          setSkipToSchedule(true);
+          setScheduling(true);
+        }
         if (active.session_duration_minutes) {
           const creditDur = durationFromMinutes(active.session_duration_minutes);
           if (creditDur) setDuration(creditDur);
         }
+      } else if (directSchedule) {
+        setSkipToSchedule(false);
+        setScheduling(false);
       }
     })();
     return () => { cancelled = true; };
@@ -842,6 +849,8 @@ export default function Book() {
         );
       }
 
+      const scheduleCredit = creditRecord || existingCredit;
+
       return (
         <div className="min-h-[80vh] py-12">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
@@ -965,12 +974,17 @@ export default function Book() {
                 {bookingError}
               </p>
             )}
+            {!scheduleCredit && (
+              <p className="mt-6 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
+                Loading your credit balance before this session can be confirmed.
+              </p>
+            )}
 
             <div className="flex gap-3 mt-8">
               <Button variant="outline" onClick={() => setScheduling(false)} className="font-semibold">
                 Back
               </Button>
-              <Button onClick={handleBookSession} disabled={!selectedDate || !selectedTime || submitting}
+              <Button onClick={handleBookSession} disabled={!selectedDate || !selectedTime || submitting || !scheduleCredit}
                 className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
                 {submitting ? 'Booking...' : 'Confirm session'}
               </Button>

@@ -30,6 +30,7 @@ const CoachSessions = React.lazy(() => import('@/pages/coach/CoachSessions'));
 const CoachClients = React.lazy(() => import('@/pages/coach/CoachClients'));
 const CoachClientDetail = React.lazy(() => import('@/pages/coach/CoachClientDetail'));
 const CoachEarnings = React.lazy(() => import('@/pages/coach/CoachEarnings'));
+const CoachReviews = React.lazy(() => import('@/pages/coach/CoachReviews'));
 const CoachProfile = React.lazy(() => import('@/pages/coach/CoachProfile'));
 const CoachSettings = React.lazy(() => import('@/pages/coach/CoachSettings'));
 
@@ -219,6 +220,7 @@ const AuthenticatedApp = () => {
                 <Route path="/coach/clients" element={<CoachClients />} />
                 <Route path="/coach/clients/:clientEmail" element={<CoachClientDetail />} />
                 <Route path="/coach/earnings" element={<CoachEarnings />} />
+                <Route path="/coach/reviews" element={<CoachReviews />} />
                 <Route path="/coach/profile" element={<CoachProfile />} />
                 <Route path="/coach/settings" element={<CoachSettings />} />
               </Route>

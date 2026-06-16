@@ -100,6 +100,7 @@ function creditBookHref(credit) {
   const coachId = creditCoachId(credit);
   if (coachId) params.set('coach_id', coachId);
   if (credit?.id) params.set('credit_id', credit.id);
+  if (coachId && credit?.id) params.set('schedule', '1');
   return params.toString() ? `/book?${params.toString()}` : '/coaches';
 }
 

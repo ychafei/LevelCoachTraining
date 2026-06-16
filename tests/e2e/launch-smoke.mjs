@@ -95,6 +95,9 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(book.includes('setConfirmedCoachId') && book.includes('creditCoachId(exactCredit)'), 'Book.jsx must keep the exact credit coach after Stripe return');
   assert(!book.includes('credits.find(c => remainingCredits(c) > 0 && c.payment_processor === \'stripe\')'), 'Book.jsx must not attach first arbitrary Stripe credit');
   assert(athleteOverview.includes('creditBookHref') && athleteOverview.includes("params.set('credit_id'"), 'athlete portal must deep-link existing credits back into booking');
+  assert(athleteOverview.includes("params.set('schedule', '1')"), 'athlete portal existing-credit CTA must deep-link directly to scheduling');
+  assert(book.includes('const directSchedule') && book.includes('useState(!!directSchedule)'), 'Book.jsx must honor direct schedule links for existing credits');
+  assert(book.includes('} else {\n        active = credits.find(c => remainingCredits(c) > 0);'), 'Book.jsx must not fall back to an arbitrary credit when credit_id is provided');
   assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
   assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
@@ -108,6 +111,15 @@ test('coach portal: prepaid purchases are visible before scheduling', () => {
   assert(overview.includes('sessionCreditRepo.filter') && overview.includes('Prepaid credits'), 'coach dashboard must load prepaid credits purchased with this coach');
   assert(overview.includes('purchased {credit.package_name') || overview.includes('purchased {credit.package_name ||'), 'coach dashboard must identify client purchases, not only booked sessions');
   assert(backfill.includes('accountForCoachId(doc.original_coach_id || doc.originating_coach_id || doc.coach_id)'), 'permission backfill must grant original coaches read access to existing credits');
+});
+
+test('coach portal: reviews have a dedicated route', () => {
+  const app = source('src/App.jsx');
+  const layout = source('src/components/coach-portal/CoachLayout.jsx');
+  const reviews = source('src/pages/coach/CoachReviews.jsx');
+  assert(app.includes("import('@/pages/coach/CoachReviews')") && app.includes('path="/coach/reviews"'), 'coach reviews must be a dedicated routed page');
+  assert(layout.includes("to: '/coach/reviews'") && !layout.includes("to: '/coach#reviews'"), 'coach sidebar must not route reviews to the dashboard anchor');
+  assert(reviews.includes('Published reviews') && reviews.includes('coachReviewRepo.listPublished'), 'coach reviews page must show only review-specific content');
 });
 
 test('wellness reports: athlete check-ins are same-day session-bound', () => {
