@@ -516,6 +516,9 @@ async function provisionSessionCredits() {
   await ensureIndex('session_credits', 'idx_client_email',   'key', ['client_email']);
   await ensureIndex('session_credits', 'idx_package_id',     'key', ['package_id']);
   await ensureIndex('session_credits', 'idx_coach_id',       'key', ['coach_id']);
+  await ensureIndex('session_credits', 'idx_original_coach',  'key', ['original_coach_id']);
+  await ensureIndex('session_credits', 'idx_origin_coach',    'key', ['originating_coach_id']);
+  await ensureIndex('session_credits', 'idx_credit_payment',  'key', ['source_payment_record_id']);
   await ensureIndex('session_credits', 'idx_client_profile', 'key', ['client_profile_id']);
   await ensureIndex('session_credits', 'idx_credit_owner',   'key', ['owner_profile_id']);
   await ensureIndex('session_credits', 'idx_credit_athlete', 'key', ['athlete_id']);
