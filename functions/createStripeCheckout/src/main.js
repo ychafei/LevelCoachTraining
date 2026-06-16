@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role } from 'node-appwrite';
 import Stripe from 'stripe';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
@@ -49,6 +49,10 @@ function header(req, names) {
 
 function callerAccountId(req) {
   return header(req, ['x-appwrite-user-id', 'X-Appwrite-User-Id', 'X-Appwrite-User-ID']);
+}
+
+function ownerReadGrant(accountId) {
+  return accountId ? [Permission.read(Role.user(accountId))] : [];
 }
 
 async function profileForAccount(db, accountId) {
@@ -699,7 +703,7 @@ export default async ({ req, res, error }) => {
       available_for_refund_cents: amount,
       disputed_amount_cents: 0,
       metadata: JSON.stringify(metadata),
-    });
+    }, ownerReadGrant(accountId));
 
     return res.json({ url: session.url, checkout_session_id: session.id });
   } catch (err) {

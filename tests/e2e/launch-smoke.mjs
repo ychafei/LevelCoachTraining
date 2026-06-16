@@ -95,8 +95,29 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(book.includes('setConfirmedCoachId') && book.includes('creditCoachId(exactCredit)'), 'Book.jsx must keep the exact credit coach after Stripe return');
   assert(!book.includes('credits.find(c => remainingCredits(c) > 0 && c.payment_processor === \'stripe\')'), 'Book.jsx must not attach first arbitrary Stripe credit');
   assert(athleteOverview.includes('creditBookHref') && athleteOverview.includes("params.set('credit_id'"), 'athlete portal must deep-link existing credits back into booking');
+  assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
+  assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
   assert(stripeWebhook.includes('sendPurchaseNotifications') && stripeWebhook.includes("type: 'payment_receipt'") && stripeWebhook.includes("type: 'credit_purchased'"), 'stripe webhook must notify buyer and coach when prepaid credit is purchased');
+  assert(stripeWebhook.includes('creditReadGrants') && stripeWebhook.includes('coachReadGrant'), 'session credits must be readable by the original coach for pending-credit visibility');
+});
+
+test('coach portal: prepaid purchases are visible before scheduling', () => {
+  const overview = source('src/pages/coach/CoachOverview.jsx');
+  const backfill = source('scripts/backfill-permissions.mjs');
+  assert(overview.includes('sessionCreditRepo.filter') && overview.includes('Prepaid credits'), 'coach dashboard must load prepaid credits purchased with this coach');
+  assert(overview.includes('purchased {credit.package_name') || overview.includes('purchased {credit.package_name ||'), 'coach dashboard must identify client purchases, not only booked sessions');
+  assert(backfill.includes('accountForCoachId(doc.original_coach_id || doc.originating_coach_id || doc.coach_id)'), 'permission backfill must grant original coaches read access to existing credits');
+});
+
+test('wellness reports: athlete check-ins are same-day session-bound', () => {
+  const wellness = source('src/features/athlete/AthleteWellness.jsx');
+  const training = source('functions/training/src/main.js');
+  assert(wellness.includes('Session-day wellness report') && wellness.includes('todaySessions'), 'wellness UI must only expose day-of sessions');
+  assert(training.includes('session_id is required for session-day wellness reports'), 'training function must require a session_id for wellness reports');
+  assert(training.includes('Wellness reports open only on the day of the session'), 'training function must enforce day-of submission');
+  assert(training.includes('This session does not belong to this athlete'), 'training function must bind check-in to the athlete session');
+  assert(training.includes('coachForGrants.$id') && training.includes('injury_flag'), 'check-ins must grant the session coach read access and persist injury flags');
 });
 
 test('parent/minor booking: guardian consent must be exact-child bound', () => {

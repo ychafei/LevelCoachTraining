@@ -205,6 +205,23 @@ function callerIsAthlete(athlete, profile) {
   return Boolean(athlete && (athlete.ownerProfileId === profile.$id || athlete.id === profile.$id));
 }
 
+function todayInTz(timezone = 'America/Detroit') {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function sessionBelongsToAthlete(session, athlete, profile) {
+  const sessionAthleteId = String(session?.athlete_id || '').trim();
+  if (sessionAthleteId && sessionAthleteId === athlete.id) return true;
+  if (session?.booked_by_profile_id && session.booked_by_profile_id === profile.$id) return true;
+  return Boolean(athlete.email
+    && String(session?.client_email || '').toLowerCase() === String(athlete.email).toLowerCase());
+}
+
 // --- Field builders --------------------------------------------------------------
 
 async function buildCommonFields(db, payload, { requireTitle = true } = {}) {
@@ -498,71 +515,65 @@ async function checkinCreate(db, users, accountId, profile, payload, res) {
   }
   const notes = cleanText(payload.notes, 20000);
   const sessionId = String(payload.session_id || '').trim();
-
-  // Coach path first: coach label + owned coach record + relationship.
-  const coach = await coachContext(db, users, accountId);
-  let athlete = null;
-  let coachForGrants = null;
-  let createdByRole = 'athlete';
+  if (!sessionId) return res.json({ error: 'session_id is required for session-day wellness reports.' }, 400);
 
   const requestedAthleteId = String(payload.athlete_id || '').trim();
-  if (coach && requestedAthleteId) {
+  let athlete = null;
+  if (requestedAthleteId) {
     const candidate = await resolveAthlete(db, requestedAthleteId);
-    if (candidate && !callerIsAthlete(candidate, profile) && (await hasRelationship(db, coach, candidate))) {
-      athlete = candidate;
-      coachForGrants = coach;
-      createdByRole = 'coach';
+    if (!candidate || !callerIsAthlete(candidate, profile)) {
+      return res.json({ error: 'You can only create wellness reports for yourself.' }, 403);
     }
+    athlete = candidate;
+  } else {
+    const own = await db.listDocuments(DB_ID, 'athlete_profiles', [
+      Query.equal('profile_id', profile.$id),
+      Query.limit(1),
+    ]).catch(() => ({ documents: [] }));
+    athlete = own.documents[0]
+      ? await resolveAthlete(db, own.documents[0].$id)
+      : await resolveAthlete(db, profile.$id);
   }
+  if (!athlete) return res.json({ error: 'Athlete not found.' }, 404);
 
-  if (!athlete) {
-    // Athlete self check-in: resolve the caller's own athlete identity.
-    if (requestedAthleteId) {
-      const candidate = await resolveAthlete(db, requestedAthleteId);
-      if (!candidate || !callerIsAthlete(candidate, profile)) {
-        return res.json({ error: 'You can only create check-ins for yourself.' }, 403);
-      }
-      athlete = candidate;
-    } else {
-      const own = await db.listDocuments(DB_ID, 'athlete_profiles', [
-        Query.equal('profile_id', profile.$id),
-        Query.limit(1),
-      ]).catch(() => ({ documents: [] }));
-      athlete = own.documents[0]
-        ? await resolveAthlete(db, own.documents[0].$id)
-        : await resolveAthlete(db, profile.$id);
-    }
-    if (!athlete) return res.json({ error: 'Athlete not found.' }, 404);
-
-    // Optional coach context for the check-in grants.
-    const coachId = String(payload.coach_id || '').trim();
-    if (coachId) {
-      coachForGrants = await db.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
-      if (!coachForGrants) return res.json({ error: 'Coach not found.' }, 404);
-    }
+  const session = await db.getDocument(DB_ID, 'sessions', sessionId).catch(() => null);
+  if (!session) return res.json({ error: 'Session not found.' }, 400);
+  if (!sessionBelongsToAthlete(session, athlete, profile)) {
+    return res.json({ error: 'This session does not belong to this athlete.' }, 403);
   }
-
-  if (sessionId) {
-    const session = await db.getDocument(DB_ID, 'sessions', sessionId).catch(() => null);
-    if (!session) return res.json({ error: 'Session not found.' }, 400);
-    if (!coachForGrants && session.coach_id) {
-      coachForGrants = await db.getDocument(DB_ID, 'coaches', session.coach_id).catch(() => null);
-    }
+  if (!['pending', 'confirmed'].includes(session.status)) {
+    return res.json({ error: 'Wellness reports can only be submitted before a scheduled session is completed.' }, 409);
   }
+  if (session.date !== todayInTz(session.timezone || 'America/Detroit')) {
+    return res.json({ error: 'Wellness reports open only on the day of the session.' }, 409);
+  }
+  const existing = await db.listDocuments(DB_ID, 'session_check_ins', [
+    Query.equal('session_id', session.$id),
+    Query.equal('athlete_id', athlete.id),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  if (existing.documents.length > 0) {
+    return res.json({ error: 'A wellness report has already been submitted for this session.' }, 409);
+  }
+  const coachForGrants = session.coach_id
+    ? await db.getDocument(DB_ID, 'coaches', session.coach_id).catch(() => null)
+    : null;
+  if (!coachForGrants) return res.json({ error: 'Session coach not found.' }, 400);
 
   const checkIn = await db.createDocument(DB_ID, 'session_check_ins', ID.unique(), {
-    coach_id: coachForGrants?.$id || '',
+    coach_id: coachForGrants.$id,
     athlete_id: athlete.id,
     session_id: sessionId,
     mood: ratings.mood ?? null,
     energy: ratings.energy ?? null,
     soreness: ratings.soreness ?? null,
     notes,
+    injury_flag: payload.injury_flag === true,
     created_by_profile_id: profile.$id,
-    created_by_role: createdByRole,
+    created_by_role: 'athlete',
   }, grantsFor(coachForGrants, {
     ...athlete,
-    accountId: athlete.accountId || (callerIsAthlete(athlete, profile) ? accountId : ''),
+    accountId: athlete.accountId || accountId,
   }, { athleteUpdate: true }));
   return res.json({ check_in: checkIn });
 }

@@ -194,9 +194,14 @@ const COLLECTION_GRANTS = {
     await accountForCoachId(doc.coach_id),
   ]),
 
-  // read: owner account (client_email → profile; client_profile_id fallback)
+  // read: owner account + original coach account. Coaches can see prepaid
+  // credits purchased with them before the athlete schedules a session.
   session_credits: async (doc) => readGrants([
-    (await accountForEmail(doc.client_email)) || (await accountForProfileId(doc.client_profile_id)),
+    doc.owner_account_id
+      || (await accountForEmail(doc.client_email))
+      || (await accountForProfileId(doc.client_profile_id))
+      || (await accountForProfileId(doc.owner_profile_id)),
+    await accountForCoachId(doc.original_coach_id || doc.originating_coach_id || doc.coach_id),
   ]),
 
   // read: participants

@@ -107,6 +107,10 @@ function firstBookableCredit(credits) {
   return credits.find((credit) => (credit.status || 'active') === 'active' && creditRemainingCents(credit) > 0) || null;
 }
 
+function creditCoachName(credit, coachesById) {
+  return coachDisplayName(coachesById[creditCoachId(credit)]);
+}
+
 function CreditsCard({ credits, remaining, loading, coachesById }) {
   return (
     <SectionCard title="Session credits" icon={CreditCard}>
@@ -133,13 +137,15 @@ function CreditsCard({ credits, remaining, loading, coachesById }) {
               const left = creditRemainingCents(credit);
               const reserved = creditReservedCents(credit);
               const spent = creditSpentCents(credit);
-              const coachName = coachDisplayName(coachesById[creditCoachId(credit)]);
+              const coachName = creditCoachName(credit, coachesById);
               return (
                 <li key={credit.id} className="flex items-start justify-between gap-3 text-sm">
                   <span className="min-w-0">
-                    <span className="block truncate text-muted-foreground">{credit.package_name || 'Training package'}</span>
+                    <span className="block truncate font-semibold text-foreground">
+                      {coachName !== 'Coach' ? `Credit with ${coachName}` : 'Training credit'}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
-                      {coachName !== 'Coach' ? `${coachName} · ` : ''}{usd(reserved)} reserved · {usd(spent)} spent
+                      {credit.package_name || 'Training package'} · {usd(reserved)} reserved · {usd(spent)} spent
                     </span>
                   </span>
                   <span className="shrink-0 font-semibold text-foreground">{usd(left)}</span>
@@ -149,8 +155,12 @@ function CreditsCard({ credits, remaining, loading, coachesById }) {
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             {firstBookableCredit(credits) && (
-              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-                <Link to={creditBookHref(firstBookableCredit(credits))}>Book with credit</Link>
+              <Button asChild size="sm" variant="outline" className="h-auto min-h-8 whitespace-normal text-xs">
+                <Link to={creditBookHref(firstBookableCredit(credits))}>
+                  {creditCoachName(firstBookableCredit(credits), coachesById) !== 'Coach'
+                    ? `Schedule with ${creditCoachName(firstBookableCredit(credits), coachesById)}`
+                    : 'Schedule with credit'}
+                </Link>
               </Button>
             )}
             <Button asChild size="sm" variant="outline" className="h-8 text-xs">
@@ -382,14 +392,14 @@ function buildActions({ legalStatus, remaining, credits, creditCoachesById, cred
     });
   } else if (creditsLoaded && remaining > 0 && !hasUpcoming) {
     const credit = firstBookableCredit(credits);
-    const coachName = coachDisplayName(creditCoachesById[creditCoachId(credit)]);
+    const coachName = creditCoachName(credit, creditCoachesById);
     actions.push({
       key: 'book',
       icon: CalendarDays,
       title: coachName !== 'Coach' ? `Book with ${coachName}` : 'Book your next session',
       body: `You have ${usd(remaining)} in credit ready to use. Get the next session on the calendar.`,
       href: credit ? creditBookHref(credit) : '/coaches',
-      label: 'Book now',
+      label: coachName !== 'Coach' ? `Schedule with ${coachName}` : 'Book now',
     });
   }
 

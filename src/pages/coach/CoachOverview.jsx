@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  CreditCard,
   DollarSign,
   MessageSquare,
   Star,
@@ -26,6 +27,7 @@ import {
   legalTemplateRepo,
   reportsRepo,
   sessionRepo,
+  sessionCreditRepo,
   stripeConnectedAccountRepo,
 } from '@/api/repo';
 import { useAuth } from '@/lib/AuthContext';
@@ -154,6 +156,25 @@ function sportProfileComplete(row) {
   return listComplete(row?.specialties) && listComplete(row?.levels) && listComplete(row?.session_types);
 }
 
+function creditRemainingCents(credit) {
+  const remaining = Number(credit?.remaining_amount_cents);
+  if (Number.isInteger(remaining)) return Math.max(0, remaining);
+  const available = Number(credit?.available_amount_cents);
+  if (Number.isInteger(available)) return Math.max(0, available);
+  const total = Number(credit?.total_credits) || 0;
+  const used = Number(credit?.used_credits) || 0;
+  const perSession = Number(credit?.per_session_base_price_cents) || 0;
+  return Math.max(0, total - used) * Math.max(0, perSession);
+}
+
+function mergeById(rows) {
+  const map = new Map();
+  for (const row of rows || []) {
+    if (row?.id) map.set(row.id, row);
+  }
+  return [...map.values()];
+}
+
 export default function CoachOverview() {
   const { user, isAdmin } = useAuth();
   const { coach, loading: coachLoading, reload: reloadCoach } = useMyCoach();
@@ -163,6 +184,7 @@ export default function CoachOverview() {
   const [reviews, setReviews] = useState(null);
   const [conversations, setConversations] = useState(null);
   const [connectAccount, setConnectAccount] = useState(null);
+  const [prepaidCredits, setPrepaidCredits] = useState(null);
   const [hasSportProfiles, setHasSportProfiles] = useState(false);
   const [legalSigned, setLegalSigned] = useState(null);
 
@@ -170,7 +192,19 @@ export default function CoachOverview() {
 
   const loadAll = useCallback(async () => {
     if (!coachId) return;
-    const [ssns, earn, revs, convos, connectRows, sportRows, templates, agreements] = await Promise.all([
+    const [
+      ssns,
+      earn,
+      revs,
+      convos,
+      connectRows,
+      sportRows,
+      templates,
+      agreements,
+      creditsByCoach,
+      creditsByOriginalCoach,
+      creditsByOriginatingCoach,
+    ] = await Promise.all([
       sessionRepo.filter({ coach_id: coachId }, '-date').catch(() => []),
       reportsRepo.coachEarnings().catch(() => null),
       coachReviewRepo.listPublished(coachId).catch(() => []),
@@ -181,6 +215,9 @@ export default function CoachOverview() {
       user?.id
         ? legalAgreementRepo.filter({ signer_profile_id: user.id, status: 'signed' }).catch(() => [])
         : Promise.resolve([]),
+      sessionCreditRepo.filter({ coach_id: coachId }, '-created_date').catch(() => []),
+      sessionCreditRepo.filter({ original_coach_id: coachId }, '-created_date').catch(() => []),
+      sessionCreditRepo.filter({ originating_coach_id: coachId }, '-created_date').catch(() => []),
     ]);
     setSessions(ssns || []);
     setEarnings(earn);
@@ -188,6 +225,11 @@ export default function CoachOverview() {
     setConversations((convos || []).filter((c) => !c.is_archived
       && (c.coach_id === coachId || c.participant_emails?.includes(user?.email))));
     setConnectAccount(connectRows?.[0] || null);
+    setPrepaidCredits(mergeById([
+      ...(creditsByCoach || []),
+      ...(creditsByOriginalCoach || []),
+      ...(creditsByOriginatingCoach || []),
+    ]).filter((credit) => (credit.status || 'active') === 'active' && creditRemainingCents(credit) > 0));
     setHasSportProfiles((sportRows || []).some(sportProfileComplete));
     setLegalSigned(legalPacketComplete(templates, agreements, coachId));
   }, [coachId, user?.id, user?.email]);
@@ -397,6 +439,39 @@ export default function CoachOverview() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="p-5">
+          <SectionHeader title="Prepaid credits" />
+          {prepaidCredits === null ? (
+            <SkeletonRows />
+          ) : prepaidCredits.length === 0 ? (
+            <div className="py-8 text-center">
+              <CreditCard className="mx-auto mb-2 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">No available prepaid credits yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground">When a client buys credit with you, it appears here until that credit is used.</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {prepaidCredits.slice(0, 5).map((credit) => (
+                <li key={credit.id} className="rounded-lg border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {credit.client_name || credit.client_email || 'Client'} purchased {credit.package_name || 'training credit'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Available to schedule · {formatInstantInTz(credit.created_date, tz, { hour: undefined, minute: undefined, timeZoneName: undefined })}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+                      {formatCents(creditRemainingCents(credit))}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
         {/* Recent reviews */}
         <Card id="reviews" className="p-5">
           <SectionHeader title="Recent reviews" />

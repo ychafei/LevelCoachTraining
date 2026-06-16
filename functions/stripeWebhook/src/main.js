@@ -140,6 +140,19 @@ function ownerReadGrant(metadata) {
     : [];
 }
 
+async function coachReadGrant(db, coachId) {
+  if (!coachId) return [];
+  const coach = await db.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+  return coach?.user_id ? [Permission.read(Role.user(coach.user_id))] : [];
+}
+
+async function creditReadGrants(db, metadata) {
+  return [...new Set([
+    ...ownerReadGrant(metadata),
+    ...(await coachReadGrant(db, metadata.coach_id || metadata.original_coach_id || metadata.originating_coach_id || '')),
+  ])];
+}
+
 function deterministicCreditId(paymentRecord) {
   const base = String(paymentRecord?.$id || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 28);
   return base ? `credit_${base}` : ID.unique();
@@ -355,7 +368,7 @@ async function ensurePaymentRecord(db, session, paymentIntent) {
     disputed_amount_cents: 0,
     metadata: JSON.stringify(metadata),
     currency: session.currency || paymentIntent?.currency || 'usd',
-  });
+  }, ownerReadGrant(metadata));
 }
 
 async function createCreditIfMissing(db, paymentRecord, session, metadata) {
@@ -375,8 +388,8 @@ async function createCreditIfMissing(db, paymentRecord, session, metadata) {
   const customerName = session.customer_details?.name || metadata.client_name || '';
   const customerEmail = session.customer_details?.email || session.customer_email || metadata.client_email || '';
 
-  // Buyer gets a per-document read grant on their credit.
-  const permissions = ownerReadGrant(metadata);
+  // Buyer and the original coach get per-document read grants on the credit.
+  const permissions = await creditReadGrants(db, metadata);
   const creditData = {
     client_email: customerEmail,
     client_name: customerName,
@@ -543,7 +556,7 @@ async function handleCheckoutCompleted(db, stripe, session, error) {
     metadata: JSON.stringify(metadata),
     webhook_processed_at: new Date().toISOString(),
     currency,
-  });
+  }, ownerReadGrant(metadata));
 
   // Ledger: checkout records only the platform charge and purchased credit.
   // Coach/org payout ledgers are written after an earned session outcome.

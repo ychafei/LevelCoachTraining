@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BatteryCharging, Flame, HeartPulse, Smile, Sparkles } from 'lucide-react';
+import { BatteryCharging, CalendarDays, Flame, HeartPulse, Smile, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -113,6 +113,15 @@ function CheckInHistory({ checkIns, loading, sessionsById }) {
   );
 }
 
+function todayInTz(timezone = 'America/Detroit') {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 export default function AthleteWellness({ user, athleteProfile, athleteIds, sessions = [] }) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState({ energy: 0, soreness: 0, mood: 0 });
@@ -128,18 +137,26 @@ export default function AthleteWellness({ user, athleteProfile, athleteIds, sess
     queryFn: () => trainingRepo.listCheckIns({ athlete_id: athleteIds }),
   });
 
-  // Recent + upcoming sessions the check-in can be linked to (last 14 days).
-  const linkableSessions = useMemo(() => {
-    const now = Date.now();
-    const cutoff = now - 14 * 24 * 60 * 60 * 1000;
+  // Wellness reports are day-of only and must be tied to the exact session so
+  // the right coach receives read access.
+  const todaySessions = useMemo(() => {
     return sessions
       .filter((session) => {
-        const ms = sessionStartMs(session);
-        return ms !== null && ms >= cutoff && ['confirmed', 'completed'].includes(session.status);
+        const sessionDay = todayInTz(session.timezone || 'America/Detroit');
+        return session.date === sessionDay && ['pending', 'confirmed'].includes(session.status);
       })
-      .sort((a, b) => (sessionStartMs(b) ?? 0) - (sessionStartMs(a) ?? 0))
+      .sort((a, b) => (sessionStartMs(a) ?? 0) - (sessionStartMs(b) ?? 0))
       .slice(0, 10);
   }, [sessions]);
+
+  useEffect(() => {
+    if (todaySessions.length === 1 && !sessionId) {
+      setSessionId(todaySessions[0].id);
+    }
+    if (sessionId && !todaySessions.some((session) => session.id === sessionId)) {
+      setSessionId('');
+    }
+  }, [sessionId, todaySessions]);
 
   const sessionsById = useMemo(() => {
     const map = {};
@@ -147,7 +164,7 @@ export default function AthleteWellness({ user, athleteProfile, athleteIds, sess
     return map;
   }, [sessions]);
 
-  const ready = values.energy > 0 && values.soreness > 0 && values.mood > 0;
+  const ready = !!sessionId && values.energy > 0 && values.soreness > 0 && values.mood > 0;
 
   const submit = async () => {
     if (!ready) return;
@@ -158,7 +175,7 @@ export default function AthleteWellness({ user, athleteProfile, athleteIds, sess
         : notes.trim();
       await trainingRepo.createCheckIn({
         athlete_id: athleteProfile?.id || user?.id || '',
-        session_id: sessionId || '',
+        session_id: sessionId,
         energy: values.energy,
         soreness: values.soreness,
         mood: values.mood,
@@ -181,29 +198,27 @@ export default function AthleteWellness({ user, athleteProfile, athleteIds, sess
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <SectionCard
-        title="How are you feeling today?"
+        title="Session-day wellness report"
         icon={Sparkles}
-        description="Quick, honest answers help your coach train you the right way. This is not a test — there are no wrong answers."
+        description="Submit this on the day of a scheduled session so that session's coach can plan around how you feel."
       >
-        <div className="space-y-5">
-          {SCALES.map((scale) => (
-            <ScalePicker
-              key={scale.key}
-              scale={scale}
-              value={values[scale.key]}
-              onChange={(n) => setValues((current) => ({ ...current, [scale.key]: n }))}
-            />
-          ))}
-
-          {linkableSessions.length > 0 && (
+        {todaySessions.length === 0 ? (
+          <EmptyState
+            icon={CalendarDays}
+            title="No session today"
+            body="Wellness reports open on the day of a confirmed session. Once you have a session today, you can send that coach your readiness report."
+            compact
+          />
+        ) : (
+          <div className="space-y-5">
             <div>
-              <Label htmlFor="checkin-session">Link to a session (optional)</Label>
+              <Label htmlFor="checkin-session">Session today</Label>
               <Select value={sessionId} onValueChange={setSessionId}>
                 <SelectTrigger id="checkin-session" className="mt-1 bg-background">
-                  <SelectValue placeholder="Pick a recent session" />
+                  <SelectValue placeholder="Choose today's session" />
                 </SelectTrigger>
                 <SelectContent>
-                  {linkableSessions.map((session) => (
+                  {todaySessions.map((session) => (
                     <SelectItem key={session.id} value={session.id}>
                       {formatInTz(session.date, session.start_time, session.timezone)}
                     </SelectItem>
@@ -211,44 +226,53 @@ export default function AthleteWellness({ user, athleteProfile, athleteIds, sess
                 </SelectContent>
               </Select>
             </div>
-          )}
 
-          <div>
-            <Label htmlFor="checkin-notes">Anything else? (optional)</Label>
-            <Textarea
-              id="checkin-notes"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              maxLength={4000}
-              className="mt-1 bg-background"
-              placeholder="Sore spots, school stress, big wins — anything you want your coach to know."
-            />
+            {SCALES.map((scale) => (
+              <ScalePicker
+                key={scale.key}
+                scale={scale}
+                value={values[scale.key]}
+                onChange={(n) => setValues((current) => ({ ...current, [scale.key]: n }))}
+              />
+            ))}
+
+            <div>
+              <Label htmlFor="checkin-notes">Anything else? (optional)</Label>
+              <Textarea
+                id="checkin-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                maxLength={4000}
+                className="mt-1 bg-background"
+                placeholder="Sore spots, school stress, big wins — anything you want your coach to know."
+              />
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/40 p-3 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={injury}
+                onChange={(event) => setInjury(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-red-500"
+              />
+              <span>
+                <span className="font-semibold text-foreground">Something hurts or might be an injury.</span>{' '}
+                Checking this flags it for your coach. If it&apos;s serious, tell a parent, guardian, or doctor right away.
+              </span>
+            </label>
+
+            <Button
+              disabled={!ready || saving}
+              onClick={submit}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 sm:w-auto"
+            >
+              {saving ? 'Saving…' : 'Save check-in'}
+            </Button>
+            {!ready && (
+              <p className="text-xs text-muted-foreground">Choose today's session and pick a 1–10 score for energy, soreness, and mood to save.</p>
+            )}
           </div>
-
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/40 p-3 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={injury}
-              onChange={(event) => setInjury(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-red-500"
-            />
-            <span>
-              <span className="font-semibold text-foreground">Something hurts or might be an injury.</span>{' '}
-              Checking this flags it for your coach. If it&apos;s serious, tell a parent, guardian, or doctor right away.
-            </span>
-          </label>
-
-          <Button
-            disabled={!ready || saving}
-            onClick={submit}
-            className="w-full bg-accent text-accent-foreground hover:bg-accent/90 sm:w-auto"
-          >
-            {saving ? 'Saving…' : 'Save check-in'}
-          </Button>
-          {!ready && (
-            <p className="text-xs text-muted-foreground">Pick a 1–10 score for energy, soreness, and mood to save.</p>
-          )}
-        </div>
+        )}
       </SectionCard>
 
       <CheckInHistory
