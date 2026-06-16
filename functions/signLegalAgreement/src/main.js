@@ -256,6 +256,15 @@ function legalPdfPermissions(accountId) {
   return permissions;
 }
 
+function legalAgreementPermissions(accountId) {
+  const permissions = [
+    Permission.read(Role.label('admin')),
+    Permission.read(Role.label('super_admin')),
+  ];
+  if (accountId) permissions.unshift(Permission.read(Role.user(accountId)));
+  return permissions;
+}
+
 function addWrapped(doc, text, x, y, width, lineHeight = 12) {
   const lines = doc.splitTextToSize(String(text || ''), width);
   for (const line of lines) {
@@ -398,7 +407,7 @@ export default async ({ req, res, error }) => {
       ...signaturePayload,
       signature_hash: signatureHash,
       status: 'signed',
-    });
+    }, legalAgreementPermissions(accountId));
 
     let pdf = null;
     let updated = agreement;

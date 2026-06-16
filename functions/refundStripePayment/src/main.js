@@ -58,6 +58,11 @@ function validRequestId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
+function cleanReason(value) {
+  const reason = String(value || '').replace(/<[^>]*>/g, '').trim();
+  return reason.length >= 3 && reason.length <= 1000 ? reason : '';
+}
+
 async function firstDocument(databases, collection, queries) {
   const rows = await databases.listDocuments(DB_ID, collection, [...queries, Query.limit(1)]);
   return rows.documents[0] || null;
@@ -247,6 +252,11 @@ export default async ({ req, res, error }) => {
     if (!validRequestId(requestId)) {
       return res.json({ error: 'request_id is required (1-64 chars, letters/digits/_/-).' }, 400);
     }
+    const reason = cleanReason(payload.reason);
+    if (!reason) return res.json({ error: 'reason is required (3-1000 chars).' }, 400);
+    if (String(payload.confirmation || '').trim() !== 'REFUND') {
+      return res.json({ error: 'Type REFUND to confirm this refund.' }, 400);
+    }
 
     const { databases, users } = services();
 
@@ -327,7 +337,7 @@ export default async ({ req, res, error }) => {
         payment_record_id: paymentRecord.$id,
         refunded_by_account_id: accountId,
         request_id: requestId,
-        reason: String(payload.reason || '').slice(0, 400),
+        reason: reason.slice(0, 400),
       },
     }, {
       idempotencyKey: `refund_${paymentRecord.$id}_${requestId}`,
@@ -414,7 +424,7 @@ export default async ({ req, res, error }) => {
       idempotency_key: `ledger_refund_${refund.id}`,
       metadata: JSON.stringify({
         request_id: requestId,
-        reason: payload.reason || '',
+        reason,
         session_id: refundEarnedSessionId,
         unused_credit_refund_cents: creditRefund.debit,
         released_transfer_refund_cents: releasedRefundCents,
@@ -460,7 +470,7 @@ export default async ({ req, res, error }) => {
       }),
       metadata: JSON.stringify({
         request_id: requestId,
-        reason: payload.reason || '',
+        reason,
         checkout_session_id: paymentRecord.checkout_session_id || '',
         unused_credit_refund_cents: creditRefund.debit,
         released_transfer_refund_cents: releasedRefundCents,

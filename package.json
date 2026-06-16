@@ -21,6 +21,10 @@
     "phase7:verify": "node scripts/verify-phase7.mjs",
     "phase8:verify": "node scripts/verify-phase8.mjs",
     "sports:seed": "node scripts/seed-sports.mjs",
+    "legal:void-unbound-guardian": "node scripts/void-unbound-guardian-agreements.mjs --dry-run",
+    "legal:void-unbound-guardian:apply": "node scripts/void-unbound-guardian-agreements.mjs --apply",
+    "test:e2e": "node tests/e2e/launch-smoke.mjs",
+    "test:launch": "npm run test:e2e",
     "verify:all": "npm run phase0:verify && npm run phase1:verify && npm run phase2:verify && npm run phase3:verify && npm run phase4:verify && npm run phase5:verify && npm run phase6:verify && npm run phase7:verify && npm run phase8:verify",
     "sitemap": "node scripts/generate-sitemap.mjs",
     "build:seo": "vite build && node scripts/generate-sitemap.mjs && node scripts/prerender.mjs"

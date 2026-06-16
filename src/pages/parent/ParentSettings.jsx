@@ -140,8 +140,7 @@ function AccountSection({ user, refetchUser }) {
     if (!file) return;
     setUploading(true);
     try {
-      const { url: photo_url } = await storage.uploadFile('coach-photos', file);
-      await auth.updateCurrentUser({ photo_url });
+      await storage.uploadProfilePhoto(file);
       await refetchUser();
       toast.success('Photo updated.');
     } catch (err) {

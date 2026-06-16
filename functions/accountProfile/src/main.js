@@ -1,6 +1,14 @@
-import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role, Storage, Users } from 'node-appwrite';
+import { InputFile } from 'node-appwrite/file';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
+const PROFILE_PHOTO_BUCKET = 'client-photos';
+const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+const PROFILE_PHOTO_MIME_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 const ONBOARDING_ROLES = ['athlete', 'parent', 'guardian', 'organization', 'coach_applicant'];
 const MATCHING_AGE_GROUPS = ['5-8', '9-12', '13+'];
@@ -13,7 +21,7 @@ function services() {
     .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1')
     .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID)
     .setKey(process.env.APPWRITE_API_KEY);
-  return { db: new Databases(client), users: new Users(client) };
+  return { db: new Databases(client), users: new Users(client), storage: new Storage(client) };
 }
 
 function body(req) {
@@ -73,6 +81,23 @@ async function updateProfileResilient(db, profileId, data) {
 function cleanString(value, max) {
   const text = String(value ?? '').replace(/<[^>]*>/g, '').trim();
   return text.length > max ? null : text;
+}
+
+function canonicalFileViewUrl(bucketId, fileId) {
+  const endpoint = process.env.VITE_APPWRITE_ENDPOINT || process.env.APPWRITE_FUNCTION_API_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1';
+  const project = process.env.VITE_APPWRITE_PROJECT_ID || process.env.APPWRITE_FUNCTION_PROJECT_ID;
+  const url = new URL(`${endpoint}/storage/buckets/${bucketId}/files/${fileId}/view`);
+  if (project) url.searchParams.set('project', project);
+  return url.toString();
+}
+
+function parseImageDataUrl(dataUrl) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(dataUrl || '').trim());
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64');
+  if (!buffer.length || buffer.length > MAX_PROFILE_PHOTO_BYTES) return null;
+  return { mime, buffer };
 }
 
 function validIsoDate(value) {
@@ -272,6 +297,51 @@ async function updateProfile(db, accountId, payload, res, error) {
   return res.json({ profile: updated });
 }
 
+async function uploadProfilePhoto(db, storage, accountId, payload, res, error) {
+  const profile = await profileForAccount(db, accountId);
+  if (!profile) return res.json({ error: 'No profile found. Call ensure first.' }, 404);
+
+  const ban = await activeBan(db, profile.email);
+  if (ban) return res.json({ error: 'This account is suspended.' }, 403);
+
+  const parsed = parseImageDataUrl(payload.image_data || payload.data_url || '');
+  if (!parsed || !PROFILE_PHOTO_MIME_EXT[parsed.mime]) {
+    return res.json({ error: 'Upload a JPG, PNG, or WebP image under 5 MB.' }, 400);
+  }
+
+  const ext = PROFILE_PHOTO_MIME_EXT[parsed.mime];
+  const safeName = `profile-avatar-${profile.$id}.${ext}`;
+  let created;
+  try {
+    created = await storage.createFile({
+      bucketId: PROFILE_PHOTO_BUCKET,
+      fileId: ID.unique(),
+      file: InputFile.fromBuffer(parsed.buffer, safeName),
+      permissions: [
+        Permission.read(Role.user(accountId)),
+        Permission.read(Role.label('admin')),
+      ],
+    });
+  } catch (err) {
+    error?.(`[accountProfile.uploadProfilePhoto] ${err?.message || err}`);
+    return res.json({ error: 'Could not upload profile photo.' }, 500);
+  }
+
+  const photoUrl = canonicalFileViewUrl(PROFILE_PHOTO_BUCKET, created.$id);
+  const updated = await updateProfileResilient(db, profile.$id, { photo_url: photoUrl }).catch((err) => {
+    error?.(`[accountProfile.uploadProfilePhoto] profile update failed: ${err?.message || err}`);
+    return null;
+  });
+  if (!updated) return res.json({ error: 'Photo uploaded, but profile could not be updated.' }, 500);
+
+  return res.json({
+    profile: updated,
+    file_id: created.$id,
+    bucket_id: PROFILE_PHOTO_BUCKET,
+    url: photoUrl,
+  });
+}
+
 export default async ({ req, res, error }) => {
   try {
     const accountId = callerAccountId(req);
@@ -279,10 +349,11 @@ export default async ({ req, res, error }) => {
 
     const payload = body(req);
     const action = String(payload.action || '');
-    const { db, users } = services();
+    const { db, users, storage } = services();
 
     if (action === 'ensure') return await ensureProfile(db, users, accountId, res, error);
     if (action === 'update') return await updateProfile(db, accountId, payload, res, error);
+    if (action === 'uploadProfilePhoto') return await uploadProfilePhoto(db, storage, accountId, payload, res, error);
 
     return res.json({ error: 'Unknown action.' }, 400);
   } catch (err) {

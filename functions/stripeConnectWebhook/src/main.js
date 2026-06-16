@@ -27,9 +27,26 @@ async function createWebhookEvent(db, event) {
       payload: JSON.stringify(event).slice(0, 100000),
     });
   } catch (err) {
-    if (err?.code === 409) return null;
-    throw err;
+    if (err?.code !== 409) throw err;
+    const existing = await firstDocument(db, 'stripe_webhook_events', [
+      Query.equal('stripe_event_id', event.id),
+    ]).catch(() => null);
+    if (!existing) return null;
+    const stalled = existing.status === 'processing'
+      && Date.now() - new Date(existing.$createdAt).getTime() > 10 * 60 * 1000;
+    if (existing.status === 'failed' || stalled) {
+      return db.updateDocument(DB_ID, 'stripe_webhook_events', existing.$id, {
+        status: 'processing',
+        error: '',
+      }).catch(() => null);
+    }
+    return null;
   }
+}
+
+async function firstDocument(db, collection, queries) {
+  const rows = await db.listDocuments(DB_ID, collection, [...queries, Query.limit(1)]);
+  return rows.documents[0] || null;
 }
 
 // Derived rollup of the Stripe flags, stored for UI/state checks. Must stay

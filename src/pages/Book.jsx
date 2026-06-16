@@ -406,6 +406,7 @@ export default function Book() {
     if (stripeSuccess === '1' && user) {
       let cancelled = false;
       const url = new URL(window.location.href);
+      const checkoutSessionId = url.searchParams.get('session_id') || '';
       url.searchParams.delete('stripe_success');
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.pathname);
@@ -413,20 +414,31 @@ export default function Book() {
       setStripeCheckoutMessage('Payment received. Waiting for Stripe to finish issuing your training credits.');
 
       (async () => {
-        let active = null;
-        for (let i = 0; i < 8; i += 1) {
-          const credits = await sessionCreditRepo.list().catch(() => []);
-          active = credits.find(c => remainingCredits(c) > 0 && c.payment_processor === 'stripe');
-          if (active || cancelled) break;
+        let exactCredit = null;
+        if (!checkoutSessionId) {
+          setStripeCheckoutMessage('Stripe returned without a checkout session id. Check your dashboard in a moment or contact support.');
+          return;
+        }
+        for (let i = 0; i < 10; i += 1) {
+          const status = await rpc.invoke('createStripeCheckout', {
+            action: 'status',
+            checkout_session_id: checkoutSessionId,
+          }).then((res) => res.data).catch(() => null);
+          exactCredit = status?.credit || null;
+          if (exactCredit || cancelled) break;
+          if (['failed', 'cancelled', 'refunded'].includes(status?.status)) {
+            setStripeCheckoutMessage(status?.message || 'This checkout did not create usable training credit.');
+            return;
+          }
           await new Promise(r => setTimeout(r, 1500));
         }
         if (cancelled) return;
-        if (active) {
-          setExistingCredit(active);
+        if (exactCredit) {
+          setExistingCredit(exactCredit);
           setUseExistingCredit(true);
-          setCreditRecord(active);
-          if (active.session_duration_minutes) {
-            const creditDur = durationFromMinutes(active.session_duration_minutes);
+          setCreditRecord(exactCredit);
+          if (exactCredit.session_duration_minutes) {
+            const creditDur = durationFromMinutes(exactCredit.session_duration_minutes);
             if (creditDur) setDuration(creditDur);
           }
           setStripeCheckoutMessage('');

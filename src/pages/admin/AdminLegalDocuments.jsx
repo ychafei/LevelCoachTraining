@@ -100,6 +100,63 @@ function fromDateTimeInput(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : '';
 }
 
+function LegalTemplateDestructiveDialog({ action, template, signedCount = 0, saving, onClose, onConfirm }) {
+  const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const expected = action === 'retire' ? 'RETIRE' : 'DELETE';
+  const verb = action === 'retire' ? 'Retire' : 'Delete';
+  const valid = reason.trim().length >= 3 && confirmation.trim() === expected;
+
+  return (
+    <Dialog open={!!template} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-card border-border">
+        <DialogHeader>
+          <DialogTitle>{verb} legal template</DialogTitle>
+          <DialogDescription>
+            Audit preview: {verb.toLowerCase()} {template?.template_key || template?.title || 'template'} v{template?.version || 'unknown'}
+            {signedCount ? ` with ${signedCount} signed agreement record${signedCount === 1 ? '' : 's'}` : ' with no signed agreement records'}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="legal-template-reason" className="text-xs font-semibold">Reason</Label>
+            <Textarea
+              id="legal-template-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              rows={3}
+              placeholder="Why is this legal template being changed? (stored in the audit log)"
+              className="mt-1 bg-secondary border-border"
+            />
+            {reason && reason.trim().length < 3 && (
+              <p className="mt-1 text-xs text-destructive">Use at least 3 characters.</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="legal-template-confirmation" className="text-xs font-semibold">Type {expected} to confirm</Label>
+            <Input
+              id="legal-template-confirmation"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              className="mt-1 bg-secondary border-border"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button
+            onClick={() => onConfirm({ reason: reason.trim(), confirmation: confirmation.trim() })}
+            disabled={!valid || saving}
+            className={action === 'delete' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+          >
+            {saving ? `${verb}ing...` : verb}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function bumpVersion(version) {
   const raw = String(version || '').trim();
   const match = raw.match(/^(\d+)(?:\.(\d+))?$/);
@@ -161,6 +218,7 @@ export default function AdminLegalDocuments() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [retiringId, setRetiringId] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [destructiveTemplate, setDestructiveTemplate] = useState(null);
   const [agreementDialog, setAgreementDialog] = useState(null);
 
   const load = async () => {
@@ -298,12 +356,12 @@ export default function AdminLegalDocuments() {
     }
   };
 
-  const retireTemplate = async (template) => {
-    if (!window.confirm(`Retire "${template.title}"? Retired templates stop being required for new signatures.`)) return;
+  const retireTemplate = async (template, details) => {
     setRetiringId(template.id);
     try {
-      await legalTemplateRepo.retireAdmin(template.id);
+      await legalTemplateRepo.retireAdmin(template.id, details);
       toast.success('Legal template retired');
+      setDestructiveTemplate(null);
       await load();
     } catch (err) {
       toast.error(err?.message || 'Could not retire legal template.');
@@ -312,17 +370,17 @@ export default function AdminLegalDocuments() {
     }
   };
 
-  const deleteTemplate = async (template) => {
+  const deleteTemplate = async (template, details) => {
     const signedCount = agreementCountByTemplate.get(template.id) || 0;
     if (signedCount > 0) {
       toast.error('This document has signed agreements. Retire it instead so the legal history stays available.');
       return;
     }
-    if (!window.confirm(`Delete "${template.title}" from Appwrite? This only works for documents with no signed agreements.`)) return;
     setDeletingId(template.id);
     try {
-      await legalTemplateRepo.deleteAdmin(template.id);
+      await legalTemplateRepo.deleteAdmin(template.id, details);
       toast.success('Legal document deleted');
+      setDestructiveTemplate(null);
       if (viewTemplate?.id === template.id) setViewTemplate(null);
       await load();
     } catch (err) {
@@ -339,7 +397,7 @@ export default function AdminLegalDocuments() {
 
     if (signedCount > 0) {
       return isRetired ? null : (
-        <Button size="sm" variant="ghost" disabled={retiringId === template.id} onClick={() => retireTemplate(template)} className="h-8 text-xs">
+        <Button size="sm" variant="ghost" disabled={retiringId === template.id} onClick={() => { setViewTemplate(null); setDestructiveTemplate({ action: 'retire', template, signedCount }); }} className="h-8 text-xs">
           <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {retiringId === template.id ? 'Retiring' : 'Retire'}
         </Button>
       );
@@ -350,7 +408,7 @@ export default function AdminLegalDocuments() {
         size="sm"
         variant="ghost"
         disabled={deletingId === template.id}
-        onClick={() => deleteTemplate(template)}
+        onClick={() => { setViewTemplate(null); setDestructiveTemplate({ action: 'delete', template, signedCount }); }}
         className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
       >
         <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {deletingId === template.id ? 'Deleting' : 'Delete'}
@@ -616,6 +674,23 @@ export default function AdminLegalDocuments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {destructiveTemplate && (
+        <LegalTemplateDestructiveDialog
+          action={destructiveTemplate.action}
+          template={destructiveTemplate.template}
+          signedCount={destructiveTemplate.signedCount}
+          saving={retiringId === destructiveTemplate.template.id || deletingId === destructiveTemplate.template.id}
+          onClose={() => setDestructiveTemplate(null)}
+          onConfirm={(details) => {
+            if (destructiveTemplate.action === 'retire') {
+              void retireTemplate(destructiveTemplate.template, details);
+            } else {
+              void deleteTemplate(destructiveTemplate.template, details);
+            }
+          }}
+        />
+      )}
 
       <Dialog open={!!agreementDialog} onOpenChange={(open) => !open && setAgreementDialog(null)}>
         <AgreementDetails

@@ -179,6 +179,14 @@ function str(value, min, max) {
   return trimmed;
 }
 
+function destructiveReason(payload) {
+  return str(payload.reason, 3, 1000);
+}
+
+function confirmationMatches(payload, expected) {
+  return String(payload.confirmation || '').trim() === expected;
+}
+
 function sha256(value) {
   return createHash('sha256').update(String(value || '')).digest('hex');
 }
@@ -1362,6 +1370,11 @@ async function retireLegalTemplate(ctx, payload) {
   const { databases, actor } = ctx;
   const templateId = String(payload.template_id || payload.id || '');
   if (!templateId) return { status: 400, body: { error: 'template_id is required.' } };
+  const reason = destructiveReason(payload);
+  if (!reason) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+  if (!confirmationMatches(payload, 'RETIRE')) {
+    return { status: 400, body: { error: 'Type RETIRE to confirm this legal template retirement.' } };
+  }
   const template = await databases.getDocument(DB_ID, 'legal_templates', templateId).catch(() => null);
   if (!template) return { status: 404, body: { error: 'Legal template not found.' } };
   const retiredAt = template.retired_at || new Date().toISOString();
@@ -1374,6 +1387,7 @@ async function retireLegalTemplate(ctx, payload) {
     entity_id: templateId,
     before: JSON.stringify({ retired_at: template.retired_at || '' }),
     after: JSON.stringify({ retired_at: retiredAt }),
+    metadata: JSON.stringify({ reason, template_key: template.template_key || '', version: template.version || '' }),
   });
   return { status: 200, body: { ok: true, retired_at: retiredAt } };
 }
@@ -1382,6 +1396,11 @@ async function deleteLegalTemplate(ctx, payload) {
   const { databases, actor } = ctx;
   const templateId = String(payload.template_id || payload.id || '');
   if (!templateId) return { status: 400, body: { error: 'template_id is required.' } };
+  const reason = destructiveReason(payload);
+  if (!reason) return { status: 400, body: { error: 'reason is required (3-1000 chars).' } };
+  if (!confirmationMatches(payload, 'DELETE')) {
+    return { status: 400, body: { error: 'Type DELETE to confirm this legal template deletion.' } };
+  }
   const template = await databases.getDocument(DB_ID, 'legal_templates', templateId).catch(() => null);
   if (!template) return { status: 404, body: { error: 'Legal template not found.' } };
   if (await templateHasSignatures(databases, templateId)) {
@@ -1408,6 +1427,7 @@ async function deleteLegalTemplate(ctx, payload) {
       checksum: template.checksum,
       retired_at: template.retired_at || '',
     }),
+    metadata: JSON.stringify({ reason, template_key: template.template_key || '', version: template.version || '' }),
   });
   return { status: 200, body: { ok: true, deleted_template_id: templateId } };
 }

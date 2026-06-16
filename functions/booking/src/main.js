@@ -643,8 +643,8 @@ async function legalPacketCompleteFor(db, profile, signerRole, athleteId) {
   return templates.every((template) =>
     agreementRows.documents.some((agreement) =>
       agreementMatchesTemplate(agreement, template)
-      // Guardian signings should bind to the athlete; accept legacy unbound rows.
-      && (template.role === 'platform' || signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
+      // Guardian signings must bind to the exact child being booked.
+      && (template.role === 'platform' || signerRole !== 'guardian' || (athleteId && agreement.athlete_id === athleteId))
     )
   );
 }

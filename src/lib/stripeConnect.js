@@ -30,12 +30,13 @@ export function dashboardLink({ owner_type, owner_id }) {
 // Admin-only refunds. `request_id` is the Stripe idempotency anchor —
 // generate it ONCE per user intent with crypto.randomUUID() in the caller so
 // retries of the same intent never double-refund.
-export function refundPayment({ payment_record_id, amount_cents, request_id, reason }) {
+export function refundPayment({ payment_record_id, amount_cents, request_id, reason, confirmation }) {
   return callFn('refundStripePayment', {
     payment_record_id,
     request_id,
     ...(amount_cents != null ? { amount_cents } : {}),
     ...(reason ? { reason } : {}),
+    ...(confirmation ? { confirmation } : {}),
   });
 }
 
@@ -56,12 +57,13 @@ export function refreshStripeConnectAccount({ ownerType, ownerId, stripeAccountI
   return refresh({ owner_type: ownerType, owner_id: ownerId, stripe_account_id: stripeAccountId });
 }
 
-export function refundStripePayment({ paymentRecordId, amountCents, reason, requestId }) {
+export function refundStripePayment({ paymentRecordId, amountCents, reason, requestId, confirmation }) {
   return refundPayment({
     payment_record_id: paymentRecordId,
     amount_cents: amountCents,
     // Legacy callers don't carry an idempotency key — generate one per call.
     request_id: requestId || crypto.randomUUID(),
     reason,
+    confirmation,
   });
 }

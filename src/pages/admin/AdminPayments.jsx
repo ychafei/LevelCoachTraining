@@ -62,20 +62,24 @@ function RefundDialog({ payment, onClose, onDone }) {
   const [requestId] = useState(() => crypto.randomUUID());
   const [amount, setAmount] = useState((remaining / 100).toFixed(2));
   const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [saving, setSaving] = useState(false);
 
   const amountCents = Math.round(Number(amount) * 100);
   const validAmount = Number.isInteger(amountCents) && amountCents > 0 && amountCents <= remaining;
+  const validReason = reason.trim().length >= 3;
+  const validConfirmation = confirmation.trim() === 'REFUND';
 
   const submit = async () => {
-    if (!validAmount || saving) return;
+    if (!validAmount || !validReason || !validConfirmation || saving) return;
     setSaving(true);
     try {
       const result = await refundPayment({
         payment_record_id: payment.id,
         amount_cents: amountCents,
         request_id: requestId,
-        reason: reason.trim() || undefined,
+        reason: reason.trim(),
+        confirmation: confirmation.trim(),
       });
       toast.success(
         result?.state === 'refunded'
@@ -128,14 +132,30 @@ function RefundDialog({ payment, onClose, onDone }) {
               placeholder="Why is this payment being refunded? (stored on the refund + audit log)"
               className="mt-1 bg-secondary border-border"
             />
+            {!validReason && (
+              <p className="mt-1 text-xs text-destructive">A refund reason is required for the audit log.</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="refund-confirmation" className="text-xs font-semibold">Type REFUND to confirm</Label>
+            <Input
+              id="refund-confirmation"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              className="mt-1 bg-secondary border-border"
+            />
+            {confirmation && !validConfirmation && (
+              <p className="mt-1 text-xs text-destructive">Confirmation must exactly match REFUND.</p>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
+            Audit preview: refund {validAmount ? formatCents(amountCents) : '$0'} from payment {shortId(payment.id)}.
             Transfers to the coach/organization are reversed proportionally and linked credits are adjusted server-side.
           </p>
         </div>
         <Button
           onClick={submit}
-          disabled={!validAmount || saving}
+          disabled={!validAmount || !validReason || !validConfirmation || saving}
           className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-semibold"
         >
           <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />

@@ -33,6 +33,12 @@ function body(req) {
   try { return JSON.parse(req.bodyRaw || req.body || '{}'); } catch { return {}; }
 }
 
+function parseJson(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(String(value)); } catch { return {}; }
+}
+
 function header(req, names) {
   for (const name of names) {
     const value = req.headers?.[name] || req.headers?.[name.toLowerCase()] || req.headers?.[name.toUpperCase()];
@@ -100,9 +106,9 @@ function agreementMatchesTemplate(agreement, template) {
 
 // Buyer legal gate. For guardian/parent buyers the packet must be complete for
 // the SPECIFIC athlete being purchased for (athleteId), mirroring booking's
-// legalPacketCompleteFor: a signed guardian agreement must bind to that athlete
-// (legacy unbound rows are accepted). Non-guardian (athlete-self) buyers keep
-// the original role-scoped behavior; athleteId is ignored for them.
+// legalPacketCompleteFor: a signed guardian agreement must bind to that athlete.
+// Non-guardian (athlete-self) buyers keep the original role-scoped behavior;
+// athleteId is ignored for them.
 async function legalPacketComplete(db, profile, athleteId) {
   const signerRole = signerRoleForProfile(profile);
   const templateRole = SIGNER_TO_TEMPLATE_ROLE[signerRole];
@@ -128,8 +134,8 @@ async function legalPacketComplete(db, profile, athleteId) {
     agreementRows.documents.some((agreement) =>
       matchesEntity(agreement, signerRole, profile, template)
       && agreementMatchesTemplate(agreement, template)
-      // Guardian signings should bind to the athlete; accept legacy unbound rows.
-      && (template.role === 'platform' || signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
+      // Guardian signings must bind to the exact child being purchased for.
+      && (template.role === 'platform' || signerRole !== 'guardian' || (athleteId && agreement.athlete_id === athleteId))
     )
   );
 }
@@ -298,6 +304,102 @@ async function creditAccessibleToProfile(db, credit, profile) {
   return !!link && link.can_book !== false;
 }
 
+function paymentRecordOwnedByProfile(paymentRecord, profile, accountId) {
+  const metadata = parseJson(paymentRecord?.metadata);
+  const emailsMatch = String(metadata.client_email || '').toLowerCase()
+    && String(metadata.client_email || '').toLowerCase() === String(profile?.email || '').toLowerCase();
+  return metadata.client_account_id === accountId
+    || metadata.client_profile_id === profile?.$id
+    || emailsMatch;
+}
+
+function publicCredit(credit) {
+  if (!credit) return null;
+  return {
+    id: credit.$id,
+    package_id: credit.package_id || '',
+    package_name: credit.package_name || '',
+    coach_id: credit.coach_id || credit.original_coach_id || credit.originating_coach_id || '',
+    athlete_id: credit.athlete_id || '',
+    total_credits: Number(credit.total_credits || 0),
+    used_credits: Number(credit.used_credits || 0),
+    session_duration_minutes: Number(credit.session_duration_minutes || 0),
+    amount_cents: Number(credit.amount_cents || credit.original_amount_cents || 0),
+    remaining_amount_cents: Number(credit.remaining_amount_cents || 0),
+    available_amount_cents: Number(credit.available_amount_cents || 0),
+    reserved_amount_cents: Number(credit.reserved_amount_cents || 0),
+    currency: credit.currency || 'usd',
+    status: credit.status || 'active',
+    payment_processor: credit.payment_processor || 'stripe',
+  };
+}
+
+async function creditForPaymentRecord(db, paymentRecord) {
+  const directId = String(paymentRecord.credit_lot_id || paymentRecord.credit_id || '').trim();
+  if (directId) {
+    const direct = await db.getDocument(DB_ID, 'session_credits', directId).catch(() => null);
+    if (direct) return direct;
+  }
+  const rows = await db.listDocuments(DB_ID, 'session_credits', [
+    Query.equal('source_payment_record_id', paymentRecord.$id),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function checkoutStatusAction(db, profile, accountId, payload, res) {
+  const checkoutSessionId = String(payload.checkout_session_id || payload.session_id || '').trim();
+  if (!checkoutSessionId || checkoutSessionId.length > 160) {
+    return res.json({ error: 'checkout_session_id is required.' }, 400);
+  }
+
+  const rows = await db.listDocuments(DB_ID, 'stripe_payment_records', [
+    Query.equal('checkout_session_id', checkoutSessionId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  const paymentRecord = rows.documents[0] || null;
+  if (!paymentRecord) {
+    return res.json({
+      status: 'pending',
+      payment_status: 'pending',
+      credit_status: 'pending',
+      checkout_session_id: checkoutSessionId,
+      message: 'Checkout was received by Stripe, but the platform payment record is still processing.',
+    });
+  }
+
+  let credit = null;
+  if (paymentRecordOwnedByProfile(paymentRecord, profile, accountId)) {
+    credit = await creditForPaymentRecord(db, paymentRecord);
+  } else {
+    credit = await creditForPaymentRecord(db, paymentRecord);
+    if (!(await creditAccessibleToProfile(db, credit, profile))) {
+      return res.json({ error: 'You cannot access this checkout session.' }, 403);
+    }
+  }
+
+  const paymentStatus = paymentRecord.state || paymentRecord.status || 'created';
+  const creditStatus = credit
+    ? 'ready'
+    : paymentStatus === 'paid'
+      ? 'pending'
+      : ['failed', 'cancelled', 'refunded'].includes(paymentStatus)
+        ? paymentStatus
+        : 'pending';
+
+  return res.json({
+    status: paymentStatus,
+    payment_status: paymentRecord.status || paymentStatus,
+    credit_status: creditStatus,
+    checkout_session_id: checkoutSessionId,
+    payment_record_id: paymentRecord.$id,
+    credit: publicCredit(credit),
+    message: credit
+      ? 'Credit is ready.'
+      : 'Payment is recorded, but the credit package is still processing.',
+  });
+}
+
 function validateBookingLocation(coach, payload) {
   const label = truncateMetadata(payload.booking_location_label || payload.location_label || payload.location || '', 120);
   const lat = finiteNumber(payload.booking_location_lat ?? payload.location_lat ?? payload.lat);
@@ -381,6 +483,21 @@ function validId(value) {
 
 export default async ({ req, res, error }) => {
   try {
+    const accountId = callerAccountId(req);
+    if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
+
+    const payload = body(req);
+    const action = String(payload.action || 'create').trim();
+    const db = databases();
+    const profile = await profileForAccount(db, accountId);
+    if (!profile) return res.json({ error: 'No profile found for checkout user.' }, 404);
+    if (await callerBanned(db, profile)) return res.json({ error: 'Account access is restricted.' }, 403);
+
+    if (action === 'status') {
+      return await checkoutStatusAction(db, profile, accountId, payload, res);
+    }
+    if (action && action !== 'create') return res.json({ error: 'Unknown checkout action.' }, 400);
+
     if (!process.env.STRIPE_SECRET_KEY) {
       error?.('[createStripeCheckout] STRIPE_SECRET_KEY is not configured.');
       return res.json({ error: 'Service configuration error.' }, 500);
@@ -392,10 +509,6 @@ export default async ({ req, res, error }) => {
       return res.json({ error: 'Service configuration error.' }, 500);
     }
 
-    const accountId = callerAccountId(req);
-    if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
-
-    const payload = body(req);
     const packageId = payload.packageId || payload.package_id;
     const coachId = payload.coachId || payload.coach_id;
     const requestedDuration = Number(payload.sessionDurationMinutes || payload.session_duration_minutes || 60);
@@ -415,10 +528,6 @@ export default async ({ req, res, error }) => {
       return res.json({ error: 'athlete_id is invalid.' }, 400);
     }
 
-    const db = databases();
-    const profile = await profileForAccount(db, accountId);
-    if (!profile) return res.json({ error: 'No profile found for checkout user.' }, 404);
-    if (await callerBanned(db, profile)) return res.json({ error: 'Account access is restricted.' }, 403);
     if (!profile.email) return res.json({ error: 'Checkout user must have an email address.' }, 400);
     // Guardian/parent buyers must identify the child they are purchasing for so
     // the legal gate is athlete-scoped (parity with booking). Otherwise a
@@ -472,9 +581,13 @@ export default async ({ req, res, error }) => {
     }
 
     // Checkout charges LCTrainings as merchant of record and creates prepaid
-    // platform credit. Coach payout/legal readiness is enforced at publish time
-    // and again when releasing earned payouts, not during client payment.
-    if (coach.is_active !== true) return res.json({ error: COACH_NOT_BOOKABLE }, 400);
+    // platform credit for a public, bookable coach.
+    // Coach payout/legal readiness is enforced at publish time.
+    // Do not sell coach-bound credit for
+    // unpublished coaches because booking enforces the same public gate.
+    if (coach.is_active !== true || coach.published !== true) {
+      return res.json({ error: COACH_NOT_BOOKABLE }, 400);
+    }
 
     const bookingLocation = validateBookingLocation(coach, payload);
     if (bookingLocation.error) return res.json({ error: bookingLocation.error }, 400);

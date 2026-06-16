@@ -173,8 +173,7 @@ function AccountSection() {
     }
     setUploading(true);
     try {
-      const { url } = await storage.uploadFile('client-photos', file);
-      await auth.updateCurrentUser({ photo_url: url });
+      await storage.uploadProfilePhoto(file);
       await refetchUser();
       toast.success('Photo updated.');
     } catch (err) {

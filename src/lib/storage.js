@@ -4,6 +4,7 @@ import {
   APPWRITE_PROJECT_ID,
   APPWRITE_PUBLIC_ENDPOINT,
 } from '@/api/appwriteClient';
+import { callFn } from '@/lib/rpc';
 
 // Maps a logical bucket name (used at every call site today) to the actual
 // Appwrite bucket id. Provisioner created these six buckets — keep this in
@@ -27,6 +28,15 @@ function canonicalFileViewUrl(bucketId, fileId) {
   return url.toString();
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export const storage = {
   // Returns { url, id } where url is a public file-view URL. Components
   // currently destructure `url` only.
@@ -47,5 +57,17 @@ export const storage = {
     }
     if (!fileId) return '';
     return canonicalFileViewUrl(bucketId, fileId);
+  },
+
+  uploadProfilePhoto: async (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      throw new Error('Please choose an image file.');
+    }
+    const imageData = await fileToDataUrl(file);
+    return callFn('accountProfile', {
+      action: 'uploadProfilePhoto',
+      image_data: imageData,
+      file_name: file.name || '',
+    });
   },
 };
