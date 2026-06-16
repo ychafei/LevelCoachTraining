@@ -245,14 +245,20 @@ export default function SessionsPanel({
                   athleteName={athleteNamesById[session.athlete_id] || ''}
                   actions={canManage ? (
                     <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs"
-                        onClick={() => openReschedule(session)}
-                      >
-                        Reschedule
-                      </Button>
+                      {late ? (
+                        <span className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-muted-foreground">
+                          Reschedule locked
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => openReschedule(session)}
+                        >
+                          Reschedule
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -352,7 +358,7 @@ export default function SessionsPanel({
             <DialogTitle>Reschedule session</DialogTitle>
             <DialogDescription>
               Pick a new time inside the coach&apos;s availability. The same {Number(rescheduleTarget?.duration_minutes) || 60}-minute
-              duration applies, and the 24-hour cancellation policy carries over.
+              duration applies. Reschedules are available until 24 hours before the original session.
             </DialogDescription>
           </DialogHeader>
           {availabilityLoading ? (

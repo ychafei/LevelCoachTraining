@@ -774,6 +774,14 @@ function formatStart(startUtcIso, timezone) {
   } catch { return startUtcIso; }
 }
 
+function formatSessionStart(session, coach) {
+  const startMs = sessionStartMs(session, coach);
+  if (startMs !== null) {
+    return formatStart(new Date(startMs).toISOString(), session.timezone || coachTimezone(coach || {}));
+  }
+  return `${session.date || 'Unknown date'} ${session.start_time || ''}`.trim();
+}
+
 // Transactional email via the Resend HTTP API. Fixed server-side templates only.
 async function sendEmail({ to, subject, html }, error) {
   try {
@@ -793,6 +801,44 @@ async function sendEmail({ to, subject, html }, error) {
     }
   } catch (err) {
     error?.(`Email send failed: ${err?.message || err}`);
+  }
+}
+
+async function coachNotificationEmail(db, coach) {
+  if (!coach) return '';
+  const coachPriv = await db.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coach.$id), Query.limit(1),
+  ]).then((r) => r.documents[0]).catch(() => null);
+  return coachPriv?.email || coach.email || '';
+}
+
+async function clientProfileForSession(db, session, fallbackProfile) {
+  let clientProfile = session.booked_by_profile_id
+    ? await db.getDocument(DB_ID, 'profiles', session.booked_by_profile_id).catch(() => null)
+    : null;
+  if (!clientProfile && session.client_email) {
+    const rows = await db.listDocuments(DB_ID, 'profiles', [
+      Query.equal('email', [session.client_email, String(session.client_email).toLowerCase()]),
+      Query.limit(1),
+    ]).catch(() => ({ documents: [] }));
+    clientProfile = rows.documents[0] || null;
+  }
+  if (!clientProfile && fallbackProfile && String(fallbackProfile.email || '').toLowerCase() === String(session.client_email || '').toLowerCase()) {
+    clientProfile = fallbackProfile;
+  }
+  return clientProfile;
+}
+
+async function sendSessionEventEmails(db, { session, coach, profile, subject, clientHtml, coachHtml, error }) {
+  const clientProfile = await clientProfileForSession(db, session, profile);
+  const clientEmail = clientProfile?.email || session.client_email || '';
+  if (clientEmail && clientHtml) {
+    await sendEmail({ to: clientEmail, subject, html: clientHtml }, error);
+  }
+
+  const coachEmail = await coachNotificationEmail(db, coach);
+  if (coachEmail && coachHtml) {
+    await sendEmail({ to: coachEmail, subject, html: coachHtml }, error);
   }
 }
 
@@ -1116,16 +1162,7 @@ async function notifyBothSides(db, { session, coach, profile, type, title, clien
     accountId: coach?.user_id, profileId: coachProfile?.$id,
     type, title, message: coachMessage, data,
   });
-  let clientProfile = session.booked_by_profile_id
-    ? await db.getDocument(DB_ID, 'profiles', session.booked_by_profile_id).catch(() => null)
-    : null;
-  if (!clientProfile && session.client_email) {
-    const rows = await db.listDocuments(DB_ID, 'profiles', [
-      Query.equal('email', [session.client_email, String(session.client_email).toLowerCase()]),
-      Query.limit(1),
-    ]).catch(() => ({ documents: [] }));
-    clientProfile = rows.documents[0] || null;
-  }
+  const clientProfile = await clientProfileForSession(db, session, profile);
   const clientAccount = clientProfile?.account_id
     || (profile && String(profile.email).toLowerCase() === String(session.client_email).toLowerCase() ? profile.account_id : '');
   await notify(db, {
@@ -1714,10 +1751,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     `,
   }, error);
   // Coach email is PII held in the server-only coach_private collection.
-  const coachPriv = await db.listDocuments(DB_ID, 'coach_private', [
-    Query.equal('coach_id', coach.$id), Query.limit(1),
-  ]).then((r) => r.documents[0]).catch(() => null);
-  const coachNotifyEmail = coachPriv?.email || coach.email;
+  const coachNotifyEmail = await coachNotificationEmail(db, coach);
   if (coachNotifyEmail) await sendEmail({
     to: coachNotifyEmail,
     subject,
@@ -1764,7 +1798,10 @@ async function cancelAction(db, users, accountId, profile, payload, res, error) 
     });
   }
 
-  const when = `${session.date} ${session.start_time}`;
+  const when = formatSessionStart(session, authority.coach);
+  const coachName = [authority.coach?.first_name, authority.coach?.last_name].filter(Boolean).join(' ') || 'your coach';
+  const cancelledBy = authority.isCoach ? 'Coach' : authority.isAdmin ? 'LevelCoach admin' : 'Client';
+  const reasonLine = reason ? `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>` : '';
   await notifyBothSides(db, {
     session: updated, coach: authority.coach, profile,
     type: 'booking_cancelled',
@@ -1773,6 +1810,27 @@ async function cancelAction(db, users, accountId, profile, payload, res, error) 
     clientMessage: restore
       ? `Your session on ${when} was cancelled and your credit was restored.`
       : `Your session on ${when} was cancelled. Per policy, the credit was forfeited.`,
+  });
+  await sendSessionEventEmails(db, {
+    session: updated,
+    coach: authority.coach,
+    profile,
+    subject: `LevelCoach session cancelled — ${when}`,
+    error,
+    clientHtml: `
+      <p>Hi there,</p>
+      <p>Your session with <strong>${escapeHtml(coachName)}</strong> was cancelled.</p>
+      <p><strong>${escapeHtml(when)}</strong></p>
+      <p>${restore ? 'Your session credit was restored.' : 'Per the 24-hour cancellation policy, this credit was forfeited.'}</p>
+      ${reasonLine}
+    `,
+    coachHtml: `
+      <p>Hi ${escapeHtml(authority.coach?.first_name || 'Coach')},</p>
+      <p>Your session with <strong>${escapeHtml(updated.client_name || 'Client')}</strong> was cancelled.</p>
+      <p><strong>${escapeHtml(when)}</strong></p>
+      <p>Cancelled by: ${escapeHtml(cancelledBy)}. ${restore ? 'The client credit was restored.' : 'The client credit was forfeited under the late-cancel policy.'}</p>
+      ${reasonLine}
+    `,
   });
 
   return res.json({ session: updated, credit_restored: restore });
@@ -1795,6 +1853,13 @@ async function rescheduleAction(db, users, accountId, profile, payload, res, err
   const authority = await sessionAuthority(db, users, accountId, profile, session);
   if (!authority.any) return res.json({ error: 'You cannot reschedule this session.' }, 403);
   if (!authority.coach) return res.json({ error: 'Coach not found for this session.' }, 404);
+  const currentStartMs = sessionStartMs(session, authority.coach);
+  if (!authority.isCoach && !authority.isAdmin
+    && (currentStartMs === null || currentStartMs - Date.now() < 24 * 3600000)) {
+    return res.json({
+      error: 'Sessions inside 24 hours cannot be self-rescheduled. Message your coach or contact support for an exception.',
+    }, 403);
+  }
 
   const durationMinutes = payload.duration_minutes === undefined
     ? Number(session.duration_minutes) || 60
@@ -1823,13 +1888,37 @@ async function rescheduleAction(db, users, accountId, profile, payload, res, err
     starts_at_utc: slot.startUtcIso,
   });
 
+  const oldWhen = formatSessionStart(session, authority.coach);
   const when = formatStart(slot.startUtcIso, slot.timezone);
+  const coachName = [authority.coach.first_name, authority.coach.last_name].filter(Boolean).join(' ') || 'your coach';
+  const rescheduledBy = authority.isCoach ? 'Coach' : authority.isAdmin ? 'LevelCoach admin' : 'Client';
   await notifyBothSides(db, {
     session: updated, coach: authority.coach, profile,
     type: 'booking_rescheduled',
     title: 'Session rescheduled',
-    coachMessage: `A session was rescheduled to ${when}.`,
-    clientMessage: `Your session was rescheduled to ${when}.`,
+    coachMessage: `A session was rescheduled from ${oldWhen} to ${when}.`,
+    clientMessage: `Your session was rescheduled from ${oldWhen} to ${when}.`,
+  });
+  await sendSessionEventEmails(db, {
+    session: updated,
+    coach: authority.coach,
+    profile,
+    subject: `LevelCoach session rescheduled — ${when}`,
+    error,
+    clientHtml: `
+      <p>Hi there,</p>
+      <p>Your session with <strong>${escapeHtml(coachName)}</strong> was rescheduled.</p>
+      <p><strong>Previous time:</strong> ${escapeHtml(oldWhen)}</p>
+      <p><strong>New time:</strong> ${escapeHtml(when)}</p>
+      <p>You can view the updated session from your LevelCoach Training dashboard.</p>
+    `,
+    coachHtml: `
+      <p>Hi ${escapeHtml(authority.coach.first_name || 'Coach')},</p>
+      <p>Your session with <strong>${escapeHtml(updated.client_name || 'Client')}</strong> was rescheduled.</p>
+      <p><strong>Previous time:</strong> ${escapeHtml(oldWhen)}</p>
+      <p><strong>New time:</strong> ${escapeHtml(when)}</p>
+      <p>Rescheduled by: ${escapeHtml(rescheduledBy)}.</p>
+    `,
   });
 
   return res.json({ session: updated });

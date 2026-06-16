@@ -158,10 +158,15 @@ test('parent/minor booking: guardian consent must be exact-child bound', () => {
 test('coach session management: session state changes stay server-side', () => {
   const booking = source('functions/booking/src/main.js');
   const sessionRepo = source('src/api/repo/sessionRepo.js');
+  const sessionsPanel = source('src/features/athlete/SessionsPanel.jsx');
   assert(booking.includes("case 'complete'") || booking.includes('completeAction'), 'booking function must expose complete action');
   assert(booking.includes("case 'cancel'") || booking.includes('cancelAction'), 'booking function must expose cancel action');
   assert(booking.includes("case 'reschedule'") || booking.includes('rescheduleAction'), 'booking function must expose reschedule action');
   assert(sessionRepo.includes("callFn('booking'"), 'sessionRepo must route mutations through booking function');
+  assert(booking.includes('Sessions inside 24 hours cannot be self-rescheduled'), 'client/guardian reschedules inside 24 hours must be blocked server-side');
+  assert(booking.includes('LevelCoach session confirmed') && booking.includes('coachNotifyEmail'), 'new bookings must email both the client and coach');
+  assert(booking.includes('sendSessionEventEmails(db') && booking.includes('booking_cancelled') && booking.includes('booking_rescheduled'), 'booking changes must send transactional emails to both parties');
+  assert(sessionsPanel.includes('Reschedule locked'), 'athlete/parent portal must not offer self-service late rescheduling');
 });
 
 test('organization payout split: split math is server validated', () => {
