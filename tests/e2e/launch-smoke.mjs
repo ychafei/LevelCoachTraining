@@ -133,6 +133,27 @@ test('coach portal: reviews have a dedicated route', () => {
   assert(app.includes("import('@/pages/coach/CoachReviews')") && app.includes('path="/coach/reviews"'), 'coach reviews must be a dedicated routed page');
   assert(layout.includes("to: '/coach/reviews'") && !layout.includes("to: '/coach#reviews'"), 'coach sidebar must not route reviews to the dashboard anchor');
   assert(reviews.includes('Published reviews') && reviews.includes('coachReviewRepo.listPublished'), 'coach reviews page must show only review-specific content');
+  assert(reviews.includes('Session feedback:'), 'coach reviews page must show the post-session feedback label');
+});
+
+test('post-session reviews: completed clients are prompted and reviews stay verified', () => {
+  const prompt = source('src/features/athlete/PostSessionReviewPrompt.jsx');
+  const athletePortal = source('src/pages/athlete/AthletePortal.jsx');
+  const childDetail = source('src/features/parent/ChildDetail.jsx');
+  const sessionsPanel = source('src/features/athlete/SessionsPanel.jsx');
+  const reviewFn = source('functions/reviews/src/main.js');
+  const provision = source('scripts/provision-appwrite.mjs');
+  const coachDetail = source('src/pages/CoachDetail.jsx');
+  const coachReviews = source('src/pages/coach/CoachReviews.jsx');
+  assert(prompt.includes('How was your session with') && prompt.includes('SESSION_FEEDBACK_OPTIONS'), 'post-session review prompt must ask for quick session feedback');
+  assert(prompt.includes("feedback === 'other'") && prompt.includes('review-other'), 'Other feedback must open a required text box');
+  assert(prompt.includes('firstPendingReviewSession') && prompt.includes("session.status === 'completed'"), 'auto prompt must target completed unreviewed sessions only');
+  assert(athletePortal.includes('PostSessionReviewPrompt') && childDetail.includes('PostSessionReviewPrompt'), 'adult and parent portals must mount the instant review prompt');
+  assert(sessionsPanel.includes('ReviewSessionDialog') && sessionsPanel.includes('onReviewChanged'), 'manual session review button must use the same review dialog and refresh review state');
+  assert(reviewFn.includes("session.status !== 'completed'") && reviewFn.includes('You can only review your own sessions'), 'review function must remain completed-session and owner verified');
+  assert(reviewFn.includes('session_feedback_key') && reviewFn.includes('session_feedback_other'), 'review function must persist quick feedback fields');
+  assert(provision.includes('session_feedback_label') && provision.includes('session_feedback_other'), 'Appwrite schema must include feedback fields');
+  assert(coachDetail.includes('Session feedback:') && coachReviews.includes('Session feedback:'), 'public coach profile and coach reviews page must display feedback');
 });
 
 test('wellness reports: athlete check-ins are same-day session-bound', () => {

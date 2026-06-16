@@ -17,6 +17,7 @@ import AthleteOverview from '@/features/athlete/AthleteOverview';
 import AthleteTraining from '@/features/athlete/AthleteTraining';
 import AthleteWellness from '@/features/athlete/AthleteWellness';
 import AthleteDocuments from '@/features/athlete/AthleteDocuments';
+import PostSessionReviewPrompt from '@/features/athlete/PostSessionReviewPrompt';
 import SessionsPanel from '@/features/athlete/SessionsPanel';
 import { Reveal, SectionCard } from '@/features/athlete/portalShared';
 
@@ -46,7 +47,8 @@ export default function AthletePortal() {
   const sessionsData = useMySessions(user, athlete.athleteIds);
   const creditsData = useMyCredits(user);
   const trainingData = useMyTraining(user, athlete.athleteIds);
-  const { reviewedSessionIds } = useMyReviewedSessionIds(user);
+  const reviewsData = useMyReviewedSessionIds(user);
+  const { reviewedSessionIds } = reviewsData;
   const legalStatus = useLegalPacketStatus({ user, signerRole: 'athlete' });
 
   const firstSport = athlete.sports[0] || '';
@@ -60,6 +62,17 @@ export default function AthletePortal() {
           sessionsData={sessionsData}
           creditsData={creditsData}
           trainingData={trainingData}
+        />
+
+        <PostSessionReviewPrompt
+          sessions={sessionsData.sessions}
+          coachesById={sessionsData.coachesById}
+          reviewedSessionIds={reviewedSessionIds}
+          loading={sessionsData.loading || sessionsData.coachesLoading || reviewsData.loading}
+          onChanged={() => {
+            reviewsData.refresh();
+            sessionsData.refresh();
+          }}
         />
 
         <Tabs value={tab} onValueChange={goTab} className="mt-8">
@@ -110,6 +123,7 @@ export default function AthletePortal() {
                   loading={sessionsData.loading}
                   onChanged={sessionsData.refresh}
                   reviewedSessionIds={reviewedSessionIds}
+                  onReviewChanged={reviewsData.refresh}
                   canManage={user?.is_minor !== true}
                 />
               </SectionCard>

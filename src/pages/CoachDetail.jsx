@@ -58,6 +58,13 @@ function StarRow({ rating, className = 'h-4 w-4' }) {
   );
 }
 
+function reviewFeedbackText(review) {
+  if (review?.session_feedback_key === 'other' && review.session_feedback_other) {
+    return review.session_feedback_other;
+  }
+  return review?.session_feedback_label || '';
+}
+
 function packagePriceCents(pkg) {
   const cents = Number(pkg?.price_cents);
   if (Number.isInteger(cents) && cents > 0) return cents;
@@ -503,6 +510,11 @@ export default function CoachDetail() {
                       {review.created_date && (
                         <p className="mt-1 text-xs font-semibold text-slate-500">
                           {new Date(review.created_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
+                      {reviewFeedbackText(review) && (
+                        <p className="mt-2 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                          Session feedback: {reviewFeedbackText(review)}
                         </p>
                       )}
                       {review.comment && (

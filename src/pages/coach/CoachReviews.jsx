@@ -17,6 +17,13 @@ function RatingStars({ rating }) {
   );
 }
 
+function reviewFeedbackText(review) {
+  if (review?.session_feedback_key === 'other' && review.session_feedback_other) {
+    return review.session_feedback_other;
+  }
+  return review?.session_feedback_label || '';
+}
+
 function SkeletonReviews() {
   return (
     <div className="space-y-3" aria-hidden="true">
@@ -155,6 +162,11 @@ export default function CoachReviews() {
                   </div>
                   <RatingStars rating={review.rating} />
                 </div>
+                {reviewFeedbackText(review) && (
+                  <p className="mt-3 rounded-md bg-secondary/60 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground ring-1 ring-border">
+                    Session feedback: {reviewFeedbackText(review)}
+                  </p>
+                )}
                 {review.comment && (
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{review.comment}</p>
                 )}

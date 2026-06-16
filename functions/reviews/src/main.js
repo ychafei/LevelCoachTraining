@@ -1,6 +1,13 @@
 import { Client, Databases, Users, ID, Permission, Query, Role } from 'node-appwrite';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
+const SESSION_FEEDBACK_OPTIONS = new Map([
+  ['great_fit', 'Great fit'],
+  ['helpful', 'Helpful session'],
+  ['okay', 'It was okay'],
+  ['not_right_fit', 'Not the right fit'],
+  ['other', 'Other'],
+]);
 
 function services() {
   const client = new Client()
@@ -58,6 +65,20 @@ function str(value, min, max) {
   return trimmed;
 }
 
+async function createDocumentResilient(databases, collection, data, permissions) {
+  let payload = { ...data };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await databases.createDocument(DB_ID, collection, ID.unique(), payload, permissions);
+    } catch (err) {
+      const match = /unknown attribute:?\s*"?([\w.-]+)"?/i.exec(err?.message || '');
+      if (!match || !(match[1] in payload)) throw err;
+      delete payload[match[1]];
+    }
+  }
+  return databases.createDocument(DB_ID, collection, ID.unique(), payload, permissions);
+}
+
 // Recompute coaches.rating_avg / review_count from published reviews only.
 async function recomputeAggregates(databases, coachId) {
   let cursor = null;
@@ -95,12 +116,23 @@ async function submit(databases, profile, payload) {
   const sessionId = String(payload.session_id || '');
   const rating = Number(payload.rating);
   const comment = str(payload.comment ?? '', 0, 5000);
+  const sessionFeedbackKey = String(payload.session_feedback_key || payload.feedback_key || '').trim();
+  const sessionFeedbackOther = str(payload.session_feedback_other ?? payload.feedback_other ?? '', 0, 1000);
   if (!coachId) return { status: 400, body: { error: 'coach_id is required.' } };
   if (!sessionId) return { status: 400, body: { error: 'session_id is required.' } };
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     return { status: 400, body: { error: 'rating must be an integer 1-5.' } };
   }
   if (comment === undefined) return { status: 400, body: { error: 'comment is too long (max 5000 chars).' } };
+  if (sessionFeedbackKey && !SESSION_FEEDBACK_OPTIONS.has(sessionFeedbackKey)) {
+    return { status: 400, body: { error: 'session_feedback_key is invalid.' } };
+  }
+  if (sessionFeedbackKey === 'other' && !sessionFeedbackOther) {
+    return { status: 400, body: { error: 'Tell us what made the session feel different.' } };
+  }
+  if (sessionFeedbackOther === undefined) {
+    return { status: 400, body: { error: 'session_feedback_other is too long (max 1000 chars).' } };
+  }
 
   // Only clients with a completed session with this coach may review it.
   const session = await databases.getDocument(DB_ID, 'sessions', sessionId).catch(() => null);
@@ -125,12 +157,15 @@ async function submit(databases, profile, payload) {
 
   const reviewerName = [profile.first_name, profile.last_name ? `${profile.last_name[0]}.` : '']
     .filter(Boolean).join(' ') || 'Client';
-  const review = await databases.createDocument(DB_ID, 'coach_reviews', ID.unique(), {
+  const review = await createDocumentResilient(databases, 'coach_reviews', {
     coach_id: coachId,
     session_id: sessionId,
     reviewer_profile_id: profile.$id,
     reviewer_name: reviewerName,
     rating,
+    session_feedback_key: sessionFeedbackKey,
+    session_feedback_label: SESSION_FEEDBACK_OPTIONS.get(sessionFeedbackKey) || '',
+    session_feedback_other: sessionFeedbackKey === 'other' ? sessionFeedbackOther : '',
     comment,
     status: 'published',
   }, [Permission.read(Role.any())]);

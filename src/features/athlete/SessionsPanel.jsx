@@ -14,9 +14,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { coachReviewRepo, sessionRepo } from '@/api/repo';
+import { sessionRepo } from '@/api/repo';
 import { callFn } from '@/lib/rpc';
 import { CANCEL_POLICY_COPY } from '@/lib/policies';
+import { ReviewSessionDialog } from '@/features/athlete/PostSessionReviewPrompt';
 import {
   formatInTz,
   formatRangeInTz,
@@ -100,6 +101,7 @@ export default function SessionsPanel({
   onChanged = () => {},
   athleteNamesById = {},
   reviewedSessionIds = null, // Set of session ids already reviewed; null hides review CTAs
+  onReviewChanged = () => {},
   canManage = true,
   emptyUpcoming = null,
 }) {
@@ -115,9 +117,7 @@ export default function SessionsPanel({
   const [rescheduling, setRescheduling] = useState(false);
 
   const [reviewTarget, setReviewTarget] = useState(null);
-  const [reviewRating, setReviewRating] = useState(0);
-  const [reviewComment, setReviewComment] = useState('');
-  const [reviewSaving, setReviewSaving] = useState(false);
+  const [localReviewedIds, setLocalReviewedIds] = useState(() => new Set());
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -130,6 +130,20 @@ export default function SessionsPanel({
     done.sort((a, b) => (sessionStartMs(b) ?? 0) - (sessionStartMs(a) ?? 0));
     return { upcoming: up, past: done };
   }, [sessions]);
+
+  const reviewedIds = useMemo(() => {
+    const ids = new Set(reviewedSessionIds || []);
+    for (const id of localReviewedIds) ids.add(id);
+    return ids;
+  }, [reviewedSessionIds, localReviewedIds]);
+
+  const openReview = (session) => {
+    setReviewTarget(session);
+  };
+
+  const closeReview = () => {
+    setReviewTarget(null);
+  };
 
   const openReschedule = async (session) => {
     setRescheduleTarget(session);
@@ -186,28 +200,6 @@ export default function SessionsPanel({
       toast.error(err?.message || 'Could not reschedule this session.');
     } finally {
       setRescheduling(false);
-    }
-  };
-
-  const submitReview = async () => {
-    if (!reviewTarget || reviewRating < 1) return;
-    setReviewSaving(true);
-    try {
-      await coachReviewRepo.submit({
-        session_id: reviewTarget.id,
-        coach_id: reviewTarget.coach_id,
-        rating: reviewRating,
-        comment: reviewComment.trim(),
-      });
-      toast.success('Thanks — your review was submitted.');
-      setReviewTarget(null);
-      setReviewRating(0);
-      setReviewComment('');
-      onChanged();
-    } catch (err) {
-      toast.error(err?.message || 'Could not submit your review.');
-    } finally {
-      setReviewSaving(false);
     }
   };
 
@@ -292,7 +284,7 @@ export default function SessionsPanel({
             {past.map((session) => {
               const showReview = reviewedSessionIds !== null
                 && session.status === 'completed'
-                && !reviewedSessionIds.has(session.id);
+                && !reviewedIds.has(session.id);
               return (
                 <SessionRow
                   key={session.id}
@@ -303,7 +295,7 @@ export default function SessionsPanel({
                     <Button
                       size="sm"
                       className="h-8 bg-accent text-xs text-accent-foreground hover:bg-accent/90"
-                      onClick={() => { setReviewTarget(session); setReviewRating(0); setReviewComment(''); }}
+                      onClick={() => openReview(session)}
                     >
                       <Star className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Review session
                     </Button>
@@ -411,57 +403,20 @@ export default function SessionsPanel({
       </Dialog>
 
       {/* Review dialog */}
-      <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
-        <DialogContent className="max-w-md bg-card">
-          <DialogHeader>
-            <DialogTitle>Review your session</DialogTitle>
-            <DialogDescription>
-              How was your session with {coachDisplayName(coachesById[reviewTarget?.coach_id])}? Your rating helps other athletes find great coaches.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div role="radiogroup" aria-label="Rating from 1 to 5 stars" className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={reviewRating === value}
-                  aria-label={`${value} star${value > 1 ? 's' : ''}`}
-                  onClick={() => setReviewRating(value)}
-                  className="rounded p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Star
-                    className={value <= reviewRating ? 'h-7 w-7 fill-yellow-400 text-yellow-400' : 'h-7 w-7 text-muted-foreground'}
-                    aria-hidden="true"
-                  />
-                </button>
-              ))}
-            </div>
-            <div>
-              <Label htmlFor="review-comment">Comment (optional)</Label>
-              <Textarea
-                id="review-comment"
-                value={reviewComment}
-                onChange={(event) => setReviewComment(event.target.value)}
-                maxLength={5000}
-                className="mt-1 bg-background"
-                placeholder="What went well? What did you work on?"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewTarget(null)}>Cancel</Button>
-            <Button
-              disabled={reviewRating < 1 || reviewSaving}
-              onClick={submitReview}
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-              {reviewSaving ? 'Submitting…' : 'Submit review'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ReviewSessionDialog
+        open={!!reviewTarget}
+        session={reviewTarget}
+        coach={coachesById[reviewTarget?.coach_id]}
+        onOpenChange={(open) => {
+          if (!open) closeReview();
+        }}
+        onSubmitted={(sessionId) => {
+          setLocalReviewedIds((prev) => new Set(prev).add(sessionId));
+          closeReview();
+          onReviewChanged();
+          onChanged();
+        }}
+      />
     </div>
   );
 }

@@ -84,6 +84,7 @@ export function useMySessions(user, athleteIds = []) {
     sessions,
     coachesById,
     loading: sessionsQuery.isLoading && !!user?.id,
+    coachesLoading: coachesQuery.isLoading && coachIds.length > 0,
     error: sessionsQuery.error,
     refresh: () => queryClient.invalidateQueries({ queryKey: ['portal', 'sessions'] }),
   };
@@ -166,6 +167,7 @@ export function useMyTraining(user, athleteIds = []) {
 // Session ids the caller has already reviewed (published reviews are
 // readable by anyone; per-doc grants cover the rest of the caller's own).
 export function useMyReviewedSessionIds(user) {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['portal', 'myReviews', user?.id],
     enabled: !!user?.id,
@@ -174,5 +176,6 @@ export function useMyReviewedSessionIds(user) {
   return {
     reviewedSessionIds: new Set((query.data || []).map((review) => review.session_id)),
     loading: query.isLoading && !!user?.id,
+    refresh: () => queryClient.invalidateQueries({ queryKey: ['portal', 'myReviews'] }),
   };
 }
