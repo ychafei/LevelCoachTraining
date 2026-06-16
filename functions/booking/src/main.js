@@ -166,6 +166,48 @@ function coachOffersSport(coach, sportKey) {
   return sports.length === 0 || sports.includes(sportKey);
 }
 
+function isSelfProfileAthleteId(profile, athleteId) {
+  const id = String(athleteId || '').trim();
+  if (!id || !profile) return false;
+  return [profile.$id, profile.id, profile.account_id].filter(Boolean).includes(id);
+}
+
+async function selfAthleteProfile(db, profile) {
+  if (!profile?.$id) return null;
+  const rows = await db.listDocuments(DB_ID, 'athlete_profiles', [
+    Query.equal('profile_id', profile.$id),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function resolveBookingAthlete(db, profile, athleteId) {
+  const requestedId = String(athleteId || '').trim();
+  if (!requestedId) {
+    return { athlete: null, athleteId: profile?.$id || '', selfManaged: true };
+  }
+
+  const athlete = await db.getDocument(DB_ID, 'athlete_profiles', requestedId).catch(() => null);
+  if (athlete) {
+    return {
+      athlete,
+      athleteId: athlete.$id,
+      selfManaged: athlete.profile_id === profile?.$id,
+    };
+  }
+
+  if (isSelfProfileAthleteId(profile, requestedId)) {
+    const selfProfile = await selfAthleteProfile(db, profile);
+    return {
+      athlete: selfProfile,
+      athleteId: selfProfile?.$id || profile.$id,
+      selfManaged: true,
+    };
+  }
+
+  return { error: 'Athlete not found.' };
+}
+
 function calculateAmountCents(pkg, durationMinutes) {
   const selected = durationOptionFor(pkg, durationMinutes);
   if (selected) return selected.price_cents;
@@ -1478,10 +1520,13 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   let athlete = null;
   let guardianBooking = false;
   let athleteGuardianLink = null;
+  let sessionAthleteId = profile.$id;
   if (effectiveAthleteId) {
-    athlete = await db.getDocument(DB_ID, 'athlete_profiles', effectiveAthleteId).catch(() => null);
-    if (!athlete) return res.json({ error: 'Athlete not found.' }, 404);
-    if (athlete.profile_id === profile.$id) {
+    const resolvedAthlete = await resolveBookingAthlete(db, profile, effectiveAthleteId);
+    if (resolvedAthlete.error) return res.json({ error: resolvedAthlete.error }, 404);
+    athlete = resolvedAthlete.athlete;
+    sessionAthleteId = resolvedAthlete.athleteId || profile.$id;
+    if (resolvedAthlete.selfManaged) {
       guardianBooking = false;
     } else {
       athleteGuardianLink = await guardianLink(db, profile.$id, athlete.$id);
@@ -1496,7 +1541,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     : credit.owner_profile_id
       ? credit.owner_profile_id === profile.$id
     : String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase();
-  const isCreditAthleteSelf = Boolean(creditAthleteId && athlete?.profile_id === profile.$id);
+  const isCreditAthleteSelf = Boolean(creditAthleteId && (athlete?.profile_id === profile.$id || isSelfProfileAthleteId(profile, creditAthleteId)));
   const isCreditGuardian = Boolean(creditAthleteId && athleteGuardianLink && athleteGuardianLink.can_book !== false);
   if (!ownsCredit && !isCreditAthleteSelf && !isCreditGuardian) {
     return res.json({ error: 'This credit does not belong to you or an athlete linked to you.' }, 403);
@@ -1545,7 +1590,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     'reserve',
     creditId,
     coach.$id,
-    athlete?.$id || profile.$id,
+    sessionAthleteId || profile.$id,
     offering.pkg.$id,
     date,
     startTime,
@@ -1554,7 +1599,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
 
   const reservationResult = await reserveCreditValue(db, credit, priceSnapshotCents, reservationKey, {
     owner_profile_id: profile.$id,
-    athlete_id: athlete?.$id || '',
+    athlete_id: sessionAthleteId,
     coach_id: coach.$id,
     organization_id: payoutPlan.organization_id || '',
     offering_id: offering.pkg.$id,
@@ -1588,7 +1633,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     if (existingSession) return res.json({ session: existingSession, duplicate: true });
   }
 
-  const guardianAccounts = await guardianAccountsForAthlete(db, athlete?.$id);
+  const guardianAccounts = await guardianAccountsForAthlete(db, athlete && !guardianBooking ? '' : athlete?.$id);
   let athleteAccount = '';
   if (athlete?.profile_id && athlete.profile_id !== profile.$id) {
     const owner = await db.getDocument(DB_ID, 'profiles', athlete.profile_id).catch(() => null);
@@ -1615,7 +1660,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       payment_method: 'credits',
       credit_id: creditId,
       notes,
-      athlete_id: athlete?.$id || '',
+      athlete_id: sessionAthleteId,
       booked_by_profile_id: profile.$id,
       timezone: slot.timezone,
       starts_at_utc: slot.startUtcIso,

@@ -294,6 +294,12 @@ async function guardianLink(db, guardianProfileId, athleteId) {
   return rows.documents[0] || null;
 }
 
+function isSelfProfileAthleteId(profile, athleteId) {
+  const id = String(athleteId || '').trim();
+  if (!id || !profile) return false;
+  return [profile.$id, profile.id, profile.account_id].filter(Boolean).includes(id);
+}
+
 async function creditAccessibleToProfile(db, credit, profile) {
   if (!credit || !profile) return false;
   if (credit.client_profile_id && credit.client_profile_id === profile.$id) return true;
@@ -302,6 +308,7 @@ async function creditAccessibleToProfile(db, credit, profile) {
   if (String(credit.client_email || '').toLowerCase() && String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase()) return true;
   const athleteId = String(credit.athlete_id || '').trim();
   if (!athleteId) return false;
+  if (isSelfProfileAthleteId(profile, athleteId)) return true;
   const athlete = await db.getDocument(DB_ID, 'athlete_profiles', athleteId).catch(() => null);
   if (athlete?.profile_id === profile.$id) return true;
   const link = await guardianLink(db, profile.$id, athleteId);

@@ -107,7 +107,10 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(availability.includes('booking_rules: bookingRules') && availability.includes('bufferedRange'), 'public availability must expose booking rules and buffer busy ranges');
   assert(schedule.includes('bookingRulesForAvailability') && schedule.includes('min_notice_hours'), 'slot grid must hide times that violate coach notice/advance rules');
   assert(booking.includes('allowMissingSport') && booking.includes('effectiveSportKey'), 'booking function must infer sport from a paid package when the shortcut skips sport selection');
+  assert(booking.includes('resolveBookingAthlete') && booking.includes('isSelfProfileAthleteId'), 'booking must accept self-managed adult profile ids as athlete ids');
+  assert(booking.includes('athlete_id: sessionAthleteId'), 'booking must store a stable athlete id on the session');
   assert(bookingPackage.dependencies?.stripe, 'booking function must declare stripe because payout release code imports it at module load');
+  assert(checkout.includes('isSelfProfileAthleteId(profile, athleteId)'), 'checkout/top-up access must accept self-managed adult profile ids on credits');
   assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
   assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
