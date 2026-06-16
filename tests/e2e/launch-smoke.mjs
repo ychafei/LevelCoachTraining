@@ -88,6 +88,7 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   const availability = source('functions/getCoachAvailability/src/main.js');
   const book = source('src/pages/Book.jsx');
   const booking = source('functions/booking/src/main.js');
+  const bookingPackage = JSON.parse(source('functions/booking/package.json'));
   const schedule = source('src/lib/scheduleET.js');
   const athleteOverview = source('src/features/athlete/AthleteOverview.jsx');
   const stripeWebhook = source('functions/stripeWebhook/src/main.js');
@@ -106,6 +107,7 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(availability.includes('booking_rules: bookingRules') && availability.includes('bufferedRange'), 'public availability must expose booking rules and buffer busy ranges');
   assert(schedule.includes('bookingRulesForAvailability') && schedule.includes('min_notice_hours'), 'slot grid must hide times that violate coach notice/advance rules');
   assert(booking.includes('allowMissingSport') && booking.includes('effectiveSportKey'), 'booking function must infer sport from a paid package when the shortcut skips sport selection');
+  assert(bookingPackage.dependencies?.stripe, 'booking function must declare stripe because payout release code imports it at module load');
   assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
   assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
