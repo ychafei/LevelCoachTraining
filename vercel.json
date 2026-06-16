@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install && npx playwright@$(node -p \"require('playwright-core/package.json').version\") install chromium",
+  "installCommand": "npm install && (npx playwright@$(node -p \"require('playwright-core/package.json').version\") install --with-deps chromium || npx playwright@$(node -p \"require('playwright-core/package.json').version\") install chromium)",
   "buildCommand": "npm run build:seo",
   "rewrites": [
     { "source": "/how-it-works", "destination": "/index.html" },
