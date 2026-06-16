@@ -155,13 +155,33 @@ function sportLabel(value) {
 }
 
 function packageApplies(pkg, { sportKey = '' } = {}) {
-  const sportKeys = Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.filter(Boolean) : [];
-  if (sportKeys.length && (!sportKey || !sportKeys.includes(sportKey))) return false;
+  const sportKeys = packageSportKeys(pkg);
+  const selectedSport = cleanKey(sportKey);
+  if (sportKeys.length && (!selectedSport || !sportKeys.includes(selectedSport))) return false;
   return true;
+}
+
+function packageSportKeys(pkg) {
+  return Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.map(cleanKey).filter(Boolean) : [];
+}
+
+function inferSportForPackage(pkg, coachSports = []) {
+  const packageSports = packageSportKeys(pkg);
+  const offeredSports = coachSports.map(cleanKey).filter(Boolean);
+  const shared = packageSports.find((sport) => offeredSports.includes(sport));
+  return shared || packageSports[0] || offeredSports[0] || '';
+}
+
+function packageId(pkg) {
+  return pkg?.id || pkg?.$id || '';
 }
 
 function creditCoachId(credit) {
   return credit?.coach_id || credit?.original_coach_id || credit?.originating_coach_id || '';
+}
+
+function apiErrorMessage(err, fallback) {
+  return err?.data?.error || err?.message || fallback;
 }
 
 export default function Book() {
@@ -501,6 +521,7 @@ export default function Book() {
     .map(cleanKey)
     .filter(Boolean);
   const uniqueCoachSports = [...new Set(coachSports)];
+  const coachSportsKey = uniqueCoachSports.join('|');
   const needsAthleteStep = familyAthletes.length > 1;
   const needsSportStep = uniqueCoachSports.length > 1;
   const effectiveSport = selectedSport || (!needsSportStep ? uniqueCoachSports[0] || '' : '');
@@ -539,6 +560,29 @@ export default function Book() {
       setSelectedSport('');
     }
   }, [selectedSport, uniqueCoachSports]);
+
+  useEffect(() => {
+    const activeCredit = creditRecord || existingCredit;
+    if (!activeCredit?.package_id || packages.length === 0) return;
+    const creditPackage = packages.find((pkg) => packageId(pkg) === activeCredit.package_id);
+    if (!creditPackage) return;
+    if (packageId(selectedPackage) !== packageId(creditPackage)) {
+      setSelectedPackage(creditPackage);
+    }
+    if (!selectedSport) {
+      const inferred = inferSportForPackage(creditPackage, uniqueCoachSports);
+      if (inferred) setSelectedSport(inferred);
+    }
+  }, [
+    creditRecord?.id,
+    creditRecord?.package_id,
+    existingCredit?.id,
+    existingCredit?.package_id,
+    packages,
+    selectedPackage,
+    selectedSport,
+    coachSportsKey,
+  ]);
 
   useEffect(() => {
     if (selectedPackage && !filteredPackages.some((pkg) => pkg.id === selectedPackage.id)) {
@@ -724,12 +768,14 @@ export default function Book() {
     setSubmitting(true);
     setBookingError('');
     try {
+      const bookingPackageId = selectedPackage?.id || activeCredit.package_id || '';
+      const bookingSportKey = effectiveSport || inferSportForPackage(selectedPackage, uniqueCoachSports);
       const res = await rpc.invoke('booking', {
         action: 'book',
         coach_id: coach.id,
         credit_id: activeCredit.id,
-        ...(selectedPackage?.id ? { package_id: selectedPackage.id } : {}),
-        sport_key: effectiveSport,
+        ...(bookingPackageId ? { package_id: bookingPackageId } : {}),
+        ...(bookingSportKey ? { sport_key: bookingSportKey } : {}),
         date: format(selectedDate, 'yyyy-MM-dd'),
         start_time: selectedTime,
         duration_minutes: slotDurationMinutes,
@@ -756,7 +802,7 @@ export default function Book() {
       if (err?.data?.requires_top_up && Number.isInteger(Number(err.data.top_up_amount_cents))) {
         setBookingError(`This coach costs $${formatMoney(Number(err.data.top_up_amount_cents) / 100)} more than your available credit balance. Add a top-up before booking.`);
       } else {
-        setBookingError(err?.data?.error || 'Could not book the session. Please try again.');
+        setBookingError(apiErrorMessage(err, 'Could not book the session. Please try again.'));
       }
     } finally {
       setSubmitting(false);

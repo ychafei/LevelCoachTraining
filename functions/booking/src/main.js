@@ -132,10 +132,32 @@ function asCleanArray(value) {
   return [];
 }
 
-function packageAppliesToSelection(pkg, { sportKey }) {
+function packageAppliesToSelection(pkg, { sportKey, allowMissingSport = false, coachSports = [] }) {
   const packageSports = asCleanArray(pkg?.sport_keys);
-  if (packageSports.length && (!sportKey || !packageSports.includes(sportKey))) return false;
-  return true;
+  if (!packageSports.length) return true;
+  if (sportKey) return packageSports.includes(sportKey);
+  if (!allowMissingSport) return false;
+  const offeredSports = asCleanArray(coachSports);
+  return offeredSports.length === 0 || packageSports.some((sport) => offeredSports.includes(sport));
+}
+
+function inferPackageSportKey(pkg, coach, fallback = '') {
+  const selected = cleanKey(fallback);
+  if (selected) return selected;
+  const packageSports = asCleanArray(pkg?.sport_keys);
+  const coachSports = asCleanArray(coach?.sports);
+  const shared = packageSports.find((sport) => coachSports.includes(sport));
+  return shared || packageSports[0] || coachSports[0] || '';
+}
+
+function offeringResponse(pkg, coach, context, amount) {
+  return {
+    pkg,
+    amount_cents: amount,
+    organization_id: pkg.organization_id || '',
+    session_type: pkg.session_type || '',
+    sport_key: inferPackageSportKey(pkg, coach, context.sportKey),
+  };
 }
 
 function coachOffersSport(coach, sportKey) {
@@ -383,10 +405,12 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
   const requestedSessionType = normalizedSessionType(payload.session_type || payload.sessionType);
   const context = {
     sportKey: cleanKey(payload.sport_key || payload.sport || ''),
+    coachSports: coach?.sports,
   };
   if (requestedPackageId && validId(requestedPackageId)) {
     const pkg = await db.getDocument(DB_ID, 'pricing_packages', requestedPackageId).catch(() => null);
-    if (!(await packageBookableForCoach(db, pkg, coach.$id, context))) {
+    const allowMissingSport = !context.sportKey && credit?.package_id === requestedPackageId;
+    if (!(await packageBookableForCoach(db, pkg, coach.$id, { ...context, allowMissingSport }))) {
       return { error: 'This package is not available for the selected coach or sport.' };
     }
     const pkgSessionType = normalizedSessionType(pkg.session_type);
@@ -396,7 +420,7 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
     if (!packageHasRequestedDuration(pkg, durationMinutes)) return { error: 'This package is not available for the selected duration.' };
     const amount = calculateSessionPriceCents(pkg, durationMinutes);
     if (Number.isInteger(amount) && amount > 0) {
-      return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
+      return offeringResponse(pkg, coach, context, amount);
     }
     return { error: 'A valid server-side price is required for this package.' };
   }
@@ -405,13 +429,13 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
 
   for (const packageId of [...new Set(candidates)]) {
     const pkg = await db.getDocument(DB_ID, 'pricing_packages', packageId).catch(() => null);
-    if (await packageBookableForCoach(db, pkg, coach.$id, context)) {
+    if (await packageBookableForCoach(db, pkg, coach.$id, { ...context, allowMissingSport: !context.sportKey })) {
       const pkgSessionType = normalizedSessionType(pkg.session_type);
       if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
       if (!packageHasRequestedDuration(pkg, durationMinutes)) continue;
       const amount = calculateSessionPriceCents(pkg, durationMinutes);
       if (Number.isInteger(amount) && amount > 0) {
-        return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
+        return offeringResponse(pkg, coach, context, amount);
       }
     }
   }
@@ -429,7 +453,7 @@ async function resolveOffering(db, coach, credit, payload, durationMinutes) {
       if (requestedSessionType && pkgSessionType && pkgSessionType !== requestedSessionType) continue;
       const amount = calculateSessionPriceCents(pkg, durationMinutes);
       if (Number.isInteger(amount) && amount > 0) {
-        return { pkg, amount_cents: amount, organization_id: pkg.organization_id || '', session_type: pkg.session_type || '' };
+        return offeringResponse(pkg, coach, context, amount);
       }
     }
   }
@@ -1488,6 +1512,10 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
 
   const offering = await resolveOffering(db, coach, credit, { ...payload, package_id: packageId }, durationMinutes);
   if (offering.error) return res.json({ error: offering.error }, 400);
+  const effectiveSportKey = sportKey || offering.sport_key || inferPackageSportKey(offering.pkg, coach, '');
+  if (!coachOffersSport(coach, effectiveSportKey)) {
+    return res.json({ error: 'This coach does not offer the selected sport.' }, 400);
+  }
   const priceSnapshotCents = offering.amount_cents;
   if (!Number.isInteger(priceSnapshotCents) || priceSnapshotCents <= 0) {
     return res.json({ error: 'A valid server-side session price is required.' }, 400);
@@ -1533,7 +1561,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
     currency: 'usd',
     metadata: {
       price_snapshot_cents: priceSnapshotCents,
-      sport_key: sportKey,
+      sport_key: effectiveSportKey,
       preferred_location: preferredLocation,
       client_message: notes,
       platform_share_bps: payoutPlan.platform_bps,
@@ -1594,7 +1622,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       total_price: priceSnapshotCents / 100,
       credit_reservation_id: reservation.$id,
       offering_id: offering.pkg.$id,
-      sport_key: sportKey,
+      sport_key: effectiveSportKey,
       preferred_location: preferredLocation,
       reserved_amount_cents: priceSnapshotCents,
       price_snapshot_cents: priceSnapshotCents,

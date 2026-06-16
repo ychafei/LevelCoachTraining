@@ -32,6 +32,11 @@ function validTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
 }
 
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
 export function timeToMinutes(value) {
   const [h, m] = String(value || '').split(':').map(Number);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
@@ -196,6 +201,14 @@ export function coachHasWindows(av) {
   return Object.values(weekly).some((day) => day?.enabled && validTime(day.start) && validTime(day.end));
 }
 
+function bookingRulesForAvailability(av) {
+  const rules = av?.booking_rules || av?.bookingRules || {};
+  return {
+    minNoticeHours: clampNumber(rules.min_notice_hours ?? rules.minNoticeHours, 0, 720, 0),
+    maxAdvanceDays: clampNumber(rules.max_advance_days ?? rules.maxAdvanceDays, 1, 730, 365),
+  };
+}
+
 // Bookable windows ([startMinutes, endMinutes]) for one date. Mirrors the
 // server-side `booking` validateSlot window logic.
 export function windowsForDate(av, dateStr) {
@@ -275,7 +288,12 @@ export function slotsForDate(av, dateStr, durationMinutes = 60, options = {}) {
       const end = start + duration;
       if (busy.some(([busyStart, busyEnd]) => start < busyEnd && end > busyStart)) continue;
       const startUtcMs = zonedStartUtcMs(dateStr, time, tz);
-      if (startUtcMs !== null && startUtcMs <= nowMs) continue;
+      if (startUtcMs !== null) {
+        if (startUtcMs <= nowMs) continue;
+        const rules = bookingRulesForAvailability(av);
+        if (startUtcMs - nowMs < rules.minNoticeHours * 60 * 60 * 1000) continue;
+        if (startUtcMs - nowMs > rules.maxAdvanceDays * 24 * 60 * 60 * 1000) continue;
+      }
       out.push(time);
     }
   }

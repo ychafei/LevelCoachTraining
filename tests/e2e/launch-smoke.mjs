@@ -85,7 +85,10 @@ test('guest browsing: public routes render without a live Appwrite session', asy
 
 test('adult athlete booking: checkout requires published coach and exact checkout status', () => {
   const checkout = source('functions/createStripeCheckout/src/main.js');
+  const availability = source('functions/getCoachAvailability/src/main.js');
   const book = source('src/pages/Book.jsx');
+  const booking = source('functions/booking/src/main.js');
+  const schedule = source('src/lib/scheduleET.js');
   const athleteOverview = source('src/features/athlete/AthleteOverview.jsx');
   const stripeWebhook = source('functions/stripeWebhook/src/main.js');
   assert(/coach\.is_active\s*!==\s*true\s*\|\|\s*coach\.published\s*!==\s*true/.test(checkout), 'checkout must reject unpublished coaches');
@@ -98,6 +101,11 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(athleteOverview.includes("params.set('schedule', '1')"), 'athlete portal existing-credit CTA must deep-link directly to scheduling');
   assert(book.includes('const directSchedule') && book.includes('useState(!!directSchedule)'), 'Book.jsx must honor direct schedule links for existing credits');
   assert(book.includes('} else {\n        active = credits.find(c => remainingCredits(c) > 0);'), 'Book.jsx must not fall back to an arbitrary credit when credit_id is provided');
+  assert(book.includes('activeCredit.package_id') && book.includes('inferSportForPackage'), 'Book.jsx must carry paid-credit package/sport context into direct scheduling');
+  assert(book.includes('apiErrorMessage(err'), 'Book.jsx must surface server booking errors instead of hiding the real reason');
+  assert(availability.includes('booking_rules: bookingRules') && availability.includes('bufferedRange'), 'public availability must expose booking rules and buffer busy ranges');
+  assert(schedule.includes('bookingRulesForAvailability') && schedule.includes('min_notice_hours'), 'slot grid must hide times that violate coach notice/advance rules');
+  assert(booking.includes('allowMissingSport') && booking.includes('effectiveSportKey'), 'booking function must infer sport from a paid package when the shortcut skips sport selection');
   assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
   assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
