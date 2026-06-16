@@ -43,10 +43,10 @@ function AuthFooter() {
         </p>
         <div className="flex items-center gap-5 text-xs">
           <Link to="/terms" className="text-slate-500 transition-colors hover:text-blue-700">
-            Terms of Service
+            Terms
           </Link>
           <Link to="/privacy" className="text-slate-500 transition-colors hover:text-blue-700">
-            Privacy Policy
+            Privacy Notice
           </Link>
           <Link to="/resources" className="text-slate-500 transition-colors hover:text-blue-700">
             Support

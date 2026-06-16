@@ -15,10 +15,27 @@ const cleanPhone = (val) => val.replace(/\D/g, '');
 const isValidPhone = (val) => cleanPhone(val).length === 10;
 const hasNumbers = (val) => /\d/.test(val);
 
+function parseNotificationPrefs(raw) {
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function notificationPrefsWithMarketingSms(raw, marketingSms) {
+  return { ...parseNotificationPrefs(raw), marketing_sms: marketingSms === true };
+}
+
 export default function OnboardingModal({ user, onComplete }) {
   // Derive initial first/last from existing data: explicit fields first, else split full_name
   const derivedFirst = user?.first_name || user?.full_name?.trim().split(/\s+/)[0] || '';
   const derivedLast = user?.last_name || user?.full_name?.trim().split(/\s+/).slice(1).join(' ') || '';
+  const notificationPrefs = parseNotificationPrefs(user?.notification_prefs);
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -31,6 +48,8 @@ export default function OnboardingModal({ user, onComplete }) {
     parent_phone: user?.parent_phone || '',
     parent_relationship: user?.parent_relationship || '',
     agreed_to_terms: false,
+    marketing_sms_consent: notificationPrefs.marketing_sms === true,
+    media_release_consent: user?.media_release_accepted === true,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -68,6 +87,8 @@ export default function OnboardingModal({ user, onComplete }) {
         parent_phone: isUnder18 ? cleanPhone(form.parent_phone) : '',
         parent_relationship: isUnder18 ? form.parent_relationship.trim() : '',
         terms_accepted: true,
+        media_release_accepted: form.media_release_consent === true,
+        notification_prefs: notificationPrefsWithMarketingSms(user?.notification_prefs, form.marketing_sms_consent),
         profile_setup_complete: true,
       });
       onComplete();
@@ -223,11 +244,11 @@ export default function OnboardingModal({ user, onComplete }) {
         {/* Terms step */}
         {((step === 2 && !isUnder18) || (step === 3 && isUnder18)) && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Please read and agree to our terms before getting started.</p>
+            <p className="text-sm text-muted-foreground">Please read and agree to the required account terms before getting started.</p>
             <div className="bg-secondary rounded-md p-3 text-xs text-muted-foreground max-h-40 overflow-y-auto leading-relaxed">
-              By using LevelCoach Training, you agree to our{' '}
-              <a href="/terms" target="_blank" className="text-accent underline">Terms of Service</a> and{' '}
-              <a href="/privacy" target="_blank" className="text-accent underline">Privacy Policy</a>. Sessions are subject to cancellation policies. All communications are monitored for safety.
+              By using LevelCoach Training, you agree to the{' '}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-accent underline">Universal Account Terms, Privacy Notice, and Electronic Signature Consent</a>, including the{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-accent underline">Privacy Notice</a>. Sessions are subject to cancellation policies. All communications are monitored for safety.
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
@@ -235,7 +256,27 @@ export default function OnboardingModal({ user, onComplete }) {
                 checked={form.agreed_to_terms}
                 onCheckedChange={v => setForm({ ...form, agreed_to_terms: !!v })}
               />
-              <Label htmlFor="terms" className="cursor-pointer text-sm">I agree to the Terms of Service and Privacy Policy</Label>
+              <Label htmlFor="terms" className="cursor-pointer text-sm">I agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent</Label>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="marketing-sms"
+                checked={form.marketing_sms_consent}
+                onCheckedChange={v => setForm({ ...form, marketing_sms_consent: !!v })}
+              />
+              <Label htmlFor="marketing-sms" className="cursor-pointer text-sm leading-5">
+                OPTIONAL: I consent to recurring marketing SMS/text messages. Consent is not a condition of purchase or use.
+              </Label>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="media-release"
+                checked={form.media_release_consent}
+                onCheckedChange={v => setForm({ ...form, media_release_consent: !!v })}
+              />
+              <Label htmlFor="media-release" className="cursor-pointer text-sm leading-5">
+                OPTIONAL: I authorize LevelCoach to use approved photos, videos, image, likeness, testimonials, training content, and session media for LevelCoach marketing.
+              </Label>
             </div>
             {error && (
               <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">

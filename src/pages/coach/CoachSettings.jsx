@@ -44,6 +44,7 @@ const NOTIFICATION_PREFS = [
   { key: 'messages', label: 'New messages', sub: 'When a client sends you a message.' },
   { key: 'payments', label: 'Payments & payouts', sub: 'Payment receipts and payout updates.' },
   { key: 'marketing', label: 'Product news', sub: 'Occasional feature announcements.', defaultOff: true },
+  { key: 'marketing_sms', label: 'Marketing SMS/text', sub: 'Optional promotional texts. Consent is not required for purchase or platform use.', defaultOff: true },
 ];
 
 const EMPTY_BLOCK_FORM = {

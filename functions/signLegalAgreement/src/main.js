@@ -226,10 +226,18 @@ function templateChecksum(template) {
   ].join('\n'));
 }
 
-function affirmationsValid(signerRole, affirmations) {
+function requiresMaterialTermsAcknowledgement(template) {
+  return [
+    'adult_athlete_booking_agreement',
+    'parent_guardian_minor_athlete_agreement',
+  ].includes(template?.template_key);
+}
+
+function affirmationsValid(signerRole, affirmations, template) {
   const a = affirmations || {};
   if (a.electronic_records_consent !== true) return false;
   if (a.reviewed_current_template !== true) return false;
+  if (requiresMaterialTermsAcknowledgement(template) && a.material_terms_acknowledgement !== true) return false;
   if (a.accurate_information !== true) return false;
   if ((signerRole === 'guardian' || signerRole === 'organization_admin') && a.legal_authority !== true) return false;
   return true;
@@ -337,20 +345,20 @@ export default async ({ req, res, error }) => {
     if (!signerRole) return res.json({ error: 'signer_role does not match your account permissions.' }, 403);
     const expectedTemplateRole = SIGNER_TO_TEMPLATE_ROLE[signerRole];
     if (!expectedTemplateRole) return res.json({ error: 'Unsupported signer_role.' }, 400);
-    if (!affirmationsValid(signerRole, affirmations)) {
-      return res.json({ error: 'Required electronic consent affirmations are incomplete.' }, 400);
-    }
-
-    const entities = await verifySignerEntities(databases, accountId, profile, signerRole, payload);
-    if (entities.error) return res.json({ error: entities.error }, entities.status || 403);
 
     const template = await databases.getDocument(DB_ID, 'legal_templates', templateId);
-    if (template.role !== expectedTemplateRole) {
+    if (template.role !== expectedTemplateRole && template.role !== 'platform') {
       return res.json({ error: `Template role ${template.role} cannot be signed as ${signerRole}.` }, 400);
     }
     if (template.retired_at && new Date(template.retired_at).getTime() <= Date.now()) {
       return res.json({ error: 'This legal template is retired.' }, 400);
     }
+    if (!affirmationsValid(signerRole, affirmations, template)) {
+      return res.json({ error: 'Required electronic consent affirmations are incomplete.' }, 400);
+    }
+
+    const entities = await verifySignerEntities(databases, accountId, profile, signerRole, payload);
+    if (entities.error) return res.json({ error: entities.error }, entities.status || 403);
 
     const signedAt = new Date().toISOString();
     const checksum = templateChecksum(template);

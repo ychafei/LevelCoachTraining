@@ -47,6 +47,36 @@ function needsAuthority(role) {
   return role === 'guardian' || role === 'organization_admin';
 }
 
+function formatDate(value) {
+  if (!value) return 'Not specified';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10) || 'Not specified';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function requiresMaterialTermsAcknowledgement(template) {
+  return [
+    'adult_athlete_booking_agreement',
+    'parent_guardian_minor_athlete_agreement',
+  ].includes(template?.template_key);
+}
+
+function optionalConsentRows(template) {
+  return String(template?.body || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^☐\s*OPTIONAL:/i.test(line))
+    .map((line, index) => ({
+      key: `optional_${index + 1}`,
+      label: line.replace(/^☐\s*/i, ''),
+    }));
+}
+
 export default function LegalSignaturePanel({
   signerRole,
   athleteId = '',
@@ -109,9 +139,11 @@ export default function LegalSignaturePanel({
   const [affirmations, setAffirmations] = useState({
     electronic_records_consent: false,
     reviewed_current_template: false,
+    material_terms_acknowledgement: false,
     accurate_information: false,
     legal_authority: false,
   });
+  const [optionalAffirmations, setOptionalAffirmations] = useState({});
   const [saving, setSaving] = useState(false);
   const [drawnTouched, setDrawnTouched] = useState(false);
   const canvasRef = useRef(null);
@@ -119,22 +151,33 @@ export default function LegalSignaturePanel({
 
   useEffect(() => {
     onStatusChange?.(status);
-     
+
   }, [status.complete, status.loading, status.missing.length, status.templates.length]);
 
   useEffect(() => {
     if (!selectedTemplate) return;
+    const optionals = Object.fromEntries(optionalConsentRows(selectedTemplate).map((row) => [row.key, false]));
     setTypedName(fullName(user));
-    setRelationship(signerRole === 'guardian' ? 'Parent/Guardian' : signerRole === 'organization_admin' ? 'Authorized representative' : '');
+    setRelationship(
+      signerRole === 'athlete'
+        ? 'Self / Adult Athlete'
+        : signerRole === 'guardian'
+          ? 'Parent/Guardian'
+          : signerRole === 'organization_admin'
+            ? 'Authorized representative'
+            : '',
+    );
     setAffirmations({
       electronic_records_consent: false,
       reviewed_current_template: false,
+      material_terms_acknowledgement: false,
       accurate_information: false,
       legal_authority: false,
     });
+    setOptionalAffirmations(optionals);
     setDrawnTouched(false);
     clearCanvas();
-     
+
   }, [selectedTemplate?.id]);
 
   const signedByTemplateId = useMemo(() => {
@@ -144,12 +187,14 @@ export default function LegalSignaturePanel({
   }, [status.signed]);
 
   const guardianNeedsSelection = signerRole === 'guardian' && !effectiveAthleteId;
+  const selectedOptionalRows = useMemo(() => optionalConsentRows(selectedTemplate), [selectedTemplate]);
 
   const canSign = selectedTemplate
     && hasFirstAndLastName(typedName)
     && !(signerRole === 'guardian' && !effectiveAthleteId)
     && affirmations.electronic_records_consent
     && affirmations.reviewed_current_template
+    && (!requiresMaterialTermsAcknowledgement(selectedTemplate) || affirmations.material_terms_acknowledgement)
     && affirmations.accurate_information
     && (!needsAuthority(signerRole) || affirmations.legal_authority);
 
@@ -199,12 +244,15 @@ export default function LegalSignaturePanel({
       await signLegalAgreement({
         template_id: selectedTemplate.id,
         signer_role: signerRole,
-        signer_relationship: relationship.trim(),
+        signer_relationship: signerRole === 'athlete' ? 'Self / Adult Athlete' : relationship.trim(),
         typed_legal_name: typedName.trim(),
         athlete_id: effectiveAthleteId,
         coach_id: coachId,
         organization_id: organizationId,
-        affirmations,
+        affirmations: {
+          ...affirmations,
+          optional_consents: optionalAffirmations,
+        },
         drawn_signature_data: drawnSignatureData,
       });
       toast.success('Legal agreement signed');
@@ -427,6 +475,14 @@ export default function LegalSignaturePanel({
             <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-foreground">{selectedTemplate?.body}</pre>
           </div>
 
+          <div className="rounded-md border border-border bg-background/40 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">You are signing</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{selectedTemplate?.title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Version: v{selectedTemplate?.version || '1.0'} · Effective Date: {formatDate(selectedTemplate?.effective_at)}
+            </p>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="typed-legal-name">Legal first and last name</Label>
@@ -441,16 +497,28 @@ export default function LegalSignaturePanel({
                 Use the signer&apos;s legal name, not a nickname. The server checks this against the profile name when available.
               </p>
             </div>
-            <div>
-              <Label htmlFor="signer-relationship">Relationship / authority</Label>
-              <Input
-                id="signer-relationship"
-                value={relationship}
-                onChange={(event) => setRelationship(event.target.value)}
-                className="mt-1 bg-background"
-                placeholder={needsAuthority(signerRole) ? 'Parent, guardian, owner, officer...' : 'Optional'}
-              />
-            </div>
+            {signerRole === 'athlete' ? (
+              <div>
+                <Label htmlFor="signer-relationship">Relationship / authority</Label>
+                <Input
+                  id="signer-relationship"
+                  value="Self / Adult Athlete"
+                  readOnly
+                  className="mt-1 bg-secondary text-muted-foreground"
+                />
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="signer-relationship">Relationship / authority</Label>
+                <Input
+                  id="signer-relationship"
+                  value={relationship}
+                  onChange={(event) => setRelationship(event.target.value)}
+                  className="mt-1 bg-background"
+                  placeholder={needsAuthority(signerRole) ? 'Parent, guardian, owner, officer...' : 'Coach, representative, title...'}
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 rounded-md border border-border bg-background/40 p-4">
@@ -458,8 +526,13 @@ export default function LegalSignaturePanel({
               I consent to electronic records and electronic signatures for this document.
             </CheckboxRow>
             <CheckboxRow checked={affirmations.reviewed_current_template} onChange={(value) => setAffirmations((current) => ({ ...current, reviewed_current_template: value }))}>
-              I reviewed the current template version and agree to sign it.
+              I have reviewed the current version of this agreement and agree to be legally bound by it.
             </CheckboxRow>
+            {requiresMaterialTermsAcknowledgement(selectedTemplate) && (
+              <CheckboxRow checked={affirmations.material_terms_acknowledgement} onChange={(value) => setAffirmations((current) => ({ ...current, material_terms_acknowledgement: value }))}>
+                I understand this agreement includes an assumption of risk, waiver/release of claims, indemnity, discretionary credit/refund policy, arbitration agreement, and class-action waiver.
+              </CheckboxRow>
+            )}
             <CheckboxRow checked={affirmations.accurate_information} onChange={(value) => setAffirmations((current) => ({ ...current, accurate_information: value }))}>
               The account, signer, typed legal name, and related profile information I provided is accurate.
             </CheckboxRow>
@@ -470,9 +543,29 @@ export default function LegalSignaturePanel({
             )}
           </div>
 
+          {selectedOptionalRows.length > 0 && (
+            <div className="space-y-2 rounded-md border border-blue-500/20 bg-blue-500/10 p-4">
+              <p className="text-sm font-semibold text-foreground">Optional consent</p>
+              {selectedOptionalRows.map((row) => (
+                <CheckboxRow
+                  key={row.key}
+                  checked={optionalAffirmations[row.key] === true}
+                  onChange={(value) => setOptionalAffirmations((current) => ({ ...current, [row.key]: value }))}
+                >
+                  {row.label}
+                </CheckboxRow>
+              ))}
+            </div>
+          )}
+
           <div>
-            <div className="flex items-center justify-between gap-3">
-              <Label>Optional drawn signature</Label>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label>Optional signature drawing</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Your typed legal name above is your required electronic signature.
+                </p>
+              </div>
               <Button type="button" variant="ghost" size="sm" onClick={clearCanvas} className="h-7 text-xs">
                 Clear
               </Button>

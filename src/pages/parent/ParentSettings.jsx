@@ -49,6 +49,7 @@ const NOTIFICATION_PREFS = [
   { key: 'messages', label: 'New messages', sub: 'When a coach messages you or one of your athletes.' },
   { key: 'payments', label: 'Payments & receipts', sub: 'Payment receipts and credit updates.' },
   { key: 'marketing', label: 'Product news', sub: 'Occasional feature announcements.', defaultOff: true },
+  { key: 'marketing_sms', label: 'Marketing SMS/text', sub: 'Optional promotional texts. Consent is not required for purchase or platform use.', defaultOff: true },
 ];
 
 const RELATIONSHIPS = ['Parent', 'Guardian', 'Grandparent', 'Other family'];

@@ -329,8 +329,8 @@ export function ApplicationForm({
               />
               <label htmlFor="application-background-check" className="text-sm text-muted-foreground cursor-pointer">
                 I consent to a background check as part of the application process. * Review the{' '}
-                <Link to="/terms" className="text-accent underline">Terms of Service</Link> and{' '}
-                <Link to="/privacy" className="text-accent underline">Privacy Policy</Link>.
+                <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-accent underline">Universal Account Terms</Link> and{' '}
+                <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-accent underline">Privacy Notice</Link>.
               </label>
             </div>
             {errors.background_check_consent && <p className="mt-1 text-xs text-destructive">{errors.background_check_consent}</p>}

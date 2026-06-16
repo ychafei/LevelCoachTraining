@@ -626,7 +626,7 @@ async function legalPacketCompleteFor(db, profile, signerRole, athleteId) {
 
   const [templateRows, agreementRows] = await Promise.all([
     db.listDocuments(DB_ID, 'legal_templates', [
-      Query.equal('role', templateRole),
+      Query.equal('role', [templateRole, 'platform']),
       Query.equal('required', true),
       Query.limit(100),
     ]),
@@ -644,7 +644,7 @@ async function legalPacketCompleteFor(db, profile, signerRole, athleteId) {
     agreementRows.documents.some((agreement) =>
       agreementMatchesTemplate(agreement, template)
       // Guardian signings should bind to the athlete; accept legacy unbound rows.
-      && (signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
+      && (template.role === 'platform' || signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
     )
   );
 }

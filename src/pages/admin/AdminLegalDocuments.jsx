@@ -66,6 +66,16 @@ function templateActive(template) {
   return Number.isNaN(retiredMs) || retiredMs > Date.now();
 }
 
+function templateEffective(template) {
+  if (!template.effective_at) return true;
+  const effectiveMs = Date.parse(template.effective_at);
+  return Number.isNaN(effectiveMs) || effectiveMs <= Date.now();
+}
+
+function activeRequiredTemplate(template) {
+  return template.required === true && templateActive(template) && templateEffective(template);
+}
+
 function compactId(value) {
   return value ? String(value).slice(0, 10) : 'unknown';
 }
@@ -160,7 +170,7 @@ export default function AdminLegalDocuments() {
         legalTemplateRepo.list('-created_date').catch(() => []),
         legalAgreementRepo.list('-created_date').catch(() => []),
       ]);
-      setTemplates(templateRows);
+      setTemplates(templateRows.filter(activeRequiredTemplate));
       setAgreements(agreementRows);
     } finally {
       setLoading(false);
@@ -217,7 +227,7 @@ export default function AdminLegalDocuments() {
 
   const stats = useMemo(() => ({
     templates: templates.length,
-    requiredTemplates: templates.filter((template) => template.required && templateActive(template)).length,
+    requiredTemplates: templates.length,
     signed: agreements.filter((agreement) => agreement.status === 'signed').length,
     missingPdf: agreements.filter((agreement) => !agreement.pdf_file_id).length,
   }), [agreements, templates]);
@@ -369,7 +379,7 @@ export default function AdminLegalDocuments() {
         </div>
 
         <div className="mt-7 grid gap-3 sm:grid-cols-4">
-          <StatTile icon={FileText} label="Templates" value={stats.templates} hint={`${stats.requiredTemplates} required active`} />
+          <StatTile icon={FileText} label="Templates" value={stats.templates} hint={`${stats.requiredTemplates} active required`} />
           <StatTile icon={FileCheck2} label="Signed" value={stats.signed} hint="current and historical records" />
           <StatTile icon={ShieldAlert} label="Missing PDFs" value={stats.missingPdf} hint="needs generation/retry" />
           <StatTile icon={Filter} label="Filtered" value={filtered.length} hint="visible agreement rows" />
@@ -408,7 +418,7 @@ export default function AdminLegalDocuments() {
               <div>
                 <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Templates</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Edit unsigned templates in place. Signed templates save legal-text changes as a new version.
+                  Only active required forms are shown here. Signed templates save legal-text changes as a new version.
                 </p>
               </div>
               <Button size="sm" variant="outline" onClick={startCreateTemplate} className="h-8 text-xs">
@@ -417,7 +427,7 @@ export default function AdminLegalDocuments() {
             </div>
             <div className="divide-y divide-border">
               {templates.length === 0 && !loading && (
-                <p className="p-4 text-sm text-muted-foreground">No legal templates found.</p>
+                <p className="p-4 text-sm text-muted-foreground">No active required legal templates found.</p>
               )}
               {sortedTemplates.map((template) => {
                 const signedCount = agreementCountByTemplate.get(template.id) || 0;

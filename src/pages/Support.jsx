@@ -59,7 +59,7 @@ const QUICK_HELP = [
   },
   {
     title: 'Legal documents',
-    body: 'Terms of Service, Privacy Policy, and the waivers signed before training.',
+    body: 'Universal account terms, privacy notice, and the agreements signed before training.',
     icon: FileText,
     to: '/terms',
     label: 'Read the terms',

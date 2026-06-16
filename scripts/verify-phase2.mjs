@@ -19,6 +19,7 @@ for (const file of [
   'src/components/legal/LegalSignaturePanel.jsx',
   'src/pages/admin/AdminLegalDocuments.jsx',
   'src/lib/legalTemplateDefinitions.js',
+  'src/lib/legalDocumentText.js',
   'scripts/seed-legal-templates.mjs',
 ]) check(existsSync(join(root, file)), `Missing required Phase 2 file: ${file}`);
 
@@ -55,25 +56,26 @@ includes('src/pages/admin/AdminLegalDocuments.jsx', [
   'created_new_version',
 ]);
 
-// Full template packet with attorney-review marker on every body.
+// Full template packet generated from the Michigan v1.0 legal forms package.
 const templates = read('src/lib/legalTemplateDefinitions.js');
-check(templates.includes('ATTORNEY REVIEW REQUIRED'), 'legal templates must carry the attorney-review marker');
+const legalDocs = read('src/lib/legalDocumentText.js');
+const legalSources = `${templates}\n${legalDocs}`;
+check(templates.includes('live signable templates'), 'legal template seed must identify the live signable packet');
 for (const key of [
-  'platform_terms_privacy_ack',
-  'athlete_participation_waiver',
-  'athlete_medical_emergency',
-  'athlete_media_release',
-  'athlete_communication_safety',
-  'athlete_payment_terms',
-  'guardian_authority_minor_packet',
-  'guardian_medical_media_safety',
-  'guardian_payment_booking_consent',
-  'coach_independent_contractor_packet',
-  'coach_safeguarding_boundaries_packet',
-  'coach_communication_policy',
-  'organization_service_authority_packet',
-  'organization_roster_privacy_safety_packet',
-]) check(templates.includes(`'${key}'`), `legal templates missing ${key}`);
+  'platform_universal_account_terms_privacy_esign',
+  'adult_athlete_booking_agreement',
+  'parent_guardian_minor_athlete_agreement',
+  'coach_public_profile_agreement',
+  'organization_public_profile_agreement',
+]) check(legalSources.includes(key), `legal templates missing ${key}`);
+
+for (const file of [
+  'LevelCoach_Universal_Account_Terms_Privacy_Esign_Michigan_v1_0.docx',
+  'LevelCoach_Adult_Athlete_Booking_Agreement_Michigan_v1_0.docx',
+  'LevelCoach_Parent_Guardian_Minor_Athlete_Agreement_Michigan_v1_0.docx',
+  'LevelCoach_Coach_Public_Profile_Agreement_Michigan_v1_0.docx',
+  'LevelCoach_Organization_Public_Profile_Agreement_Michigan_v1_0.docx',
+]) check(existsSync(join(root, 'public/legal', file)), `Missing public legal download: ${file}`);
 
 // Seeder retires superseded versions so users never sign stale documents.
 includes('scripts/seed-legal-templates.mjs', ['retired_at']);
@@ -81,9 +83,9 @@ includes('scripts/seed-legal-templates.mjs', ['retired_at']);
 // Guardian signings can target a specific child in the UI.
 includes('src/components/legal/LegalSignaturePanel.jsx', ['athleteId']);
 
-// Public pages clearly mark placeholder status.
-includes('src/pages/Terms.jsx', ['ATTORNEY REVIEW']);
-includes('src/pages/Privacy.jsx', ['ATTORNEY REVIEW']);
+// Public pages expose the new universal account packet and privacy notice.
+includes('src/pages/Terms.jsx', ['Universal Account Terms', 'LEGAL_SIGNING_FLOW']);
+includes('src/pages/Privacy.jsx', ['Privacy Notice', 'platform_universal_account_terms_privacy_esign']);
 
 if (failures.length) {
   console.error('Phase 2 verification failed:');

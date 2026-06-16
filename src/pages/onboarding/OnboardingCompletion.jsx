@@ -234,6 +234,7 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
   const name = useMemo(() => splitName(user), [user]);
   const parsedBio = useMemo(() => parseAthleteBio(user?.bio), [user?.bio]);
   const savedLocation = useMemo(() => parseLocationLabel(user?.location_label), [user?.location_label]);
+  const notificationPrefs = useMemo(() => parseNotificationPrefs(user?.notification_prefs), [user?.notification_prefs]);
 
   const [form, setForm] = useState({
     first_name: name.first,
@@ -250,6 +251,9 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
     },
     locationDetail: savedLocation.detail,
     trainingGoal: parsedBio.trainingGoal,
+    termsAccepted: user?.terms_accepted === true,
+    marketingSms: notificationPrefs.marketing_sms === true,
+    mediaRelease: user?.media_release_accepted === true,
   });
   const [sportDetails, setSportDetails] = useState({
     sportKey: parsedBio.sportKey,
@@ -299,6 +303,7 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
     if (dobError) next.dob = dobError;
     if (validateLocation(form.location.city)) next.city = 'Training city is required.';
     if (!form.location.state) next.state = 'Select your state.';
+    if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
     Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
     if (guardianRequired) Object.assign(next, validateGuardianContact(guardian));
     setErrors(next);
@@ -334,6 +339,9 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
         parent_email: guardianRequired ? guardian.parentEmail.trim() : '',
         parent_phone: guardianRequired ? normalizePhoneForStorage(guardian.parentPhone) : '',
         parent_relationship: guardianRequired ? guardian.parentRelationship.trim() : '',
+        terms_accepted: true,
+        media_release_accepted: form.mediaRelease === true,
+        notification_prefs: notificationPrefsWithMarketingSms(user?.notification_prefs, form.marketingSms),
         location_label: buildLocationLabel(cityStateLabel, form.locationDetail),
         ...(hasCoords ? { location_lat: lat, location_lng: lng } : {}),
         bio: buildAthleteBio({
@@ -473,6 +481,17 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
         </div>
       )}
 
+      <div className="mt-5">
+        <LegalConsentRows
+          termsAccepted={form.termsAccepted}
+          marketingSms={form.marketingSms}
+          mediaRelease={form.mediaRelease}
+          errors={errors}
+          onChange={updateForm}
+          disabled={saving}
+        />
+      </div>
+
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
           {guardianRequired
@@ -501,12 +520,16 @@ const PARENT_STEPS = [
 
 function ParentOnboardingSteps({ user, onFinished }) {
   const name = useMemo(() => splitName(user), [user]);
-  const detailsAlreadySaved = user?.onboarding_role === 'parent' && !!user?.first_name && !!user?.phone;
+  const notificationPrefs = useMemo(() => parseNotificationPrefs(user?.notification_prefs), [user?.notification_prefs]);
+  const detailsAlreadySaved = user?.onboarding_role === 'parent' && !!user?.first_name && !!user?.phone && user?.terms_accepted === true;
   const [stage, setStage] = useState(detailsAlreadySaved ? 'athletes' : 'details');
   const [form, setForm] = useState({
     first_name: name.first,
     last_name: name.last,
     phone: user?.phone || '',
+    termsAccepted: user?.terms_accepted === true,
+    marketingSms: notificationPrefs.marketing_sms === true,
+    mediaRelease: user?.media_release_accepted === true,
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -531,6 +554,7 @@ function ParentOnboardingSteps({ user, onFinished }) {
     if (firstNameError) next.first_name = firstNameError;
     if (lastNameError) next.last_name = lastNameError;
     if (phoneError) next.phone = phoneError;
+    if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -542,6 +566,8 @@ function ParentOnboardingSteps({ user, onFinished }) {
         last_name: form.last_name.trim(),
         phone: normalizePhoneForStorage(form.phone),
         terms_accepted: true,
+        media_release_accepted: form.mediaRelease === true,
+        notification_prefs: notificationPrefsWithMarketingSms(user?.notification_prefs, form.marketingSms),
       });
       setStage('athletes');
     } catch (err) {
@@ -626,6 +652,16 @@ function ParentOnboardingSteps({ user, onFinished }) {
                 required
               />
             </div>
+            <div className="mt-5">
+              <LegalConsentRows
+                termsAccepted={form.termsAccepted}
+                marketingSms={form.marketingSms}
+                mediaRelease={form.mediaRelease}
+                errors={errors}
+                onChange={updateForm}
+                disabled={saving}
+              />
+            </div>
             <div className="mt-5 flex justify-end">
               <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
                 {saving ? 'Saving...' : 'Continue to athletes'}
@@ -702,6 +738,50 @@ function ParentOnboardingSteps({ user, onFinished }) {
   );
 }
 
+function LegalConsentRows({
+  termsAccepted,
+  marketingSms,
+  mediaRelease,
+  errors,
+  onChange,
+  disabled,
+}) {
+  return (
+    <div className="space-y-2">
+      <CheckboxRow
+        checked={termsAccepted}
+        onChange={(checked) => onChange('termsAccepted', checked)}
+        disabled={disabled}
+      >
+        I have read, understood, and agree to the{' '}
+        <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+          Universal Account Terms, Privacy Notice, and Electronic Signature Consent
+        </Link>{' '}
+        including the{' '}
+        <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+          Privacy Notice
+        </Link>
+        . <span className="text-red-600">*</span>
+      </CheckboxRow>
+      {errors.termsAccepted && <p className="text-xs font-semibold text-red-600">{errors.termsAccepted}</p>}
+      <CheckboxRow
+        checked={marketingSms}
+        onChange={(checked) => onChange('marketingSms', checked)}
+        disabled={disabled}
+      >
+        OPTIONAL: I consent to receive recurring marketing SMS/text messages from LevelCoach Training at the mobile number I provide. Consent is not a condition of purchase or use.
+      </CheckboxRow>
+      <CheckboxRow
+        checked={mediaRelease}
+        onChange={(checked) => onChange('mediaRelease', checked)}
+        disabled={disabled}
+      >
+        OPTIONAL: I authorize LevelCoach to use approved photos, videos, name, image, voice, likeness, testimonials, training content, and session media for LevelCoach marketing.
+      </CheckboxRow>
+    </div>
+  );
+}
+
 function RoleCard({ role, selected, onChoose }) {
   const Icon = role.icon;
   return (
@@ -717,6 +797,37 @@ function RoleCard({ role, selected, onChoose }) {
       <p className="mt-1 text-xs leading-5 text-slate-600">{role.body}</p>
     </button>
   );
+}
+
+function CheckboxRow({ checked, onChange, disabled, children }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-5 text-slate-600">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        disabled={disabled}
+        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+function parseNotificationPrefs(raw) {
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function notificationPrefsWithMarketingSms(raw, marketingSms) {
+  return { ...parseNotificationPrefs(raw), marketing_sms: marketingSms === true };
 }
 
 function Field({

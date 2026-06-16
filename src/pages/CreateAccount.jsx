@@ -184,6 +184,8 @@ export function AthleteSignup() {
     password: '',
     confirmPassword: '',
     terms: false,
+    marketingSms: false,
+    mediaRelease: false,
   });
   const [sportDetails, setSportDetails] = useState(EMPTY_SPORT_DETAILS);
   const [healthDetails, setHealthDetails] = useState(EMPTY_HEALTH);
@@ -259,7 +261,7 @@ export function AthleteSignup() {
     if (phoneError) next.phone = phoneError;
     if (validateLocation(form.location.city)) next.city = 'Training city is required.';
     if (!form.location.state) next.state = 'Select your state.';
-    if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
+    if (!form.terms) next.terms = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
 
     Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
 
@@ -299,6 +301,8 @@ export function AthleteSignup() {
         parent_phone: needsGuardian ? normalizePhoneForStorage(guardian.parentPhone) : '',
         parent_relationship: needsGuardian ? guardian.parentRelationship.trim() : '',
         terms_accepted: true,
+        media_release_accepted: form.mediaRelease === true,
+        notification_prefs: { marketing_sms: form.marketingSms === true },
         location_label: buildLocationLabel(cityStateLabel, form.locationDetail),
         ...(hasCoords ? { location_lat: lat, location_lng: lng } : {}),
         bio: buildAthleteBio({
@@ -632,16 +636,30 @@ export function AthleteSignup() {
                       onChange={(checked) => updateForm('terms', checked)}
                       disabled={submitting}
                     >
-                      I agree to the{' '}
-                      <Link to="/terms" className="font-semibold text-blue-700 hover:underline">
-                        Terms of Service
+                      I have read, understood, and agree to the{' '}
+                      <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Universal Account Terms, Privacy Notice, and Electronic Signature Consent
                       </Link>{' '}
-                      and{' '}
-                      <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
-                        Privacy Policy
+                      including the{' '}
+                      <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Privacy Notice
                       </Link>
                     </CheckboxRow>
                     {errors.terms && <p className="text-xs font-semibold text-red-600">{errors.terms}</p>}
+                    <CheckboxRow
+                      checked={form.marketingSms}
+                      onChange={(checked) => updateForm('marketingSms', checked)}
+                      disabled={submitting}
+                    >
+                      OPTIONAL: I consent to receive recurring marketing SMS/text messages from LevelCoach Training at the mobile number I provide. Consent is not a condition of purchase or use.
+                    </CheckboxRow>
+                    <CheckboxRow
+                      checked={form.mediaRelease}
+                      onChange={(checked) => updateForm('mediaRelease', checked)}
+                      disabled={submitting}
+                    >
+                      OPTIONAL: I authorize LevelCoach to use approved photos, videos, name, image, voice, likeness, testimonials, training content, and session media for LevelCoach marketing.
+                    </CheckboxRow>
                   </div>
 
                   {formError && (
@@ -695,6 +713,7 @@ export function ParentSignup() {
     confirmPassword: '',
     authority: false,
     terms: false,
+    marketingSms: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -738,7 +757,7 @@ export function ParentSignup() {
     if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
     if (!form.authority) next.authority = 'You must confirm you are the parent or legal guardian.';
-    if (!form.terms) next.terms = 'You must agree to the Terms of Service and Privacy Policy.';
+    if (!form.terms) next.terms = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -760,6 +779,7 @@ export function ParentSignup() {
         last_name: form.lastName.trim(),
         phone: normalizePhoneForStorage(form.phone),
         terms_accepted: true,
+        notification_prefs: { marketing_sms: form.marketingSms === true },
       });
       await refetchUser();
       const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'parent');
@@ -965,16 +985,23 @@ export function ParentSignup() {
                       onChange={(checked) => updateForm('terms', checked)}
                       disabled={submitting}
                     >
-                      I agree to the{' '}
-                      <Link to="/terms" className="font-semibold text-blue-700 hover:underline">
-                        Terms of Service
+                      I have read, understood, and agree to the{' '}
+                      <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Universal Account Terms, Privacy Notice, and Electronic Signature Consent
                       </Link>{' '}
-                      and{' '}
-                      <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
-                        Privacy Policy
+                      including the{' '}
+                      <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Privacy Notice
                       </Link>
                     </CheckboxRow>
                     {errors.terms && <p className="text-xs font-semibold text-red-600">{errors.terms}</p>}
+                    <CheckboxRow
+                      checked={form.marketingSms}
+                      onChange={(checked) => updateForm('marketingSms', checked)}
+                      disabled={submitting}
+                    >
+                      OPTIONAL: I consent to receive recurring marketing SMS/text messages from LevelCoach Training at the mobile number I provide. Consent is not a condition of purchase or use.
+                    </CheckboxRow>
                   </div>
 
                   {formError && (
@@ -1111,10 +1138,10 @@ function AuthFooter() {
 
         <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm">
           <Link to="/terms" className="text-slate-500 transition-colors hover:text-blue-700">
-            Terms of Service
+            Terms
           </Link>
           <Link to="/privacy" className="text-slate-500 transition-colors hover:text-blue-700">
-            Privacy Policy
+            Privacy Notice
           </Link>
           <Link to="/resources" className="text-slate-500 transition-colors hover:text-blue-700">
             Support

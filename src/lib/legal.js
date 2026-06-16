@@ -10,6 +10,11 @@ export const SIGNER_ROLE_TO_TEMPLATE_ROLE = {
   admin: 'admin',
 };
 
+function templateRolesForSigner(signerRole) {
+  const role = SIGNER_ROLE_TO_TEMPLATE_ROLE[signerRole] || signerRole;
+  return role ? [role, 'platform'] : [];
+}
+
 export function legalSignerRoleForUser(user) {
   if (!user) return '';
   if (['admin', 'super_admin', 'master_admin', 'master_admin_locked'].includes(user.role)) return 'admin';
@@ -32,9 +37,9 @@ function activeRequired(template) {
 }
 
 export async function listRequiredLegalTemplates(signerRole) {
-  const templateRole = SIGNER_ROLE_TO_TEMPLATE_ROLE[signerRole] || signerRole;
-  if (!templateRole) return [];
-  const rows = await legalTemplateRepo.filter({ role: templateRole }).catch(() => []);
+  const roles = templateRolesForSigner(signerRole);
+  if (roles.length === 0) return [];
+  const rows = await legalTemplateRepo.filter({ role: roles }).catch(() => []);
   return rows
     .filter(activeRequired)
     .sort((a, b) => `${a.template_key}:${a.version}`.localeCompare(`${b.template_key}:${b.version}`));
@@ -66,14 +71,14 @@ export async function getLegalPacketStatus({ user, signerRole, athleteId = '', c
   ]);
 
   const entity = { athleteId, coachId, organizationId };
-  const currentAgreements = agreements.filter((agreement) =>
-    agreement.signer_role === signerRole && matchesEntity(agreement, entity)
-  );
+  const currentAgreements = agreements.filter((agreement) => agreement.signer_role === signerRole);
 
   const signed = [];
   const missing = [];
   for (const template of templates) {
-    const agreement = currentAgreements.find((row) => agreementMatchesTemplate(row, template));
+    const agreement = currentAgreements.find((row) =>
+      agreementMatchesTemplate(row, template) && (template.role === 'platform' || matchesEntity(row, entity))
+    );
     if (agreement) signed.push({ template, agreement });
     else missing.push(template);
   }

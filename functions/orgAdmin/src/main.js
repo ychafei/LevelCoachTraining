@@ -828,15 +828,14 @@ function agreementMatchesTemplate(agreement, template) {
 async function orgLegalPacketComplete(databases, orgId) {
   const [templateRows, agreementRows, ownerRows] = await Promise.all([
     databases.listDocuments(DB_ID, 'legal_templates', [
-      Query.equal('role', 'organization'),
+      Query.equal('role', ['organization', 'platform']),
       Query.equal('required', true),
       Query.limit(100),
     ]),
     databases.listDocuments(DB_ID, 'legal_agreements', [
-      Query.equal('organization_id', orgId),
       Query.equal('signer_role', 'organization_admin'),
       Query.equal('status', 'signed'),
-      Query.limit(200),
+      Query.limit(500),
     ]),
     databases.listDocuments(DB_ID, 'organization_members', [
       Query.equal('organization_id', orgId),
@@ -850,7 +849,9 @@ async function orgLegalPacketComplete(databases, orgId) {
   if (templates.length === 0) return false;
   return templates.every((template) =>
     agreementRows.documents.some((agreement) =>
-      ownerProfileIds.has(agreement.signer_profile_id) && agreementMatchesTemplate(agreement, template)
+      ownerProfileIds.has(agreement.signer_profile_id)
+        && agreementMatchesTemplate(agreement, template)
+        && (template.role === 'platform' || agreement.organization_id === orgId)
     )
   );
 }

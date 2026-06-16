@@ -774,7 +774,7 @@ function agreementMatchesTemplate(agreement, template) {
 async function coachLegalPacketComplete(databases, profile, coach) {
   const [templateRows, agreementRows] = await Promise.all([
     databases.listDocuments(DB_ID, 'legal_templates', [
-      Query.equal('role', 'coach'),
+      Query.equal('role', ['coach', 'platform']),
       Query.equal('required', true),
       Query.limit(100),
     ]),
@@ -789,7 +789,7 @@ async function coachLegalPacketComplete(databases, profile, coach) {
   if (templates.length === 0) return false;
   return templates.every((template) =>
     agreementRows.documents.some((agreement) =>
-      (!agreement.coach_id || agreement.coach_id === coach.$id) && agreementMatchesTemplate(agreement, template)
+      (template.role === 'platform' || !agreement.coach_id || agreement.coach_id === coach.$id) && agreementMatchesTemplate(agreement, template)
     )
   );
 }

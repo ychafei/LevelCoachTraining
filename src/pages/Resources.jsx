@@ -59,7 +59,7 @@ const resourcesByAudience = {
       href: '/blog',
     },
     {
-      title: 'Terms of Service',
+      title: 'Terms',
       description: 'Booking, credits, cancellation windows, and conduct rules in plain language.',
       icon: FileText,
       href: '/terms',
@@ -91,7 +91,7 @@ const resourcesByAudience = {
       href: '/how-it-works',
     },
     {
-      title: 'Privacy Policy',
+      title: 'Privacy Notice',
       description: 'What we collect, how athlete data is protected, and your data rights.',
       icon: FileText,
       href: '/privacy',
@@ -168,8 +168,8 @@ const quickLinks = [
   { title: 'Find a coach', description: 'Search the marketplace', icon: Search, href: '/coaches' },
   { title: 'How getting paid works', description: 'Coach payouts via Stripe', icon: CreditCard, href: '/for-coaches#coach-pricing' },
   { title: 'Blog', description: 'Articles & updates', icon: BookOpen, href: '/blog' },
-  { title: 'Terms of Service', description: 'Platform rules', icon: FileText, href: '/terms' },
-  { title: 'Privacy Policy', description: 'Your data rights', icon: ShieldCheck, href: '/privacy' },
+  { title: 'Terms', description: 'Platform rules', icon: FileText, href: '/terms' },
+  { title: 'Privacy Notice', description: 'Your data rights', icon: ShieldCheck, href: '/privacy' },
 ];
 
 function ResourceCard({ resource }) {

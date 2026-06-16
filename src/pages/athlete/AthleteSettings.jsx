@@ -69,6 +69,7 @@ const NOTIFICATION_PREFS = [
   { key: 'coach_feedback', label: 'Coach feedback & homework', sub: 'When your coach shares notes or assigns work.' },
   { key: 'messages', label: 'New messages', sub: 'When your coach sends you a message.' },
   { key: 'marketing', label: 'Product news', sub: 'Occasional feature announcements.', defaultOff: true },
+  { key: 'marketing_sms', label: 'Marketing SMS/text', sub: 'Optional promotional texts. Consent is not required for purchase or platform use.', defaultOff: true },
 ];
 
 function parseNotificationPrefs(raw) {

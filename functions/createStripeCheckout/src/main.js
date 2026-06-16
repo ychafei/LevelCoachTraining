@@ -83,7 +83,8 @@ function activeRequired(template) {
   return true;
 }
 
-function matchesEntity(agreement, signerRole, profile) {
+function matchesEntity(agreement, signerRole, profile, template) {
+  if (template.role === 'platform') return true;
   if (signerRole === 'coach' && profile.coach_id && agreement.coach_id !== profile.coach_id) return false;
   if (signerRole === 'organization_admin' && profile.primary_organization_id && agreement.organization_id !== profile.primary_organization_id) return false;
   return true;
@@ -109,7 +110,7 @@ async function legalPacketComplete(db, profile, athleteId) {
 
   const [templateRows, agreementRows] = await Promise.all([
     db.listDocuments(DB_ID, 'legal_templates', [
-      Query.equal('role', templateRole),
+      Query.equal('role', [templateRole, 'platform']),
       Query.equal('required', true),
       Query.limit(100),
     ]),
@@ -125,10 +126,10 @@ async function legalPacketComplete(db, profile, athleteId) {
   if (templates.length === 0) return false;
   return templates.every((template) =>
     agreementRows.documents.some((agreement) =>
-      matchesEntity(agreement, signerRole, profile)
+      matchesEntity(agreement, signerRole, profile, template)
       && agreementMatchesTemplate(agreement, template)
       // Guardian signings should bind to the athlete; accept legacy unbound rows.
-      && (signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
+      && (template.role === 'platform' || signerRole !== 'guardian' || !athleteId || !agreement.athlete_id || agreement.athlete_id === athleteId)
     )
   );
 }

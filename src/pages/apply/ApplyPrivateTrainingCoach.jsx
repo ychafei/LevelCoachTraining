@@ -54,6 +54,8 @@ export default function ApplyPrivateTrainingCoach() {
     resumeUrl: '',
     backgroundCheckConsent: false,
     termsAccepted: false,
+    marketingSms: false,
+    mediaRelease: false,
     website: '', // honeypot — hidden from real users
   });
   const [sports, setSports] = useState([]);
@@ -161,7 +163,9 @@ export default function ApplyPrivateTrainingCoach() {
       next.resumeUrl = 'Use a full link, like https://…';
     }
     if (!form.backgroundCheckConsent) next.backgroundCheckConsent = 'Background check consent is required to apply.';
-    if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Terms of Service and Privacy Policy.';
+    if (!form.termsAccepted) {
+      next.termsAccepted = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -245,6 +249,8 @@ export default function ApplyPrivateTrainingCoach() {
             phone: normalizePhoneForStorage(form.phone),
             dob: form.dob,
             terms_accepted: true,
+            media_release_accepted: form.mediaRelease === true,
+            notification_prefs: notificationPrefsWithMarketingSms(fresh.notification_prefs, form.marketingSms),
           });
           await refetchUser();
         }
@@ -647,17 +653,31 @@ export default function ApplyPrivateTrainingCoach() {
                       onChange={(checked) => updateForm('termsAccepted', checked)}
                       disabled={submitting}
                     >
-                      I agree to the{' '}
-                      <Link to="/terms" className="font-semibold text-blue-700 hover:underline">
-                        Terms of Service
+                      I have read, understood, and agree to the{' '}
+                      <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Universal Account Terms, Privacy Notice, and Electronic Signature Consent
                       </Link>{' '}
-                      and{' '}
-                      <Link to="/privacy" className="font-semibold text-blue-700 hover:underline">
-                        Privacy Policy
+                      including the{' '}
+                      <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                        Privacy Notice
                       </Link>
                       . <span className="text-red-600">*</span>
                     </CheckboxRow>
                     {errors.termsAccepted && <p className="text-xs font-semibold text-red-600">{errors.termsAccepted}</p>}
+                    <CheckboxRow
+                      checked={form.marketingSms}
+                      onChange={(checked) => updateForm('marketingSms', checked)}
+                      disabled={submitting}
+                    >
+                      OPTIONAL: I consent to receive recurring marketing SMS/text messages from LevelCoach Training at the mobile number I provide. Consent is not a condition of purchase or use.
+                    </CheckboxRow>
+                    <CheckboxRow
+                      checked={form.mediaRelease}
+                      onChange={(checked) => updateForm('mediaRelease', checked)}
+                      disabled={submitting}
+                    >
+                      OPTIONAL: I authorize LevelCoach to use approved photos, videos, name, image, voice, likeness, testimonials, training content, and profile media for LevelCoach marketing.
+                    </CheckboxRow>
                   </div>
 
                   {formError && (
@@ -836,10 +856,10 @@ function AuthFooter() {
         </p>
         <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm">
           <Link to="/terms" className="text-slate-500 transition-colors hover:text-blue-700">
-            Terms of Service
+            Terms
           </Link>
           <Link to="/privacy" className="text-slate-500 transition-colors hover:text-blue-700">
-            Privacy Policy
+            Privacy Notice
           </Link>
           <Link to="/resources" className="text-slate-500 transition-colors hover:text-blue-700">
             Support
@@ -856,6 +876,21 @@ function splitFirstName(name) {
 
 function splitLastName(name) {
   return (name || '').trim().split(/\s+/).filter(Boolean).slice(1).join(' ');
+}
+
+function notificationPrefsWithMarketingSms(raw, marketingSms) {
+  let prefs = {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) prefs = parsed;
+    } catch {
+      prefs = {};
+    }
+  } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    prefs = raw;
+  }
+  return { ...prefs, marketing_sms: marketingSms === true };
 }
 
 function calculateAge(dob) {
