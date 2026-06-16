@@ -86,10 +86,17 @@ test('guest browsing: public routes render without a live Appwrite session', asy
 test('adult athlete booking: checkout requires published coach and exact checkout status', () => {
   const checkout = source('functions/createStripeCheckout/src/main.js');
   const book = source('src/pages/Book.jsx');
+  const athleteOverview = source('src/features/athlete/AthleteOverview.jsx');
+  const stripeWebhook = source('functions/stripeWebhook/src/main.js');
   assert(/coach\.is_active\s*!==\s*true\s*\|\|\s*coach\.published\s*!==\s*true/.test(checkout), 'checkout must reject unpublished coaches');
+  assert(checkout.includes('&coach_id=${encodeURIComponent(coach.$id)}'), 'checkout success URL must preserve coach_id');
   assert(checkout.includes("action === 'status'"), 'createStripeCheckout must expose status action');
   assert(book.includes("action: 'status'") && book.includes('checkout_session_id'), 'Book.jsx must poll exact checkout_session_id');
+  assert(book.includes('setConfirmedCoachId') && book.includes('creditCoachId(exactCredit)'), 'Book.jsx must keep the exact credit coach after Stripe return');
   assert(!book.includes('credits.find(c => remainingCredits(c) > 0 && c.payment_processor === \'stripe\')'), 'Book.jsx must not attach first arbitrary Stripe credit');
+  assert(athleteOverview.includes('creditBookHref') && athleteOverview.includes("params.set('credit_id'"), 'athlete portal must deep-link existing credits back into booking');
+  assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
+  assert(stripeWebhook.includes('sendPurchaseNotifications') && stripeWebhook.includes("type: 'payment_receipt'") && stripeWebhook.includes("type: 'credit_purchased'"), 'stripe webhook must notify buyer and coach when prepaid credit is purchased');
 });
 
 test('parent/minor booking: guardian consent must be exact-child bound', () => {

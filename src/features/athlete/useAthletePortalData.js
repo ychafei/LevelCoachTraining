@@ -52,6 +52,10 @@ export function creditsRemaining(credits) {
   return credits.reduce((sum, credit) => sum + creditRemainingCents(credit), 0);
 }
 
+export function creditCoachId(credit) {
+  return credit?.coach_id || credit?.original_coach_id || credit?.originating_coach_id || '';
+}
+
 // All sessions readable by the caller + the coaches they reference.
 export function useMySessions(user, athleteIds = []) {
   const queryClient = useQueryClient();
@@ -92,10 +96,20 @@ export function useMyCredits(user) {
     queryFn: () => sessionCreditRepo.list('-created_date'),
   });
   const credits = (query.data || []).filter((credit) => creditBelongsToViewer(credit, user));
+  const coachIds = [...new Set(credits.map(creditCoachId).filter(Boolean))];
+  const coachesQuery = useQuery({
+    queryKey: ['portal', 'creditCoaches', coachIds.join(',')],
+    enabled: coachIds.length > 0,
+    queryFn: () => coachRepo.filter({ id: coachIds }),
+  });
+  const coachesById = {};
+  for (const coach of coachesQuery.data || []) coachesById[coach.id] = coach;
   return {
     credits,
+    coachesById,
     remaining: creditsRemaining(credits),
     loading: query.isLoading && !!user?.id,
+    coachesLoading: coachesQuery.isLoading && coachIds.length > 0,
   };
 }
 

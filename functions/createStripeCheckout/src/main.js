@@ -667,7 +667,7 @@ export default async ({ req, res, error }) => {
       // Card only: a delayed-notification method (ACH/SEPA) could mint a credit
       // before funds settle. Pin to immediate-settlement cards.
       payment_method_types: ['card'],
-      success_url: `${appBaseUrl}/book?stripe_success=1&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appBaseUrl}/book?stripe_success=1&session_id={CHECKOUT_SESSION_ID}&coach_id=${encodeURIComponent(coach.$id)}`,
       cancel_url: `${appBaseUrl}/coaches`,
       client_reference_id: bookingReference,
       customer_email: profile.email,

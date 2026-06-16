@@ -160,6 +160,10 @@ function packageApplies(pkg, { sportKey = '' } = {}) {
   return true;
 }
 
+function creditCoachId(credit) {
+  return credit?.coach_id || credit?.original_coach_id || credit?.originating_coach_id || '';
+}
+
 export default function Book() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
@@ -180,10 +184,6 @@ export default function Book() {
     if (stripeCanceled) return null;
     try { return JSON.parse(sessionStorage.getItem('lc_booking') || 'null'); } catch { return null; }
   })();
-  const hasSelectedBookingContext = !!preCoachId
-    || !!preCreditId
-    || stripeSuccess === '1'
-    || !!saved?.coach?.id;
 
   const [step, setStep]                       = useState(Math.max(saved?.step ?? STEP_COACH, minStep));
   const [coach, setCoach]                     = useState(saved?.coach ? normalizePublicCoach(saved.coach) : null);
@@ -234,11 +234,22 @@ export default function Book() {
   const [sessionBooked, setSessionBooked]     = useState(false);
   const [lastBookedSession, setLastBookedSession] = useState(null);
   const [bookingError, setBookingError]       = useState('');
+  const [confirmedCoachId, setConfirmedCoachId] = useState('');
 
   // Guardian-managed athletes (family function). '' = booking for myself.
   const [familyAthletes, setFamilyAthletes]   = useState([]);
   const [selectedAthleteId, setSelectedAthleteId] = useState('');
   const [selectedSport, setSelectedSport] = useState(saved?.selectedSport || urlParams.get('sport') || '');
+  const activeCreditCoachId = creditCoachId(creditRecord || existingCredit);
+  const bookingCoachId = preCoachId || confirmedCoachId || activeCreditCoachId || saved?.coach?.id || '';
+  const hasSelectedBookingContext = !!preCoachId
+    || !!preCreditId
+    || stripeSuccess === '1'
+    || !!saved?.coach?.id
+    || paymentConfirmed
+    || skipToSchedule
+    || !!creditRecord
+    || !!existingCredit;
 
   // Legal gates. Checkout uses the profile-level signer role (mirrors
   // createStripeCheckout); credit booking mirrors the booking function:
@@ -314,16 +325,17 @@ export default function Book() {
     return () => { cancelled = true; };
   }, [coach?.id, coachOrgId, coachOrgName]);
 
-  // One-shot: pre-select coach from /coaches/:id "Book with this coach" link.
+  // One-shot: pre-select coach from /coaches/:id, a saved checkout intent, or
+  // the exact credit returned by the checkout status endpoint.
   useEffect(() => {
-    if (!preCoachId || coaches.length === 0) return;
-    const picked = coaches.find(c => c.id === preCoachId);
+    if (!bookingCoachId || coaches.length === 0) return;
+    const picked = coaches.find(c => c.id === bookingCoachId);
     if (!picked) return;
     setCoach(picked);
     setStep(prev => Math.max(prev, STEP_ATHLETE));
     // Intentionally not depending on `coach` so this only fires once per coach list load.
      
-  }, [preCoachId, coaches]);
+  }, [bookingCoachId, coaches]);
 
   // Availability: opaque busy ranges + bookable windows only — never sessions.
   const loadAvailability = useCallback(async (coachId) => {
@@ -364,6 +376,8 @@ export default function Book() {
       }
       setExistingCredit(active || null);
       setUseExistingCredit(!!active);
+      const activeCoachId = creditCoachId(active);
+      if (activeCoachId) setConfirmedCoachId(activeCoachId);
 
       // Arriving with a credit preselects that balance, but still walks through
       // sport/location/package so the selected coach price is clear before
@@ -407,6 +421,8 @@ export default function Book() {
       let cancelled = false;
       const url = new URL(window.location.href);
       const checkoutSessionId = url.searchParams.get('session_id') || '';
+      const successCoachId = url.searchParams.get('coach_id') || '';
+      if (successCoachId) setConfirmedCoachId(successCoachId);
       url.searchParams.delete('stripe_success');
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.pathname);
@@ -434,6 +450,8 @@ export default function Book() {
         }
         if (cancelled) return;
         if (exactCredit) {
+          const exactCoachId = creditCoachId(exactCredit);
+          if (exactCoachId) setConfirmedCoachId(exactCoachId);
           setExistingCredit(exactCredit);
           setUseExistingCredit(true);
           setCreditRecord(exactCredit);
@@ -1488,7 +1506,10 @@ export default function Book() {
                         coachId={coach?.id}
                         sessionDurationMinutes={duration?.minutes}
                         extraPayload={checkoutExtraPayload}
-                        onBeforeCheckout={ensureFlexiblePreferenceValid}
+                        onBeforeCheckout={async () => {
+                          await ensureFlexiblePreferenceValid();
+                          saveBookingIntent({ step: STEP_CHECKOUT });
+                        }}
                         disabled={!legalReadyForCheckout || !user.profile_setup_complete || !selectedPackage?.id || !coach?.id}
                       />
                     </div>
@@ -1521,6 +1542,10 @@ export default function Book() {
                         ...checkoutExtraPayload,
                         purpose: 'credit_top_up',
                         credit_id: existingCredit?.id,
+                      }}
+                      onBeforeCheckout={async () => {
+                        await ensureFlexiblePreferenceValid();
+                        saveBookingIntent({ step: STEP_CHECKOUT });
                       }}
                       disabled={!legalReadyForCheckout || !user?.profile_setup_complete || !selectedPackage?.id || !coach?.id || !existingCredit?.id}
                     />

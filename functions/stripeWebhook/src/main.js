@@ -171,6 +171,161 @@ async function createDocumentWithIdSafe(db, collection, id, data, permissions = 
   return db.createDocument(DB_ID, collection, id, data);
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatCents(amountCents, currency = 'usd') {
+  const amount = Number(amountCents);
+  if (!Number.isFinite(amount)) return '';
+  return (amount / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: String(currency || 'usd').toUpperCase(),
+  });
+}
+
+function appBaseUrl() {
+  return String(process.env.APP_BASE_URL || 'https://lctrainings.com').replace(/\/+$/, '');
+}
+
+function schedulePath(metadata, creditId) {
+  const params = new URLSearchParams();
+  if (metadata.coach_id) params.set('coach_id', metadata.coach_id);
+  if (creditId) params.set('credit_id', creditId);
+  const qs = params.toString();
+  return qs ? `/book?${qs}` : '/dashboard';
+}
+
+async function profileForAccount(db, accountId) {
+  if (!accountId) return null;
+  return firstDocument(db, 'profiles', [Query.equal('account_id', accountId)]).catch(() => null);
+}
+
+async function coachPrivateEmail(db, coachId) {
+  if (!coachId) return '';
+  const coachPriv = await firstDocument(db, 'coach_private', [Query.equal('coach_id', coachId)]).catch(() => null);
+  return coachPriv?.email || '';
+}
+
+async function notifyProfile(db, { profileId, accountId = '', type, title, body, link = '', data = {} }) {
+  if (!profileId) return;
+  const permissions = accountId
+    ? [
+      Permission.read(Role.user(accountId)),
+      Permission.update(Role.user(accountId)),
+    ]
+    : [];
+  await createDocumentSafe(db, 'notifications', {
+    recipient_profile_id: profileId,
+    recipient_account_id: accountId,
+    type,
+    title: String(title || '').slice(0, 200),
+    body: String(body || '').slice(0, 2000),
+    link: String(link || '').slice(0, 500),
+    read: false,
+    data: JSON.stringify(data).slice(0, 2000),
+  }, permissions).catch(() => {});
+}
+
+async function sendEmail({ to, subject, html }, error) {
+  try {
+    if (!process.env.RESEND_API_KEY || !to) return;
+    const from = process.env.EMAIL_FROM || 'LevelCoach Training <notifications@levelcoachtraining.com>';
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to, subject, html }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.message || `Resend returned ${response.status}`);
+    }
+  } catch (err) {
+    error?.(`[stripeWebhook] email send failed: ${err?.message || err}`);
+  }
+}
+
+async function sendPurchaseNotifications(db, session, paymentRecord, metadata, { creditId, amount, currency, isTopUp, error }) {
+  const link = schedulePath(metadata, creditId);
+  const fullLink = `${appBaseUrl()}${link}`;
+  const clientName = session.customer_details?.name || metadata.client_name || 'there';
+  const clientEmail = session.customer_details?.email || session.customer_email || metadata.client_email || '';
+  const coach = metadata.coach_id
+    ? await db.getDocument(DB_ID, 'coaches', metadata.coach_id).catch(() => null)
+    : null;
+  const coachName = metadata.coach_name
+    || [coach?.first_name, coach?.last_name].filter(Boolean).join(' ').trim()
+    || 'your coach';
+  const packageName = metadata.package_name || 'Training credit';
+  const amountLabel = formatCents(amount, currency);
+  const actionLabel = isTopUp ? 'top-up' : 'training credit';
+
+  await notifyProfile(db, {
+    profileId: metadata.client_profile_id || '',
+    accountId: metadata.client_account_id || '',
+    type: 'payment_receipt',
+    title: 'Payment received',
+    body: `${amountLabel} ${actionLabel} for ${packageName} is ready to schedule with ${coachName}.`,
+    link,
+    data: {
+      payment_record_id: paymentRecord.$id,
+      checkout_session_id: session.id,
+      credit_id: creditId || '',
+      coach_id: metadata.coach_id || '',
+    },
+  });
+
+  await sendEmail({
+    to: clientEmail,
+    subject: `LevelCoach receipt — ${amountLabel} ${packageName}`,
+    html: `
+      <p>Hi ${escapeHtml(clientName || 'there')},</p>
+      <p>We received your ${escapeHtml(amountLabel)} payment for <strong>${escapeHtml(packageName)}</strong>.</p>
+      <p>Your prepaid credit is ready to use with <strong>${escapeHtml(coachName)}</strong>.</p>
+      <p><a href="${escapeHtml(fullLink)}">Schedule your session</a></p>
+      <p>Card details are handled by Stripe; LevelCoach never stores your card number.</p>
+    `,
+  }, error);
+
+  if (!coach) return;
+  const coachAccountId = coach.user_id || coach.account_id || '';
+  const coachProfile = await profileForAccount(db, coachAccountId);
+  await notifyProfile(db, {
+    profileId: coachProfile?.$id || '',
+    accountId: coachAccountId,
+    type: 'credit_purchased',
+    title: 'New prepaid training credit',
+    body: `${clientName || 'An athlete'} purchased ${packageName}. They can now schedule with you.`,
+    link: '/coach/sessions',
+    data: {
+      payment_record_id: paymentRecord.$id,
+      checkout_session_id: session.id,
+      credit_id: creditId || '',
+      coach_id: coach.$id,
+      client_profile_id: metadata.client_profile_id || '',
+    },
+  });
+
+  const coachEmail = await coachPrivateEmail(db, coach.$id);
+  await sendEmail({
+    to: coachEmail,
+    subject: 'LevelCoach credit purchased',
+    html: `
+      <p>Hi ${escapeHtml(coach.first_name || 'Coach')},</p>
+      <p><strong>${escapeHtml(clientName || 'An athlete')}</strong> purchased <strong>${escapeHtml(packageName)}</strong>.</p>
+      <p>No session is on your calendar yet. You will receive a separate confirmation when they schedule a date and time.</p>
+    `,
+  }, error);
+}
+
 async function ensurePaymentRecord(db, session, paymentIntent) {
   const paymentIntentId = typeof session.payment_intent === 'string'
     ? session.payment_intent
@@ -352,7 +507,7 @@ async function writeAudit(db, entry) {
   await db.createDocument(DB_ID, 'audit_logs', ID.unique(), data).catch(() => {});
 }
 
-async function handleCheckoutCompleted(db, stripe, session) {
+async function handleCheckoutCompleted(db, stripe, session, error) {
   const paymentIntentId = typeof session.payment_intent === 'string'
     ? session.payment_intent
     : session.payment_intent?.id || '';
@@ -425,6 +580,16 @@ async function handleCheckoutCompleted(db, stripe, session) {
       metadata: JSON.stringify({ checkout_session_id: session.id }),
     }, clientReadGrant);
   }
+
+  await sendPurchaseNotifications(db, session, updated, metadata, {
+    creditId,
+    amount,
+    currency,
+    isTopUp,
+    error,
+  }).catch((err) => {
+    error?.(`[stripeWebhook] purchase notification failed: ${err?.message || err}`);
+  });
 }
 
 async function markPayment(db, lookup, status, data = {}) {
@@ -853,7 +1018,7 @@ export default async ({ req, res, error }) => {
     const object = event.data.object;
     let handled = true;
     if (event.type === 'checkout.session.completed') {
-      await handleCheckoutCompleted(db, stripe, object);
+      await handleCheckoutCompleted(db, stripe, object, error);
     } else if (event.type === 'checkout.session.async_payment_failed') {
       await markPayment(db, { checkoutSessionId: object.id }, 'failed', {
         failure_reason: 'async_payment_failed',

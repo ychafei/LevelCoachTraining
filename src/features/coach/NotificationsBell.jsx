@@ -116,6 +116,7 @@ export default function NotificationsBell({ buttonClassName = '' }) {
             <ul className="max-h-80 space-y-1 overflow-y-auto">
               {items.slice(0, 25).map((n) => {
                 const isOrgInvite = ORG_INVITE_TYPES.has(n.type);
+                const actionLabel = isOrgInvite ? 'Review invitation' : (n.link ? 'Open' : '');
                 return (
                   <li key={n.id} className="rounded-md px-2 py-2 hover:bg-secondary/60">
                     <div className="flex items-start gap-2">
@@ -129,13 +130,13 @@ export default function NotificationsBell({ buttonClassName = '' }) {
                         <p className="mt-0.5 text-[11px] text-muted-foreground/70">
                           {formatInstantInTz(n.created_date)}
                         </p>
-                        {isOrgInvite && (
+                        {actionLabel && (
                           <Link
                             to={n.link || ORG_INVITE_LINK}
                             onClick={() => setOpen(false)}
                             className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
                           >
-                            Review invitation
+                            {actionLabel}
                             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                           </Link>
                         )}

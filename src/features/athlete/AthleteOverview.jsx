@@ -14,13 +14,14 @@ import {
   MessageSquareQuote,
   NotebookPen,
   PartyPopper,
+  Receipt,
   ShieldCheck,
   Star,
   UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { notificationRepo } from '@/api/repo';
+import { notificationRepo, stripePaymentRecordRepo } from '@/api/repo';
 import { formatInTz, formatInstantInTz, formatRangeInTz } from '@/lib/scheduleET';
 import {
   EmptyState,
@@ -32,7 +33,12 @@ import {
   sessionStartMs,
   usd,
 } from '@/features/athlete/portalShared';
-import { creditRemainingCents, creditReservedCents, creditSpentCents } from '@/features/athlete/useAthletePortalData';
+import {
+  creditCoachId,
+  creditRemainingCents,
+  creditReservedCents,
+  creditSpentCents,
+} from '@/features/athlete/useAthletePortalData';
 
 function NextSessionCard({ sessions, coachesById, loading, onGoToSessions }) {
   const next = useMemo(() => {
@@ -89,7 +95,19 @@ function NextSessionCard({ sessions, coachesById, loading, onGoToSessions }) {
   );
 }
 
-function CreditsCard({ credits, remaining, loading }) {
+function creditBookHref(credit) {
+  const params = new URLSearchParams();
+  const coachId = creditCoachId(credit);
+  if (coachId) params.set('coach_id', coachId);
+  if (credit?.id) params.set('credit_id', credit.id);
+  return params.toString() ? `/book?${params.toString()}` : '/coaches';
+}
+
+function firstBookableCredit(credits) {
+  return credits.find((credit) => (credit.status || 'active') === 'active' && creditRemainingCents(credit) > 0) || null;
+}
+
+function CreditsCard({ credits, remaining, loading, coachesById }) {
   return (
     <SectionCard title="Session credits" icon={CreditCard}>
       {loading ? (
@@ -115,12 +133,13 @@ function CreditsCard({ credits, remaining, loading }) {
               const left = creditRemainingCents(credit);
               const reserved = creditReservedCents(credit);
               const spent = creditSpentCents(credit);
+              const coachName = coachDisplayName(coachesById[creditCoachId(credit)]);
               return (
                 <li key={credit.id} className="flex items-start justify-between gap-3 text-sm">
                   <span className="min-w-0">
                     <span className="block truncate text-muted-foreground">{credit.package_name || 'Training package'}</span>
                     <span className="block text-xs text-muted-foreground">
-                      {usd(reserved)} reserved · {usd(spent)} spent
+                      {coachName !== 'Coach' ? `${coachName} · ` : ''}{usd(reserved)} reserved · {usd(spent)} spent
                     </span>
                   </span>
                   <span className="shrink-0 font-semibold text-foreground">{usd(left)}</span>
@@ -128,9 +147,16 @@ function CreditsCard({ credits, remaining, loading }) {
               );
             })}
           </ul>
-          <Button asChild size="sm" variant="outline" className="mt-4 h-8 text-xs">
-            <Link to="/book">Buy more sessions</Link>
-          </Button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {firstBookableCredit(credits) && (
+              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                <Link to={creditBookHref(firstBookableCredit(credits))}>Book with credit</Link>
+              </Button>
+            )}
+            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+              <Link to="/coaches">Buy more sessions</Link>
+            </Button>
+          </div>
         </div>
       )}
     </SectionCard>
@@ -205,17 +231,24 @@ function NotificationsCard({ user }) {
                   {formatInstantInTz(notification.created_date)}
                 </p>
               </div>
-              {!notification.read && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0 text-xs text-accent"
-                  onClick={() => markRead(notification)}
-                  aria-label={`Mark "${notification.title || 'notification'}" as read`}
-                >
-                  Mark read
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {notification.link && (
+                  <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                    <Link to={notification.link}>Open</Link>
+                  </Button>
+                )}
+                {!notification.read && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-accent"
+                    onClick={() => markRead(notification)}
+                    aria-label={`Mark "${notification.title || 'notification'}" as read`}
+                  >
+                    Mark read
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -259,8 +292,55 @@ function FeedbackCard({ sessions, coachesById, loading }) {
   );
 }
 
+function PaymentHistoryCard({ user }) {
+  const query = useQuery({
+    queryKey: ['portal', 'athletePayments', user?.id],
+    enabled: !!user?.id,
+    queryFn: () => stripePaymentRecordRepo.list('-created_date').catch(() => []),
+  });
+  const payments = query.data || [];
+
+  return (
+    <SectionCard title="Payment history" icon={Receipt}>
+      {query.isLoading ? (
+        <SkeletonRows rows={2} />
+      ) : payments.length === 0 ? (
+        <EmptyState
+          icon={Receipt}
+          title="No payments on record"
+          body="Receipts for training packages will appear here after checkout."
+          compact
+        />
+      ) : (
+        <ul className="space-y-2">
+          {payments.slice(0, 6).map((payment) => {
+            const state = payment.state || payment.status || 'created';
+            const refunded = Number(payment.refunded_amount || 0);
+            return (
+              <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {Number.isFinite(Number(payment.amount)) ? usd(payment.amount) : 'Payment'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatInstantInTz(payment.created_date)}
+                    {refunded > 0 && ` · ${usd(refunded)} refunded`}
+                  </p>
+                </div>
+                <span className="rounded-full border border-border bg-secondary px-2 py-0.5 text-xs font-semibold capitalize text-muted-foreground">
+                  {String(state).replace(/_/g, ' ')}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
 // "What should I do next?" — every action below is derived from real state.
-function buildActions({ legalStatus, remaining, creditsLoaded, homework, sessions, reviewedSessionIds, goTab }) {
+function buildActions({ legalStatus, remaining, credits, creditCoachesById, creditsLoaded, homework, sessions, reviewedSessionIds, goTab }) {
   const actions = [];
 
   if (!legalStatus.loading && legalStatus.hasTemplates && !legalStatus.complete) {
@@ -301,12 +381,14 @@ function buildActions({ legalStatus, remaining, creditsLoaded, homework, session
       label: 'Browse coaches',
     });
   } else if (creditsLoaded && remaining > 0 && !hasUpcoming) {
+    const credit = firstBookableCredit(credits);
+    const coachName = coachDisplayName(creditCoachesById[creditCoachId(credit)]);
     actions.push({
       key: 'book',
       icon: CalendarDays,
-      title: 'Book your next session',
+      title: coachName !== 'Coach' ? `Book with ${coachName}` : 'Book your next session',
       body: `You have ${usd(remaining)} in credit ready to use. Get the next session on the calendar.`,
-      href: '/book',
+      href: credit ? creditBookHref(credit) : '/coaches',
       label: 'Book now',
     });
   }
@@ -378,6 +460,8 @@ export default function AthleteOverview({
   const actions = buildActions({
     legalStatus,
     remaining: creditsData.remaining,
+    credits: creditsData.credits,
+    creditCoachesById: creditsData.coachesById || {},
     creditsLoaded: !creditsData.loading,
     homework: trainingData.homework,
     sessions: sessionsData.sessions,
@@ -395,9 +479,15 @@ export default function AthleteOverview({
         loading={sessionsData.loading}
         onGoToSessions={() => goTab('sessions')}
       />
-      <CreditsCard credits={creditsData.credits} remaining={creditsData.remaining} loading={creditsData.loading} />
+      <CreditsCard
+        credits={creditsData.credits}
+        remaining={creditsData.remaining}
+        loading={creditsData.loading}
+        coachesById={creditsData.coachesById || {}}
+      />
       <NextActionsCard actions={actions} loading={actionsLoading} />
       <NotificationsCard user={user} />
+      <PaymentHistoryCard user={user} />
       <div className="lg:col-span-2">
         <FeedbackCard
           sessions={sessionsData.sessions}
