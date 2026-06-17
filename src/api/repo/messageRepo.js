@@ -21,6 +21,8 @@ export const messageRepo = {
     return res?.message ? mapDoc(res.message) : res?.message;
   },
 
+  markRead: (conversation_id) => callFn('messaging', { action: 'markRead', conversation_id }),
+
   // Start a new conversation — see conversationRepo.start for the richer
   // return shape; kept here too so messaging call sites have one import.
   startConversation: async (recipient) => {

@@ -146,6 +146,7 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
   const bookingFn = source('functions/booking/src/main.js');
   const reviewFn = source('functions/reviews/src/main.js');
   const provision = source('scripts/provision-appwrite.mjs');
+  const backfill = source('scripts/backfill-session-review-requests.mjs');
   const coachDetail = source('src/pages/CoachDetail.jsx');
   const coachReviews = source('src/pages/coach/CoachReviews.jsx');
   assert(prompt.includes('How was your session with') && prompt.includes('SESSION_FEEDBACK_OPTIONS'), 'post-session review prompt must ask for quick session feedback');
@@ -163,6 +164,8 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
   assert(reviewFn.includes("session.status !== 'completed'") && reviewFn.includes('You can only review your own sessions'), 'review function must remain completed-session and owner verified');
   assert(reviewFn.includes('session_feedback_key') && reviewFn.includes('session_feedback_other'), 'review function must persist quick feedback fields');
   assert(provision.includes('session_feedback_label') && provision.includes('session_feedback_other'), 'Appwrite schema must include feedback fields');
+  assert(backfill.includes('Backfill missing "How was your session?" prompts') && backfill.includes("session.status !== 'completed'"), 'review request backfill must exist and keep completed-session verification');
+  assert(backfill.includes('sessionHasReview') && backfill.includes('notificationExists') && backfill.includes('session_review_backfill_notice'), 'review backfill must be idempotent and notify coaches');
   assert(coachDetail.includes('Session feedback:') && coachReviews.includes('Session feedback:'), 'public coach profile and coach reviews page must display feedback');
 });
 

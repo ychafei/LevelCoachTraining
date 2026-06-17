@@ -246,6 +246,55 @@ async function sendAction(db, accountId, profile, payload, res) {
   return res.json({ message });
 }
 
+async function archiveAction(db, accountId, profile, payload, res) {
+  const conversationId = String(payload.conversation_id || '').trim();
+  const archived = payload.archived !== false;
+  if (!conversationId) return res.json({ error: 'conversation_id is required.' }, 400);
+
+  const conversation = await db.getDocument(DB_ID, 'conversations', conversationId).catch(() => null);
+  if (!conversation) return res.json({ error: 'Conversation not found.' }, 404);
+  if (!(await isParticipant(db, conversation, profile, accountId))) {
+    return res.json({ error: 'You are not a participant in this conversation.' }, 403);
+  }
+
+  // The current schema stores archive state on the conversation, so this is a
+  // whole-thread archive/unarchive rather than a per-user mailbox setting.
+  const updated = await db.updateDocument(DB_ID, 'conversations', conversationId, {
+    is_archived: archived,
+  });
+  return res.json({ conversation: updated });
+}
+
+async function markReadAction(db, accountId, profile, payload, res) {
+  const conversationId = String(payload.conversation_id || '').trim();
+  if (!conversationId) return res.json({ error: 'conversation_id is required.' }, 400);
+
+  const conversation = await db.getDocument(DB_ID, 'conversations', conversationId).catch(() => null);
+  if (!conversation) return res.json({ error: 'Conversation not found.' }, 404);
+  if (!(await isParticipant(db, conversation, profile, accountId))) {
+    return res.json({ error: 'You are not a participant in this conversation.' }, 403);
+  }
+
+  const email = String(profile.email || '').toLowerCase();
+  const rows = await db.listDocuments(DB_ID, 'messages', [
+    Query.equal('conversation_id', conversationId),
+    Query.limit(100),
+  ]).catch(() => ({ documents: [] }));
+
+  let updated = 0;
+  for (const message of rows.documents) {
+    if (sameEmail(message.sender_email, profile.email)) continue;
+    const readBy = (message.read_by || []).map((item) => String(item).toLowerCase());
+    if (readBy.includes(email)) continue;
+    const wrote = await db.updateDocument(DB_ID, 'messages', message.$id, {
+      read_by: [...new Set([...(message.read_by || []), profile.email].filter(Boolean))],
+    }).then(() => true).catch(() => false);
+    if (wrote) updated += 1;
+  }
+
+  return res.json({ updated });
+}
+
 async function reportAction(db, accountId, profile, payload, res) {
   const conversationId = String(payload.conversation_id || '').trim();
   const messageId = String(payload.message_id || '').trim();
@@ -324,6 +373,10 @@ export default async ({ req, res, error }) => {
         return await startAction(db, accountId, profile, payload, res);
       case 'send':
         return await sendAction(db, accountId, profile, payload, res);
+      case 'archive':
+        return await archiveAction(db, accountId, profile, payload, res);
+      case 'markRead':
+        return await markReadAction(db, accountId, profile, payload, res);
       case 'report':
         return await reportAction(db, accountId, profile, payload, res);
       case 'block':

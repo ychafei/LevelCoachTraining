@@ -15,6 +15,11 @@ export const conversationRepo = {
   filter: base.filter,
   get: base.get,
 
+  archive: async (conversation_id, archived = true) => {
+    const res = await callFn('messaging', { action: 'archive', conversation_id, archived });
+    return res?.conversation ? mapDoc(res.conversation) : res?.conversation;
+  },
+
   // Start (or reuse) a conversation with another member.
   // recipient: { recipient_profile_id?, coach_id?, first_message }
   // Returns { conversation, message }.
