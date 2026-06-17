@@ -143,6 +143,7 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
   const childDetail = source('src/features/parent/ChildDetail.jsx');
   const portalData = source('src/features/athlete/useAthletePortalData.js');
   const sessionsPanel = source('src/features/athlete/SessionsPanel.jsx');
+  const bookingFn = source('functions/booking/src/main.js');
   const reviewFn = source('functions/reviews/src/main.js');
   const provision = source('scripts/provision-appwrite.mjs');
   const coachDetail = source('src/pages/CoachDetail.jsx');
@@ -150,10 +151,15 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
   assert(prompt.includes('How was your session with') && prompt.includes('SESSION_FEEDBACK_OPTIONS'), 'post-session review prompt must ask for quick session feedback');
   assert(prompt.includes("feedback === 'other'") && prompt.includes('review-other'), 'Other feedback must open a required text box');
   assert(prompt.includes('firstPendingReviewSession') && prompt.includes("session.status === 'completed'"), 'auto prompt must target completed unreviewed sessions only');
+  assert(prompt.includes('reviewSessionById') && prompt.includes('onReviewConsumed'), 'review prompt must open direct review_session deep links exactly once');
   assert(athletePortal.includes('PostSessionReviewPrompt') && parentPortal.includes('PostSessionReviewPrompt'), 'adult and parent portal shells must mount the instant review prompt');
+  assert(athletePortal.includes("searchParams.get('review_session')") && parentPortal.includes("searchParams.get('review_session')"), 'athlete and parent portals must pass review_session deep links into the prompt');
   assert(parentPortal.includes('useMyReviewedSessionIds') && parentPortal.includes('reviewedSessionIds={reviewsData.reviewedSessionIds}'), 'parent portal must share reviewed state with child session review buttons');
   assert(portalData.includes('SESSION_REFRESH_MS') && portalData.includes('refetchInterval: SESSION_REFRESH_MS'), 'session data must refresh so coach-completed sessions can trigger the prompt without manual reload');
   assert(sessionsPanel.includes('ReviewSessionDialog') && sessionsPanel.includes('onReviewChanged'), 'manual session review button must use the same review dialog and refresh review state');
+  assert(bookingFn.includes('session_review_requested') && bookingFn.includes('requestClientSessionReview'), 'booking completion must create a client review notification/email');
+  assert(bookingFn.includes("newStatus === 'completed' && changedStatus"), 'review requests must only fire on the first completed transition');
+  assert(bookingFn.includes("params.set('review_session', sessionId)") && bookingFn.includes('Rate your session with'), 'completion review request must deep-link to the exact session review modal');
   assert(reviewFn.includes("session.status !== 'completed'") && reviewFn.includes('You can only review your own sessions'), 'review function must remain completed-session and owner verified');
   assert(reviewFn.includes('session_feedback_key') && reviewFn.includes('session_feedback_other'), 'review function must persist quick feedback fields');
   assert(provision.includes('session_feedback_label') && provision.includes('session_feedback_other'), 'Appwrite schema must include feedback fields');

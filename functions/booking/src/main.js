@@ -43,6 +43,10 @@ function callerAccountId(req) {
   return header(req, ['x-appwrite-user-id', 'X-Appwrite-User-Id', 'X-Appwrite-User-ID']);
 }
 
+function appBaseUrl() {
+  return String(process.env.APP_BASE_URL || 'https://www.lctrainings.com').replace(/\/+$/, '');
+}
+
 async function profileForAccount(db, accountId) {
   const rows = await db.listDocuments(DB_ID, 'profiles', [
     Query.equal('account_id', accountId),
@@ -744,7 +748,7 @@ function fullName(profile) {
   return [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || profile.email || 'Client';
 }
 
-async function notify(db, { accountId, profileId, type, title, message, data }) {
+async function notify(db, { accountId, profileId, type, title, message, link = '', data }) {
   if (!accountId) return;
   await createDocumentResilient(db, 'notifications', {
     recipient_account_id: accountId,
@@ -752,6 +756,7 @@ async function notify(db, { accountId, profileId, type, title, message, data }) 
     type,
     title: cleanText(title, 200),
     body: cleanText(message, 2000),
+    link: cleanText(link, 500),
     data: JSON.stringify(data || {}),
     read: false,
   }, [
@@ -839,6 +844,50 @@ async function sendSessionEventEmails(db, { session, coach, profile, subject, cl
   const coachEmail = await coachNotificationEmail(db, coach);
   if (coachEmail && coachHtml) {
     await sendEmail({ to: coachEmail, subject, html: coachHtml }, error);
+  }
+}
+
+function clientReviewPath(profile, sessionId) {
+  const role = String(profile?.onboarding_role || profile?.role || '').toLowerCase();
+  const path = role === 'parent' || role === 'guardian' ? '/parent' : '/athlete';
+  const params = new URLSearchParams();
+  params.set('tab', path === '/parent' ? 'family' : 'sessions');
+  params.set('review_session', sessionId);
+  return `${path}?${params.toString()}`;
+}
+
+async function requestClientSessionReview(db, { session, coach, profile, error }) {
+  const clientProfile = await clientProfileForSession(db, session, profile);
+  const clientEmail = clientProfile?.email || session.client_email || '';
+  const reviewPath = clientReviewPath(clientProfile, session.$id);
+  const reviewUrl = `${appBaseUrl()}${reviewPath}`;
+  const coachName = [coach?.first_name, coach?.last_name].filter(Boolean).join(' ') || 'your coach';
+
+  await notify(db, {
+    accountId: clientProfile?.account_id || '',
+    profileId: clientProfile?.$id || '',
+    type: 'session_review_requested',
+    title: `Rate your session with ${coachName}`,
+    message: `How was your session with ${coachName}? Leave a quick verified review to help other athletes choose the right coach.`,
+    link: reviewPath,
+    data: {
+      session_id: session.$id,
+      coach_id: session.coach_id,
+      review_session_id: session.$id,
+    },
+  });
+
+  if (clientEmail) {
+    await sendEmail({
+      to: clientEmail,
+      subject: `How was your session with ${coachName}?`,
+      html: `
+        <p>Hi there,</p>
+        <p>Your session with <strong>${escapeHtml(coachName)}</strong> is complete.</p>
+        <p>Please take a minute to rate the session and share a quick verified review. Your review helps other athletes and parents choose the right coach.</p>
+        <p><a href="${escapeHtml(reviewUrl)}">Rate your session with ${escapeHtml(coachName)}</a></p>
+      `,
+    }, error);
   }
 }
 
@@ -1945,6 +1994,7 @@ async function statusAction(db, users, accountId, profile, payload, newStatus, r
     return res.json({ session, duplicate: true });
   }
 
+  const changedStatus = session.status !== newStatus;
   const startMs = sessionStartMs(session, authority.coach);
   if (session.status !== newStatus && newStatus !== 'late_cancelled_chargeable' && startMs !== null && startMs > Date.now() && !authority.isAdmin) {
     return res.json({ error: 'Sessions can only be finalized after their scheduled start time.' }, 400);
@@ -1963,6 +2013,14 @@ async function statusAction(db, users, accountId, profile, payload, newStatus, r
     payment_state: 'released',
     payout_state: payout.payout_state,
   });
+  if (newStatus === 'completed' && changedStatus) {
+    await requestClientSessionReview(db, {
+      session: updated,
+      coach: authority.coach,
+      profile,
+      error,
+    });
+  }
   return res.json({ session: updated });
 }
 

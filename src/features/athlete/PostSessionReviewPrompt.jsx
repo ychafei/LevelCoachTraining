@@ -40,6 +40,17 @@ function firstPendingReviewSession(sessions, reviewedIds, dismissedIds) {
     .sort((a, b) => (sessionStartMs(b) ?? 0) - (sessionStartMs(a) ?? 0))[0] || null;
 }
 
+function reviewSessionById(sessions, reviewSessionId, reviewedIds, dismissedIds) {
+  const id = String(reviewSessionId || '');
+  if (!id) return null;
+  return sessions.find((session) => (
+    session.id === id
+    && session.status === 'completed'
+    && !reviewedIds.has(session.id)
+    && !dismissedIds.has(session.id)
+  )) || null;
+}
+
 export function ReviewSessionDialog({
   open,
   session,
@@ -185,6 +196,8 @@ export default function PostSessionReviewPrompt({
   coachesById = {},
   reviewedSessionIds = null,
   loading = false,
+  reviewSessionId = '',
+  onReviewConsumed = () => {},
   onChanged = () => {},
 }) {
   const [reviewTarget, setReviewTarget] = useState(null);
@@ -196,15 +209,24 @@ export default function PostSessionReviewPrompt({
     [reviewedSessionIds, localReviewedIds],
   );
 
+  const directReviewSession = useMemo(() => {
+    if (reviewedSessionIds === null) return null;
+    return reviewSessionById(sessions, reviewSessionId, reviewedIds, dismissedIds);
+  }, [dismissedIds, reviewedIds, reviewSessionId, sessions]);
+
   const pendingSession = useMemo(() => {
     if (reviewedSessionIds === null) return null;
+    if (directReviewSession) return directReviewSession;
     return firstPendingReviewSession(sessions, reviewedIds, dismissedIds);
-  }, [dismissedIds, reviewedIds, reviewedSessionIds, sessions]);
+  }, [directReviewSession, dismissedIds, reviewedIds, reviewedSessionIds, sessions]);
 
   useEffect(() => {
     if (loading || reviewTarget || !pendingSession) return;
     setReviewTarget(pendingSession);
-  }, [loading, pendingSession, reviewTarget]);
+    if (reviewSessionId && pendingSession.id === reviewSessionId) {
+      onReviewConsumed();
+    }
+  }, [loading, onReviewConsumed, pendingSession, reviewSessionId, reviewTarget]);
 
   const handleOpenChange = (open) => {
     if (open) return;

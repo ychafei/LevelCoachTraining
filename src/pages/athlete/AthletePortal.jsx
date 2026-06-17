@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -34,6 +34,7 @@ export default function AthletePortal() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
   const tab = TABS.some((t) => t.value === rawTab) ? rawTab : 'overview';
+  const reviewSessionId = searchParams.get('review_session') || '';
 
   const goTab = (next) => {
     setSearchParams((params) => {
@@ -42,6 +43,14 @@ export default function AthletePortal() {
       return copy;
     });
   };
+
+  const consumeReviewSession = useCallback(() => {
+    setSearchParams((params) => {
+      const copy = new URLSearchParams(params);
+      copy.delete('review_session');
+      return copy;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const athlete = useMyAthlete(user);
   const sessionsData = useMySessions(user, athlete.athleteIds);
@@ -69,6 +78,8 @@ export default function AthletePortal() {
           coachesById={sessionsData.coachesById}
           reviewedSessionIds={reviewedSessionIds}
           loading={sessionsData.loading || sessionsData.coachesLoading || reviewsData.loading}
+          reviewSessionId={reviewSessionId}
+          onReviewConsumed={consumeReviewSession}
           onChanged={() => {
             reviewsData.refresh();
             sessionsData.refresh();

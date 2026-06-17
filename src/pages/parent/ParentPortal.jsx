@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Settings, ShieldCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ export default function ParentPortal() {
   const rawTab = searchParams.get('tab');
   const tab = TABS.some((t) => t.value === rawTab) ? rawTab : 'family';
   const childId = searchParams.get('child') || '';
+  const reviewSessionId = searchParams.get('review_session') || '';
 
   const family = useFamily(user);
   const sessionsData = useMySessions(user, family.childIds);
@@ -57,6 +58,14 @@ export default function ParentPortal() {
 
   const goTab = (next) => setParams({ tab: next, child: '' });
   const viewChild = (child) => setParams({ tab: 'family', child: child.id });
+
+  const consumeReviewSession = useCallback(() => {
+    setSearchParams((params) => {
+      const copy = new URLSearchParams(params);
+      copy.delete('review_session');
+      return copy;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const selectedChild = family.children.find((child) => child.id === childId) || null;
   const name = greetingName(user);
@@ -135,6 +144,8 @@ export default function ParentPortal() {
           coachesById={sessionsData.coachesById}
           reviewedSessionIds={reviewsData.reviewedSessionIds}
           loading={sessionsData.loading || sessionsData.coachesLoading || reviewsData.loading}
+          reviewSessionId={reviewSessionId}
+          onReviewConsumed={consumeReviewSession}
           onChanged={() => {
             reviewsData.refresh();
             sessionsData.refresh();
