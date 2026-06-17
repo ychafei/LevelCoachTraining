@@ -27,6 +27,7 @@
     "test:launch": "npm run test:e2e",
     "verify:all": "npm run phase0:verify && npm run phase1:verify && npm run phase2:verify && npm run phase3:verify && npm run phase4:verify && npm run phase5:verify && npm run phase6:verify && npm run phase7:verify && npm run phase8:verify",
     "sitemap": "node scripts/generate-sitemap.mjs",
+    "build:vercel": "vite build && node scripts/generate-sitemap.mjs",
     "build:seo": "vite build && node scripts/generate-sitemap.mjs && node scripts/prerender.mjs"
   },
   "dependencies": {
