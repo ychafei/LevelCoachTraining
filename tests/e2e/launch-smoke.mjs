@@ -139,7 +139,9 @@ test('coach portal: reviews have a dedicated route', () => {
 test('post-session reviews: completed clients are prompted and reviews stay verified', () => {
   const prompt = source('src/features/athlete/PostSessionReviewPrompt.jsx');
   const athletePortal = source('src/pages/athlete/AthletePortal.jsx');
+  const parentPortal = source('src/pages/parent/ParentPortal.jsx');
   const childDetail = source('src/features/parent/ChildDetail.jsx');
+  const portalData = source('src/features/athlete/useAthletePortalData.js');
   const sessionsPanel = source('src/features/athlete/SessionsPanel.jsx');
   const reviewFn = source('functions/reviews/src/main.js');
   const provision = source('scripts/provision-appwrite.mjs');
@@ -148,7 +150,9 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
   assert(prompt.includes('How was your session with') && prompt.includes('SESSION_FEEDBACK_OPTIONS'), 'post-session review prompt must ask for quick session feedback');
   assert(prompt.includes("feedback === 'other'") && prompt.includes('review-other'), 'Other feedback must open a required text box');
   assert(prompt.includes('firstPendingReviewSession') && prompt.includes("session.status === 'completed'"), 'auto prompt must target completed unreviewed sessions only');
-  assert(athletePortal.includes('PostSessionReviewPrompt') && childDetail.includes('PostSessionReviewPrompt'), 'adult and parent portals must mount the instant review prompt');
+  assert(athletePortal.includes('PostSessionReviewPrompt') && parentPortal.includes('PostSessionReviewPrompt'), 'adult and parent portal shells must mount the instant review prompt');
+  assert(parentPortal.includes('useMyReviewedSessionIds') && parentPortal.includes('reviewedSessionIds={reviewsData.reviewedSessionIds}'), 'parent portal must share reviewed state with child session review buttons');
+  assert(portalData.includes('SESSION_REFRESH_MS') && portalData.includes('refetchInterval: SESSION_REFRESH_MS'), 'session data must refresh so coach-completed sessions can trigger the prompt without manual reload');
   assert(sessionsPanel.includes('ReviewSessionDialog') && sessionsPanel.includes('onReviewChanged'), 'manual session review button must use the same review dialog and refresh review state');
   assert(reviewFn.includes("session.status !== 'completed'") && reviewFn.includes('You can only review your own sessions'), 'review function must remain completed-session and owner verified');
   assert(reviewFn.includes('session_feedback_key') && reviewFn.includes('session_feedback_other'), 'review function must persist quick feedback fields');

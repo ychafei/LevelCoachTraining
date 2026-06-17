@@ -5,6 +5,8 @@ import { coachRepo, coachReviewRepo, sessionCreditRepo, sessionRepo, trainingRep
 // per-document permissions already scope results to the caller, the extra
 // client-side filters below are defense-in-depth + relevance filtering only.
 
+const SESSION_REFRESH_MS = 15000;
+
 function sameEmail(a, b) {
   return !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
 }
@@ -64,6 +66,8 @@ export function useMySessions(user, athleteIds = []) {
     queryKey: ['portal', 'sessions', user?.id],
     enabled: !!user?.id,
     queryFn: () => sessionRepo.list('-starts_at_utc'),
+    refetchInterval: SESSION_REFRESH_MS,
+    refetchOnWindowFocus: true,
   });
 
   const sessions = (sessionsQuery.data || []).filter(

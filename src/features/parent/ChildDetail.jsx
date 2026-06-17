@@ -13,9 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { callFn } from '@/lib/rpc';
 import { CANCEL_POLICY_COPY } from '@/lib/policies';
-import { useMyReviewedSessionIds, useMySessions, useMyTraining } from '@/features/athlete/useAthletePortalData';
+import { useMySessions, useMyTraining } from '@/features/athlete/useAthletePortalData';
 import AthleteTraining from '@/features/athlete/AthleteTraining';
-import PostSessionReviewPrompt from '@/features/athlete/PostSessionReviewPrompt';
 import SessionsPanel from '@/features/athlete/SessionsPanel';
 import ChildForm from '@/features/parent/ChildForm';
 import { sportDisplayName, sportIconFor } from '@/features/athlete/sportMeta';
@@ -137,12 +136,18 @@ function EmergencyCard({ child, onEdit }) {
   );
 }
 
-export default function ChildDetail({ user, child, link, onBack, onFamilyChanged }) {
+export default function ChildDetail({
+  user,
+  child,
+  link,
+  onBack,
+  onFamilyChanged,
+  reviewedSessionIds = null,
+  onReviewChanged = () => {},
+}) {
   const [editOpen, setEditOpen] = useState(false);
   const sessionsData = useMySessions(user, [child.id]);
   const trainingData = useMyTraining(user, [child.id]);
-  const reviewsData = useMyReviewedSessionIds(user);
-  const { reviewedSessionIds } = reviewsData;
 
   const childSessions = sessionsData.sessions.filter((session) => session.athlete_id === child.id);
   const age = ageFromDob(child.dob);
@@ -151,17 +156,6 @@ export default function ChildDetail({ user, child, link, onBack, onFamilyChanged
 
   return (
     <div className="space-y-4">
-      <PostSessionReviewPrompt
-        sessions={childSessions}
-        coachesById={sessionsData.coachesById}
-        reviewedSessionIds={reviewedSessionIds}
-        loading={sessionsData.loading || sessionsData.coachesLoading || reviewsData.loading}
-        onChanged={() => {
-          reviewsData.refresh();
-          sessionsData.refresh();
-        }}
-      />
-
       <div>
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground" onClick={onBack}>
           <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> All athletes
@@ -204,7 +198,7 @@ export default function ChildDetail({ user, child, link, onBack, onFamilyChanged
           loading={sessionsData.loading}
           onChanged={sessionsData.refresh}
           reviewedSessionIds={reviewedSessionIds}
-          onReviewChanged={reviewsData.refresh}
+          onReviewChanged={onReviewChanged}
           canManage
           emptyUpcoming={(
             <EmptyState

@@ -14,13 +14,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { greetingName } from '@/lib/displayName';
 import { useFamily } from '@/features/parent/useFamily';
 import { useGuardianLegal } from '@/features/parent/useGuardianLegal';
-import { useMySessions } from '@/features/athlete/useAthletePortalData';
+import { useMyReviewedSessionIds, useMySessions } from '@/features/athlete/useAthletePortalData';
 import FamilyDashboard from '@/features/parent/FamilyDashboard';
 import ChildDetail from '@/features/parent/ChildDetail';
 import FamilyCalendar from '@/features/parent/FamilyCalendar';
 import FamilyPayments from '@/features/parent/FamilyPayments';
 import FamilyMessages from '@/features/parent/FamilyMessages';
 import ParentDocuments from '@/features/parent/ParentDocuments';
+import PostSessionReviewPrompt from '@/features/athlete/PostSessionReviewPrompt';
 import { SkeletonCard } from '@/features/athlete/portalShared';
 
 const TABS = [
@@ -40,6 +41,7 @@ export default function ParentPortal() {
 
   const family = useFamily(user);
   const sessionsData = useMySessions(user, family.childIds);
+  const reviewsData = useMyReviewedSessionIds(user);
   const guardianLegal = useGuardianLegal(user, family.childIds);
 
   const setParams = (updates) => {
@@ -128,6 +130,17 @@ export default function ParentPortal() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <PostSessionReviewPrompt
+          sessions={sessionsData.sessions}
+          coachesById={sessionsData.coachesById}
+          reviewedSessionIds={reviewsData.reviewedSessionIds}
+          loading={sessionsData.loading || sessionsData.coachesLoading || reviewsData.loading}
+          onChanged={() => {
+            reviewsData.refresh();
+            sessionsData.refresh();
+          }}
+        />
+
         <Tabs value={tab} onValueChange={goTab} className="mt-6">
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <TabsList className="h-auto w-max gap-1 bg-secondary/40 p-1">
@@ -149,6 +162,8 @@ export default function ParentPortal() {
                 link={family.linkByAthleteId[selectedChild.id] || null}
                 onBack={() => setParams({ child: '' })}
                 onFamilyChanged={family.refresh}
+                reviewedSessionIds={reviewsData.reviewedSessionIds}
+                onReviewChanged={reviewsData.refresh}
               />
             ) : (
               <FamilyDashboard
