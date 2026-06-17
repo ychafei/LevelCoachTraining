@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   GraduationCap,
+  Heart,
   MapPin,
   RefreshCcw,
   Search,
@@ -33,6 +34,8 @@ import { pricingPackageRepo } from '@/api/repo';
 import SelectMenu from '@/components/forms/SelectMenu';
 import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
+import { useAuth } from '@/lib/AuthContext';
+import { savedCoachIdsFromPrefs } from '@/lib/savedCoachPrefs';
 
 const PAGE_SIZE = 12;
 const RADII = ['10', '15', '25', '50', '100'];
@@ -171,6 +174,12 @@ export default function CoachSearch() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const { isAuthenticated, user } = useAuth();
+  const savedCoachIds = useMemo(
+    () => new Set(savedCoachIdsFromPrefs(user?.notification_prefs)),
+    [user?.notification_prefs],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,6 +202,12 @@ export default function CoachSearch() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (showSavedOnly && (!isAuthenticated || savedCoachIds.size === 0)) {
+      setShowSavedOnly(false);
+    }
+  }, [isAuthenticated, savedCoachIds, showSavedOnly]);
 
   // Keep state in sync when the URL changes (back/forward, inbound links).
   useEffect(() => {
@@ -244,6 +259,7 @@ export default function CoachSearch() {
     const priceBand = PRICE_BANDS.find((band) => band.value === filters.price);
 
     const matchAt = (radius) => models.filter(({ coach, model, haystack }) => {
+      if (showSavedOnly && !savedCoachIds.has(String(coach.id))) return false;
       if (sport) {
         const sportTerms = coach.sports.map((s) => String(s).toLowerCase());
         const matchesSport = sportTerms.includes(sport.sport_key)
@@ -309,7 +325,7 @@ export default function CoachSearch() {
     }
 
     return { rows: sorted, baseRadius, effectiveRadius, expanded };
-  }, [models, filters, activePlace]);
+  }, [models, filters, activePlace, showSavedOnly, savedCoachIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.rows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -494,7 +510,23 @@ export default function CoachSearch() {
                   : 'Across all locations'}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {isAuthenticated && (
+              <Button
+                type="button"
+                variant={showSavedOnly ? 'default' : 'outline'}
+                disabled={savedCoachIds.size === 0}
+                onClick={() => setShowSavedOnly((value) => !value)}
+                className={`inline-flex h-11 rounded-lg px-4 text-sm font-extrabold ${
+                  showSavedOnly
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700'
+                    : 'border-slate-200 bg-white text-slate-800 hover:bg-blue-50'
+                }`}
+              >
+                <Heart className={`h-4 w-4 ${showSavedOnly ? 'fill-white text-white' : 'text-blue-600'}`} aria-hidden="true" />
+                Saved coaches ({savedCoachIds.size})
+              </Button>
+            )}
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
               <span>Sort</span>
               <SelectMenu

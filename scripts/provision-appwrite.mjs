@@ -383,6 +383,7 @@ async function provisionCoaches() {
   await attrInt('coaches',    'platform_fee_bps');                       // nullable admin override (basis points)
   await attrString('coaches', 'intro_video_url', 1000);
   await attrInt('coaches',    'price_hint_cents');
+  await attrDatetime('coaches', 'last_active_at');
 
   await waitAttributesReady('coaches');
   await ensureIndex('coaches', 'idx_is_active',     'key', ['is_active']);

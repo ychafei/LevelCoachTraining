@@ -256,16 +256,19 @@ const PROFILE_FIELDS = {
 // value still on the coach doc during the transition. Never returns another
 // coach's private data — `coach` is already resolved to the caller.
 async function getSelf(databases, coach) {
+  const activeCoach = await updateDocumentResilient(databases, 'coaches', coach.$id, {
+    last_active_at: new Date().toISOString(),
+  }).catch(() => coach);
   const priv = await getCoachPrivate(databases, coach.$id);
   return {
     status: 200,
     body: {
       ok: true,
       coach: {
-        ...coach,
-        email: priv?.email ?? coach.email ?? '',
-        email_verified_at: priv?.email_verified_at ?? coach.email_verified_at ?? null,
-        phone: priv?.phone ?? coach.phone ?? '',
+        ...activeCoach,
+        email: priv?.email ?? activeCoach.email ?? '',
+        email_verified_at: priv?.email_verified_at ?? activeCoach.email_verified_at ?? null,
+        phone: priv?.phone ?? activeCoach.phone ?? '',
       },
     },
   };

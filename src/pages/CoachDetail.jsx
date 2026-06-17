@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Star,
   Target,
+  Trophy,
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { callFn } from '@/lib/rpc';
 import { coachReviewRepo, pricingPackageRepo } from '@/api/repo';
 import {
   coachBookHref,
+  coachIntroEmbedUrl,
   formatAvailabilityTime,
   normalizePublicCoach,
   publicCoachDisplay,
@@ -28,6 +30,7 @@ import {
 import { CANCEL_POLICY_COPY } from '@/lib/policies';
 import { recurringWindowsByDay, timezoneAbbreviation } from '@/lib/scheduleET';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
+import { BookCoachButton, CoachActionPanel } from '@/components/public/CoachActionControls';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 
 const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
@@ -74,6 +77,51 @@ function packagePriceCents(pkg) {
 
 function formatCents(cents) {
   return `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function IntroVideo({ model }) {
+  if (!model?.introVideoUrl) return null;
+  const embedUrl = coachIntroEmbedUrl(model.introVideoUrl);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
+      <div className="aspect-video w-full">
+        {embedUrl ? (
+          <iframe
+            title={`${model.displayName} intro video`}
+            src={embedUrl}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="font-display text-xl font-bold text-white">{model.firstName}'s intro video</p>
+            <a
+              href={model.introVideoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-white px-4 py-2 text-sm font-extrabold text-blue-700 hover:bg-blue-50"
+            >
+              Open video
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HeroMetric({ label, value, icon: Icon }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+        <Icon className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-extrabold text-slate-950">{value}</p>
+    </div>
+  );
 }
 
 export default function CoachDetail() {
@@ -244,7 +292,9 @@ export default function CoachDetail() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <IntroVideo model={model} />
+
+              <div className={`flex flex-col gap-5 sm:flex-row sm:items-start ${model.introVideoUrl ? 'mt-5' : ''}`}>
                 <CoachAvatar coach={coach} size="xl" className="sm:mt-1" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -260,6 +310,10 @@ export default function CoachDetail() {
                         {model.locationLabel}
                       </span>
                     )}
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                      <span className={`h-2.5 w-2.5 rounded-full ${model.recentlyActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                      {model.recentlyActive ? 'Active in the last 24 hours' : 'No recent activity signal'}
+                    </span>
                   </div>
 
                   <h1 className="mt-4 font-display text-4xl font-bold leading-tight tracking-normal text-slate-950 sm:text-5xl">
@@ -296,6 +350,17 @@ export default function CoachDetail() {
                         {String(tag).replace(/_/g, ' ')}
                       </span>
                     ))}
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <HeroMetric
+                      icon={Star}
+                      label="Rating"
+                      value={ratingAvg > 0 ? `${ratingAvg.toFixed(1)} (${reviewCount})` : 'New'}
+                    />
+                    <HeroMetric icon={Trophy} label="Sessions" value={model.sessionsTaughtLabel} />
+                    <HeroMetric icon={Users} label="Athletes" value={model.activeAthletesLabel} />
+                    <HeroMetric icon={CalendarDays} label="Next" value={model.nextAvailable || 'Request'} />
                   </div>
                 </div>
               </div>
@@ -340,12 +405,9 @@ export default function CoachDetail() {
                   </p>
                 )}
               </div>
-              <Button asChild className="mt-3 h-12 w-full rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700">
-                <Link to={bookHref}>
-                  Book training
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              </Button>
+              <div className="mt-3">
+                <CoachActionPanel coach={coach} bookHref={bookHref} mode="profile" />
+              </div>
               <p className="mt-3 text-xs leading-5 text-slate-500">{CANCEL_POLICY_COPY}</p>
               <div className="mt-4">
                 <p className="eyebrow text-slate-500">What happens next</p>
@@ -614,9 +676,12 @@ export default function CoachDetail() {
             <p className="mt-2 text-sm leading-6 text-slate-700">
               Open the booking flow to see {model.firstName}'s live open times and confirm a session.
             </p>
-            <Button asChild className="mt-4 w-full rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700">
-              <Link to={bookHref}>Book training</Link>
-            </Button>
+            <BookCoachButton
+              coach={coach}
+              bookHref={bookHref}
+              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
+              iconClassName="h-4 w-4"
+            />
             <p className="mt-3 text-xs leading-5 text-slate-600">{CANCEL_POLICY_COPY}</p>
           </div>
         </aside>
@@ -636,9 +701,12 @@ export default function CoachDetail() {
               <p className="text-xs font-semibold text-slate-500">Rates shown at booking</p>
             )}
           </div>
-          <Button asChild className="h-11 shrink-0 rounded-lg bg-blue-600 px-6 font-bold text-white hover:bg-blue-700">
-            <Link to={bookHref}>Book training</Link>
-          </Button>
+          <BookCoachButton
+            coach={coach}
+            bookHref={bookHref}
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white hover:bg-blue-700"
+            iconClassName="h-4 w-4"
+          />
         </div>
       </div>
       {/* Spacer so the sticky bar never covers the page's last content. */}

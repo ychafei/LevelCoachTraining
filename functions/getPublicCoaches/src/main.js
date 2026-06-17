@@ -50,7 +50,8 @@ function publicMinimumComplete(doc, hasAvailabilityBlock = false) {
 }
 
 // Explicit allowlist — anything not listed here never leaves the server.
-function publicCard(doc, organization) {
+function publicCard(doc, organization, stats = null) {
+  const publicStats = stats || {};
   return {
     id: doc.$id,
     first_name: doc.first_name || '',
@@ -64,6 +65,9 @@ function publicCard(doc, organization) {
     rating_avg: Number.isFinite(Number(doc.rating_avg)) ? Number(doc.rating_avg) : 0,
     review_count: Number.isInteger(Number(doc.review_count)) ? Number(doc.review_count) : 0,
     price_hint_cents: Number.isInteger(Number(doc.price_hint_cents)) ? Number(doc.price_hint_cents) : null,
+    sessions_taught: Number.isInteger(Number(publicStats.sessions_taught)) ? Number(publicStats.sessions_taught) : 0,
+    active_athletes: Number.isInteger(Number(publicStats.active_athletes)) ? Number(publicStats.active_athletes) : 0,
+    last_active_at: doc.last_active_at || doc.$updatedAt || '',
     county: doc.county || '',
     training_area: doc.training_area || '',
     service_city: doc.service_city || '',
@@ -82,6 +86,66 @@ function publicCard(doc, organization) {
     public_verified: true,
     organization: organization || null,
   };
+}
+
+async function listSessionsForCoaches(databases, coachIds) {
+  const out = [];
+  for (let i = 0; i < coachIds.length; i += 100) {
+    const ids = coachIds.slice(i, i + 100);
+    let cursor = null;
+    while (true) {
+      const page = await databases.listDocuments(DB_ID, 'sessions', [
+        Query.equal('coach_id', ids),
+        Query.limit(100),
+        ...(cursor ? [Query.cursorAfter(cursor)] : []),
+      ]).catch(() => ({ documents: [] }));
+      out.push(...page.documents);
+      if (page.documents.length < 100) break;
+      cursor = page.documents[page.documents.length - 1].$id;
+    }
+  }
+  return out;
+}
+
+function sessionDateMs(session) {
+  const direct = Date.parse(String(session.starts_at_utc || ''));
+  if (Number.isFinite(direct)) return direct;
+  const fallback = Date.parse(`${session.date || ''}T${session.start_time || '00:00'}:00`);
+  return Number.isFinite(fallback) ? fallback : NaN;
+}
+
+async function sessionStats(databases, coachIds) {
+  const map = new Map(coachIds.map((coachId) => [coachId, {
+    sessions_taught: 0,
+    activeAthletes: new Set(),
+  }]));
+  if (coachIds.length === 0) return map;
+
+  const now = Date.now();
+  const activeWindowStart = now - 30 * 24 * 60 * 60 * 1000;
+  const activeWindowEnd = now + 30 * 24 * 60 * 60 * 1000;
+  const activeStatuses = new Set(['pending', 'confirmed', 'completed']);
+  const sessions = await listSessionsForCoaches(databases, coachIds);
+
+  for (const session of sessions) {
+    const stats = map.get(session.coach_id);
+    if (!stats) continue;
+    if (session.status === 'completed') stats.sessions_taught += 1;
+    if (!activeStatuses.has(session.status)) continue;
+    const startsAt = sessionDateMs(session);
+    if (!Number.isFinite(startsAt) || startsAt < activeWindowStart || startsAt > activeWindowEnd) continue;
+    const athleteKey = session.athlete_id || String(session.client_email || '').toLowerCase();
+    if (athleteKey) stats.activeAthletes.add(athleteKey);
+  }
+
+  const compact = new Map();
+  for (const [coachId, stats] of map.entries()) {
+    compact.set(coachId, {
+      sessions_taught: stats.sessions_taught,
+      active_athletes: stats.activeAthletes.size,
+    });
+  }
+  return compact;
 }
 
 async function listCoaches(databases) {
@@ -274,10 +338,11 @@ export default async ({ res, error }) => {
     const visibleIds = visibleBase.map((doc) => doc.$id);
     const orgs = await orgAffiliations(databases, visibleIds);
     const priceHints = await packagePriceHints(databases, visibleIds, orgs);
+    const stats = await sessionStats(databases, visibleIds);
     const visible = visibleBase.filter((doc) => priceHints.has(doc.$id));
     return res.json({
       coaches: visible.map((doc) => {
-        const card = publicCard(doc, orgs.get(doc.$id));
+        const card = publicCard(doc, orgs.get(doc.$id), stats.get(doc.$id));
         // Package-derived hint wins over the coach's manual hint when present.
         if (priceHints.has(doc.$id)) card.price_hint_cents = priceHints.get(doc.$id);
         return card;

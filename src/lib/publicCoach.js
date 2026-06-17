@@ -48,6 +48,9 @@ const PUBLIC_COACH_FIELDS = [
   'rating_avg',
   'review_count',
   'price_hint_cents',
+  'sessions_taught',
+  'active_athletes',
+  'last_active_at',
   'county',
   'training_area',
   'service_city',
@@ -139,6 +142,38 @@ function money(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return '';
   return `$${Math.round(numeric)}`;
+}
+
+function recentActivity(value, hours = 24) {
+  const ms = Date.parse(String(value || ''));
+  if (!Number.isFinite(ms)) return false;
+  return Date.now() - ms <= hours * 60 * 60 * 1000;
+}
+
+export function coachIntroEmbedUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0];
+      return id ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}` : '';
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const id = parsed.searchParams.get('v')
+        || (['embed', 'shorts', 'live'].includes(parts[0]) ? parts[1] : '');
+      return id ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}` : '';
+    }
+    if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+      const id = parsed.pathname.split('/').filter(Boolean).pop();
+      return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}` : '';
+    }
+  } catch {
+    return '';
+  }
+  return '';
 }
 
 function packagePerSessionDollars(pkg) {
@@ -285,6 +320,10 @@ export function publicCoachDisplay(coach, options = {}) {
   const rating = Number(normalized?.rating_avg);
   const reviewCount = Number(normalized?.review_count);
   const distance = options.searchPlace ? coachDistanceMiles(normalized, options.searchPlace) : null;
+  const sessionsTaught = Number(normalized?.sessions_taught);
+  const activeAthletes = Number(normalized?.active_athletes);
+  const lastActiveAt = compact(normalized?.last_active_at) || '';
+  const recentlyActive = recentActivity(lastActiveAt);
 
   return {
     raw: normalized,
@@ -293,6 +332,7 @@ export function publicCoachDisplay(coach, options = {}) {
     firstName: normalized?.first_name || 'Coach',
     initials: getCoachInitials(normalized),
     photoUrl: normalized?.photo_url || '',
+    introVideoUrl: compact(normalized?.intro_video_url) || '',
     organizationName: organizationName || 'Independent coach',
     primarySport,
     locationLabel,
@@ -327,6 +367,17 @@ export function publicCoachDisplay(coach, options = {}) {
     reviewLabel: Number.isFinite(reviewCount) && reviewCount > 0
       ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}`
       : 'New profile',
+    sessionsTaught: Number.isFinite(sessionsTaught) && sessionsTaught > 0 ? sessionsTaught : 0,
+    sessionsTaughtLabel: Number.isFinite(sessionsTaught) && sessionsTaught > 0
+      ? `${sessionsTaught.toLocaleString()} session${sessionsTaught === 1 ? '' : 's'}`
+      : 'New coach',
+    activeAthletes: Number.isFinite(activeAthletes) && activeAthletes > 0 ? activeAthletes : 0,
+    activeAthletesLabel: Number.isFinite(activeAthletes) && activeAthletes > 0
+      ? `${activeAthletes.toLocaleString()} active athlete${activeAthletes === 1 ? '' : 's'}`
+      : 'Building roster',
+    lastActiveAt,
+    recentlyActive,
+    presenceLabel: recentlyActive ? 'Active in the last 24 hours' : 'No recent activity signal',
     distanceMiles: distance,
     profileHref: coachProfileHref(normalized),
     bookIntroHref: coachBookHref(normalized, { intro: '1' }),

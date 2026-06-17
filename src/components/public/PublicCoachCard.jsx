@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
   Building2,
@@ -8,18 +8,19 @@ import {
   MapPin,
   Star,
   Tag,
+  Trophy,
+  Users,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { coachBookHref, publicCoachDisplay } from '@/lib/publicCoach';
+import { CoachActionPanel, SaveCoachButton } from '@/components/public/CoachActionControls';
 
-// No presence dot: we have no real online/offline signal, so we don't fake one.
 export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const model = publicCoachDisplay(coach);
   const sizeClass = {
     sm: 'h-10 w-10 text-xs',
     md: 'h-12 w-12 text-sm',
     lg: 'h-14 w-14 text-base',
-    xl: 'h-20 w-20 text-xl',
+    xl: 'h-[72px] w-[72px] text-xl',
   }[size] || 'h-14 w-14 text-base';
 
   return (
@@ -35,15 +36,28 @@ export function CoachAvatar({ coach, size = 'lg', className = '' }) {
           {model.initials}
         </div>
       )}
+      <PresenceDot model={model} className="absolute bottom-0 right-0" />
     </div>
   );
 }
 
+function PresenceDot({ model, className = '' }) {
+  return (
+    <span
+      className={`block h-3.5 w-3.5 rounded-full border-2 border-white ${
+        model.recentlyActive ? 'bg-emerald-500' : 'bg-slate-300'
+      } ${className}`}
+      title={model.presenceLabel}
+      aria-label={model.presenceLabel}
+    />
+  );
+}
+
 function CoachCardPhoto({ model, compact = false }) {
-  const heightClass = compact ? 'h-28 sm:h-32' : 'h-40 sm:h-44 lg:h-full';
+  const sizeClass = compact ? 'h-28 w-28' : 'h-36 w-36 sm:h-40 sm:w-40';
 
   return (
-    <div className={`relative overflow-hidden rounded-lg bg-blue-50 ring-1 ring-slate-200 ${heightClass}`}>
+    <div className={`relative mx-auto overflow-hidden rounded-lg bg-blue-50 ring-1 ring-slate-200 ${sizeClass}`}>
       {model.photoUrl ? (
         <img
           src={model.photoUrl}
@@ -55,8 +69,9 @@ function CoachCardPhoto({ model, compact = false }) {
           {model.initials}
         </div>
       )}
+      <PresenceDot model={model} className="absolute bottom-2 right-2 h-4 w-4" />
       {model.verified && (
-        <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[11px] font-extrabold text-emerald-700 shadow-sm ring-1 ring-emerald-100">
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[11px] font-extrabold text-emerald-700 shadow-sm ring-1 ring-emerald-100">
           <BadgeCheck className="h-3 w-3" aria-hidden="true" />
           Verified
         </span>
@@ -72,6 +87,18 @@ function hrefWithParams(path, params = {}) {
   return `${path}?${search.toString()}`;
 }
 
+function ProofStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+        <Icon className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+        {label}
+      </div>
+      <p className="mt-1 text-sm font-extrabold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
 export default function PublicCoachCard({
   coach,
   packages = [],
@@ -80,8 +107,8 @@ export default function PublicCoachCard({
   distanceMiles = null,
   bookingParams = {},
 }) {
+  const navigate = useNavigate();
   const model = publicCoachDisplay(coach, { packages });
-  // Sports chips (humanized sport keys) followed by specialties; deduped.
   const sportChips = model.sports.map((sport) => String(sport).replace(/_/g, ' '));
   const allChips = [...sportChips, ...model.specializations].filter(
     (chip, index, arr) => arr.findIndex((c) => c.toLowerCase() === chip.toLowerCase()) === index,
@@ -94,24 +121,55 @@ export default function PublicCoachCard({
   const bookHref = coachBookHref(model.raw, { intro: '1', ...bookingParams });
   const displayDistance = distanceMiles === null || distanceMiles === undefined ? null : Number(distanceMiles);
 
-  return (
-    <article className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4 ${className}`}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[170px_1fr] xl:grid-cols-[190px_1fr_230px]">
-        <CoachCardPhoto model={model} compact={compact} />
+  const openProfile = () => navigate(profileHref);
+  const onKeyDown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openProfile();
+    }
+  };
 
-        <div className="min-w-0">
+  return (
+    <article
+      data-testid="public-coach-card"
+      role="link"
+      tabIndex={0}
+      onClick={openProfile}
+      onKeyDown={onKeyDown}
+      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-4 ${className}`}
+      aria-label={`View ${model.displayName}'s full profile`}
+    >
+      <span className="pointer-events-none absolute right-4 top-4 hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-blue-700 opacity-0 ring-1 ring-blue-100 transition group-hover:opacity-100 lg:inline-flex">
+        View full profile
+      </span>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[160px_1fr] xl:grid-cols-[170px_1fr_250px]">
+        <div className="flex flex-col items-center">
+          <CoachCardPhoto model={model} compact={compact} />
+          <SaveCoachButton
+            coach={coach}
+            showLabel
+            className="mt-3 inline-flex h-10 w-full max-w-[160px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+            iconClassName="h-4 w-4"
+          />
+        </div>
+
+        <div className="min-w-0 pr-0 lg:pr-20 xl:pr-0">
           <div className="flex flex-wrap items-center gap-2">
-            {hasOrg && (
+            {hasOrg ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-extrabold text-blue-700 ring-1 ring-blue-100">
                 <Building2 className="h-3 w-3" aria-hidden="true" />
                 {model.organization.name}
               </span>
-            )}
-            {!hasOrg && (
+            ) : (
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200">
                 Independent coach
               </span>
             )}
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200">
+              <span className={`h-2 w-2 rounded-full ${model.recentlyActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              {model.recentlyActive ? 'Active recently' : 'Recently inactive'}
+            </span>
             {coach?.is_demo && (
               <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-extrabold text-slate-600 ring-1 ring-slate-200">
                 Demo
@@ -119,12 +177,9 @@ export default function PublicCoachCard({
             )}
           </div>
 
-          <Link
-            to={profileHref}
-            className="mt-2 block truncate font-display text-2xl font-extrabold tracking-normal text-slate-950 hover:text-blue-700"
-          >
+          <h2 className="mt-2 truncate font-display text-2xl font-extrabold tracking-normal text-slate-950 transition group-hover:text-blue-700">
             {model.displayName}
-          </Link>
+          </h2>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-slate-600">
             <span className="inline-flex items-center gap-1 text-blue-700">
@@ -146,7 +201,7 @@ export default function PublicCoachCard({
             )}
           </div>
 
-          <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{model.headline}</p>
+          <p className="mt-3 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{model.headline}</p>
 
           <div className="mt-3 flex flex-wrap gap-2">
             {visibleSpecs.map((tag) => (
@@ -174,16 +229,8 @@ export default function PublicCoachCard({
         </div>
 
         <div className="border-t border-slate-100 pt-4 md:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
-          <div className="grid grid-cols-2 gap-3 xl:block">
-            <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Rating</p>
-              <p className="mt-2 inline-flex items-center gap-1 font-display text-2xl font-extrabold text-slate-950">
-                <Star className={`h-5 w-5 ${model.ratingLabel ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} aria-hidden="true" />
-                {model.ratingLabel || 'New'}
-              </p>
-              <p className="text-xs font-semibold text-slate-500">{model.reviewLabel}</p>
-            </div>
-            <div className="rounded-lg bg-blue-50 p-3 ring-1 ring-blue-100 xl:mt-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-1">
+            <div className="rounded-lg bg-blue-50 p-3 ring-1 ring-blue-100">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Starting at</p>
               {model.rateLabel ? (
                 <p className="mt-2">
@@ -194,6 +241,19 @@ export default function PublicCoachCard({
                 <p className="mt-2 text-sm font-bold text-slate-700">Shown at booking</p>
               )}
             </div>
+            <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Rating</p>
+              <p className="mt-2 inline-flex items-center gap-1 font-display text-2xl font-extrabold text-slate-950">
+                <Star className={`h-5 w-5 ${model.ratingLabel ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} aria-hidden="true" />
+                {model.ratingLabel || 'New'}
+              </p>
+              <p className="text-xs font-semibold text-slate-500">{model.reviewLabel}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <ProofStat icon={Trophy} label="Sessions" value={model.sessionsTaughtLabel} />
+            <ProofStat icon={Users} label="Athletes" value={model.activeAthletesLabel} />
           </div>
 
           <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
@@ -204,20 +264,8 @@ export default function PublicCoachCard({
             </p>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button
-              asChild
-              variant="outline"
-              className="h-10 rounded-lg border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-50"
-            >
-              <Link to={profileHref}>Profile</Link>
-            </Button>
-            <Button
-              asChild
-              className="h-10 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-blue-600/20 hover:bg-blue-700"
-            >
-              <Link to={bookHref}>Book</Link>
-            </Button>
+          <div className="mt-3">
+            <CoachActionPanel coach={coach} bookHref={bookHref} />
           </div>
         </div>
       </div>

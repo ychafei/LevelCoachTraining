@@ -126,6 +126,26 @@ test('coach portal: prepaid purchases are visible before scheduling', () => {
   assert(backfill.includes('accountForCoachId(doc.original_coach_id || doc.originating_coach_id || doc.coach_id)'), 'permission backfill must grant original coaches read access to existing credits');
 });
 
+test('public marketplace: coach cards use gated save/message/book actions and safe aggregate stats', () => {
+  const card = source('src/components/public/PublicCoachCard.jsx');
+  const actions = source('src/components/public/CoachActionControls.jsx');
+  const search = source('src/pages/CoachSearch.jsx');
+  const detail = source('src/pages/CoachDetail.jsx');
+  const publicFn = source('functions/getPublicCoaches/src/main.js');
+  const publicModel = source('src/lib/publicCoach.js');
+  const coachSelf = source('functions/coachSelf/src/main.js');
+  assert(card.includes('role="link"') && card.includes('View full profile'), 'coach card must navigate to the full public profile from the card surface');
+  assert(card.includes('SaveCoachButton') && card.includes('CoachActionPanel'), 'coach card must expose save, message, and book actions');
+  assert(actions.includes('Continue with Google') && !actions.includes('Continue with Facebook') && !actions.includes('Continue with Apple'), 'logged-out coach actions must use the Google-only LC auth gate');
+  assert(actions.includes("conversationRepo.start({ coach_id: model.id") && actions.includes("navigate('/messages')"), 'message action must start/reuse a real coach conversation');
+  assert(actions.includes('saved_coach_ids') && actions.includes('auth.updateCurrentUser'), 'save action must persist to the signed-in profile preferences');
+  assert(search.includes('Saved coaches') && search.includes('showSavedOnly') && search.includes('savedCoachIds.has'), 'coach search must expose a signed-in saved-coaches list filter');
+  assert(detail.includes('IntroVideo') && detail.includes('CoachActionPanel') && detail.includes('BookCoachButton'), 'public coach profile must render intro video and gated actions');
+  assert(publicFn.includes('sessions_taught') && publicFn.includes('active_athletes') && publicFn.includes('last_active_at'), 'public coaches function must return only safe coach aggregate/presence fields');
+  assert(publicModel.includes('coachIntroEmbedUrl') && publicModel.includes('sessionsTaughtLabel') && publicModel.includes('activeAthletesLabel'), 'public coach display model must normalize video and stats');
+  assert(coachSelf.includes('last_active_at: new Date().toISOString()'), 'coach portal reads must update the public recent-activity signal');
+});
+
 test('coach portal: reviews have a dedicated route', () => {
   const app = source('src/App.jsx');
   const layout = source('src/components/coach-portal/CoachLayout.jsx');
