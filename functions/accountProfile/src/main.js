@@ -78,6 +78,41 @@ async function updateProfileResilient(db, profileId, data) {
   return db.updateDocument(DB_ID, 'profiles', profileId, payload);
 }
 
+async function updateCoachActivityResilient(db, coachId, timestamp) {
+  const payload = { last_active_at: timestamp };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.updateDocument(DB_ID, 'coaches', coachId, payload);
+    } catch (err) {
+      const match = /unknown attribute:?\s*"?([\w.-]+)"?/i.exec(err?.message || '');
+      if (match && match[1] === 'last_active_at') return null;
+      throw err;
+    }
+  }
+  return null;
+}
+
+async function touchLinkedCoachActivity(db, profile, accountId, error) {
+  const coachIds = new Set();
+  if (profile?.coach_id) coachIds.add(profile.coach_id);
+
+  const linkedRows = await db.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(5),
+  ]).catch(() => ({ documents: [] }));
+  for (const coach of linkedRows.documents || []) {
+    if (coach?.$id) coachIds.add(coach.$id);
+  }
+
+  if (!coachIds.size) return;
+  const timestamp = new Date().toISOString();
+  await Promise.all([...coachIds].map((coachId) =>
+    updateCoachActivityResilient(db, coachId, timestamp).catch((err) => {
+      error?.(`Could not update coach activity for ${coachId}: ${err?.message || String(err)}`);
+      return null;
+    })));
+}
+
 function cleanString(value, max) {
   const text = String(value ?? '').replace(/<[^>]*>/g, '').trim();
   return text.length > max ? null : text;
@@ -165,6 +200,8 @@ async function ensureProfile(db, users, accountId, res, error) {
     error?.(err?.message || String(err));
     return null;
   });
+
+  await touchLinkedCoachActivity(db, profile, accountId, error);
 
   return res.json({ profile, banned: Boolean(ban), labels });
 }

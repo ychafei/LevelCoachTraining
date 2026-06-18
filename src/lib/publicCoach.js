@@ -150,6 +150,33 @@ function recentActivity(value, hours = 24) {
   return Date.now() - ms <= hours * 60 * 60 * 1000;
 }
 
+function coachTimeParts(coach, date = new Date()) {
+  const timezone = compact(coach?.timezone) || undefined;
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date);
+      const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      const hour = Number(byType.hour);
+      const minute = Number(byType.minute);
+      if (byType.weekday && Number.isFinite(hour) && Number.isFinite(minute)) {
+        return { weekday: byType.weekday, minutes: hour * 60 + minute };
+      }
+    } catch {
+      // Fall through to local browser time if a legacy row has a bad timezone.
+    }
+  }
+  return {
+    weekday: DAYS[date.getDay()],
+    minutes: date.getHours() * 60 + date.getMinutes(),
+  };
+}
+
 export function coachIntroEmbedUrl(url) {
   const raw = String(url || '').trim();
   if (!raw) return '';
@@ -228,12 +255,21 @@ export function enabledAvailabilityDays(availability = {}) {
 export function nextAvailabilityLabel(coach, windowDays = 21) {
   const availability = coach?.availability || {};
   const now = new Date();
+  const today = coachTimeParts(coach, now);
   for (let offset = 0; offset <= windowDays; offset += 1) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + offset);
-    const day = DAYS[date.getDay()];
+    const date = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+    const day = offset === 0 ? today.weekday : coachTimeParts(coach, date).weekday;
     const slot = availability?.[day];
     if (!slot?.enabled || !slot.start) continue;
+    const start = minutes(slot.start);
+    const end = minutes(slot.end);
+    if (offset === 0) {
+      if (start !== null && end !== null && end <= today.minutes) continue;
+      if (start !== null && start <= today.minutes && end !== null && end > today.minutes) {
+        return 'Available today';
+      }
+      if (start !== null && start <= today.minutes) continue;
+    }
     const prefix = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : day;
     return `${prefix} ${formatAvailabilityTime(slot.start)}`;
   }
@@ -322,6 +358,9 @@ export function publicCoachDisplay(coach, options = {}) {
   const distance = options.searchPlace ? coachDistanceMiles(normalized, options.searchPlace) : null;
   const sessionsTaught = Number(normalized?.sessions_taught);
   const activeAthletes = Number(normalized?.active_athletes);
+  const safeSessionsTaught = Number.isFinite(sessionsTaught) && sessionsTaught > 0 ? sessionsTaught : 0;
+  const safeActiveAthletes = Number.isFinite(activeAthletes) && activeAthletes > 0 ? activeAthletes : 0;
+  const showActiveAthletes = safeActiveAthletes >= 2;
   const lastActiveAt = compact(normalized?.last_active_at) || '';
   const recentlyActive = recentActivity(lastActiveAt);
 
@@ -367,17 +406,19 @@ export function publicCoachDisplay(coach, options = {}) {
     reviewLabel: Number.isFinite(reviewCount) && reviewCount > 0
       ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}`
       : 'New profile',
-    sessionsTaught: Number.isFinite(sessionsTaught) && sessionsTaught > 0 ? sessionsTaught : 0,
-    sessionsTaughtLabel: Number.isFinite(sessionsTaught) && sessionsTaught > 0
-      ? `${sessionsTaught.toLocaleString()} session${sessionsTaught === 1 ? '' : 's'}`
+    sessionsTaught: safeSessionsTaught,
+    hasSessionStat: safeSessionsTaught > 0,
+    sessionsTaughtLabel: safeSessionsTaught > 0
+      ? `${safeSessionsTaught.toLocaleString()} session${safeSessionsTaught === 1 ? '' : 's'}`
       : 'New coach',
-    activeAthletes: Number.isFinite(activeAthletes) && activeAthletes > 0 ? activeAthletes : 0,
-    activeAthletesLabel: Number.isFinite(activeAthletes) && activeAthletes > 0
-      ? `${activeAthletes.toLocaleString()} active athlete${activeAthletes === 1 ? '' : 's'}`
-      : 'Building roster',
+    activeAthletes: safeActiveAthletes,
+    hasActiveAthleteStat: showActiveAthletes,
+    activeAthletesLabel: showActiveAthletes
+      ? `${safeActiveAthletes.toLocaleString()} active athletes`
+      : '',
     lastActiveAt,
     recentlyActive,
-    presenceLabel: recentlyActive ? 'Active in the last 24 hours' : 'No recent activity signal',
+    presenceLabel: recentlyActive ? 'Active' : 'Not active in 24h',
     distanceMiles: distance,
     profileHref: coachProfileHref(normalized),
     bookIntroHref: coachBookHref(normalized, { intro: '1' }),
