@@ -15,7 +15,16 @@ const assessments = makeRepo('athlete_assessments');
 const checkIns = makeRepo('session_check_ins');
 
 async function mutate(action, payload, key) {
-  const res = await callFn('training', { action, ...payload });
+  let res;
+  try {
+    res = await callFn('training', { action, ...payload });
+  } catch (err) {
+    const canRetryWithoutSport = payload?.sport_key
+      && err?.message === 'sport_key is not a known sport.';
+    if (!canRetryWithoutSport) throw err;
+    const retryPayload = { ...payload, sport_key: '' };
+    res = await callFn('training', { action, ...retryPayload });
+  }
   const doc = res?.[key];
   return doc ? mapDoc(doc) : res;
 }

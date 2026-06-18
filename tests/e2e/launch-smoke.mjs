@@ -203,11 +203,13 @@ test('post-session reviews: completed clients are prompted and reviews stay veri
 test('wellness reports: athlete check-ins are same-day session-bound', () => {
   const wellness = source('src/features/athlete/AthleteWellness.jsx');
   const training = source('functions/training/src/main.js');
+  const trainingRepo = source('src/api/repo/trainingRepo.js');
   assert(wellness.includes('Session-day wellness report') && wellness.includes('todaySessions'), 'wellness UI must only expose day-of sessions');
   assert(training.includes('session_id is required for session-day wellness reports'), 'training function must require a session_id for wellness reports');
   assert(training.includes('Wellness reports open only on the day of the session'), 'training function must enforce day-of submission');
   assert(training.includes('This session does not belong to this athlete'), 'training function must bind check-in to the athlete session');
   assert(training.includes('coachForGrants.$id') && training.includes('injury_flag'), 'check-ins must grant the session coach read access and persist injury flags');
+  assert(trainingRepo.includes("sport_key: ''") && trainingRepo.includes('sport_key is not a known sport'), 'training mutations must retry without optional sport_key when production sports data lags');
 });
 
 test('parent/minor booking: guardian consent must be exact-child bound', () => {
