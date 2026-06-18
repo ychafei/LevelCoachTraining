@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trainingRepo } from '@/api/repo';
-import { getSport, SPORTS_CATALOG } from '@/lib/sportsCatalog';
+import { getSport, resolveSportKey, SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import AssessmentForm from '@/features/coach/AssessmentForm';
 import { toast } from 'sonner';
 
@@ -88,8 +88,9 @@ function PanelSkeleton() {
 }
 
 function SportSelect({ id, value, onChange, allowNone = true }) {
+  const selectedValue = resolveSportKey(value);
   return (
-    <Select value={value || 'none'} onValueChange={(v) => onChange(v === 'none' ? '' : v)}>
+    <Select value={selectedValue || 'none'} onValueChange={(v) => onChange(v === 'none' ? '' : v)}>
       <SelectTrigger id={id} className="bg-secondary border-border mt-1">
         <SelectValue placeholder="Sport (optional)" />
       </SelectTrigger>
@@ -109,7 +110,7 @@ function GoalForm({ athleteId, defaultSportKey, initial = null, onDone, onCancel
   const [title, setTitle] = useState(initial?.title || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [targetDate, setTargetDate] = useState(initial?.target_date ? initial.target_date.slice(0, 10) : '');
-  const [sportKey, setSportKey] = useState(initial?.sport_key ?? defaultSportKey ?? '');
+  const [sportKey, setSportKey] = useState(resolveSportKey(initial?.sport_key ?? defaultSportKey ?? ''));
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -491,7 +492,7 @@ function PlanForm({ athleteId, defaultSportKey, onDone, onCancel }) {
   const [description, setDescription] = useState('');
   const [startsOn, setStartsOn] = useState('');
   const [endsOn, setEndsOn] = useState('');
-  const [sportKey, setSportKey] = useState(defaultSportKey || '');
+  const [sportKey, setSportKey] = useState(resolveSportKey(defaultSportKey));
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -632,7 +633,7 @@ function HomeworkForm({ athleteId, defaultSportKey, onDone, onCancel }) {
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [sportKey, setSportKey] = useState(defaultSportKey || '');
+  const [sportKey, setSportKey] = useState(resolveSportKey(defaultSportKey));
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -1027,7 +1028,7 @@ function CheckInsPanel({ coachId, athleteId }) {
 function pickMostCommonSport(rows) {
   const counts = new Map();
   for (const row of rows || []) {
-    const key = row?.sport_key;
+    const key = resolveSportKey(row?.sport_key);
     if (!key) continue;
     counts.set(key, (counts.get(key) || 0) + 1);
   }
@@ -1040,10 +1041,11 @@ function pickMostCommonSport(rows) {
 }
 
 function useAthleteSport(coachId, athleteId, fallbackSportKey) {
-  const [resolved, setResolved] = useState(fallbackSportKey || '');
+  const normalizedFallback = resolveSportKey(fallbackSportKey);
+  const [resolved, setResolved] = useState(normalizedFallback);
 
   useEffect(() => {
-    if (!coachId || !athleteId) { setResolved(fallbackSportKey || ''); return undefined; }
+    if (!coachId || !athleteId) { setResolved(normalizedFallback); return undefined; }
     let cancelled = false;
     (async () => {
       try {
@@ -1059,13 +1061,13 @@ function useAthleteSport(coachId, athleteId, fallbackSportKey) {
         if (cancelled) return;
         const fromHistory = pickMostCommonSport(assessments)
           || pickMostCommonSport([...goals, ...plans, ...homework]);
-        setResolved(fromHistory || fallbackSportKey || '');
+        setResolved(fromHistory || normalizedFallback);
       } catch {
-        if (!cancelled) setResolved(fallbackSportKey || '');
+        if (!cancelled) setResolved(normalizedFallback);
       }
     })();
     return () => { cancelled = true; };
-  }, [coachId, athleteId, fallbackSportKey]);
+  }, [coachId, athleteId, normalizedFallback]);
 
   return resolved;
 }

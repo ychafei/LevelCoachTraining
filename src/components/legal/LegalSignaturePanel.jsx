@@ -241,7 +241,7 @@ export default function LegalSignaturePanel({
       const drawnSignatureData = drawnTouched && canvasRef.current
         ? canvasRef.current.toDataURL('image/png')
         : '';
-      await signLegalAgreement({
+      const result = await signLegalAgreement({
         template_id: selectedTemplate.id,
         signer_role: signerRole,
         signer_relationship: signerRole === 'athlete' ? 'Self / Adult Athlete' : relationship.trim(),
@@ -255,7 +255,9 @@ export default function LegalSignaturePanel({
         },
         drawn_signature_data: drawnSignatureData,
       });
-      toast.success('Legal agreement signed');
+      toast.success(result?.pdf_pending
+        ? 'Document signed. Your signed copy is being prepared.'
+        : 'Document signed. You can continue.');
       setSelectedTemplate(null);
       await status.refresh();
     } catch (err) {

@@ -265,6 +265,41 @@ function legalAgreementPermissions(accountId) {
   return permissions;
 }
 
+function unknownAttributeName(err) {
+  return /unknown attribute:?\s*"?([\w.-]+)"?/i.exec(err?.message || '')?.[1] || '';
+}
+
+async function createDocumentResilient(databases, collectionId, data, permissions, optionalKeys = []) {
+  const optional = new Set(optionalKeys);
+  let payload = { ...data };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await databases.createDocument(DB_ID, collectionId, ID.unique(), payload, permissions);
+    } catch (err) {
+      const attr = unknownAttributeName(err);
+      if (!attr || !optional.has(attr) || !(attr in payload)) throw err;
+      delete payload[attr];
+    }
+  }
+  return databases.createDocument(DB_ID, collectionId, ID.unique(), payload, permissions);
+}
+
+async function updateDocumentResilient(databases, collectionId, documentId, data, optionalKeys = []) {
+  const optional = new Set(optionalKeys);
+  let payload = { ...data };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (Object.keys(payload).length === 0) return databases.getDocument(DB_ID, collectionId, documentId);
+    try {
+      return await databases.updateDocument(DB_ID, collectionId, documentId, payload);
+    } catch (err) {
+      const attr = unknownAttributeName(err);
+      if (!attr || !optional.has(attr) || !(attr in payload)) throw err;
+      delete payload[attr];
+    }
+  }
+  return databases.updateDocument(DB_ID, collectionId, documentId, payload);
+}
+
 function addWrapped(doc, text, x, y, width, lineHeight = 12) {
   const lines = doc.splitTextToSize(String(text || ''), width);
   for (const line of lines) {
@@ -403,19 +438,25 @@ export default async ({ req, res, error }) => {
     };
     const signatureHash = sha256(JSON.stringify(signaturePayload));
 
-    const agreement = await databases.createDocument(DB_ID, 'legal_agreements', ID.unique(), {
+    const agreement = await createDocumentResilient(databases, 'legal_agreements', {
       ...signaturePayload,
       signature_hash: signatureHash,
       status: 'signed',
-    }, legalAgreementPermissions(accountId));
+    }, legalAgreementPermissions(accountId), [
+      'ip_address',
+      'user_agent',
+      'affirmations_json',
+      'signature_method',
+      'drawn_signature_hash',
+    ]);
 
     let pdf = null;
     let updated = agreement;
     try {
       pdf = await createPdf(storage, template, agreement, { affirmations_json: affirmationsJson });
-      updated = await databases.updateDocument(DB_ID, 'legal_agreements', agreement.$id, {
+      updated = await updateDocumentResilient(databases, 'legal_agreements', agreement.$id, {
         pdf_file_id: pdf.$id,
-      });
+      }, ['pdf_file_id']);
     } catch (pdfErr) {
       error?.(`[signLegalAgreement] signed agreement ${agreement.$id}; PDF generation deferred: ${pdfErr?.message || pdfErr}`);
     }

@@ -6,6 +6,38 @@ const GOAL_STATUSES = ['active', 'achieved', 'paused', 'archived'];
 const PLAN_STATUSES = ['draft', 'active', 'completed', 'archived'];
 const PLAN_ITEM_STATUSES = ['planned', 'in_progress', 'completed', 'skipped'];
 const HOMEWORK_STATUSES = ['assigned', 'submitted', 'reviewed', 'archived'];
+const KNOWN_SPORT_KEYS = new Set([
+  'soccer',
+  'basketball',
+  'football',
+  'baseball',
+  'softball',
+  'volleyball',
+  'tennis',
+  'lacrosse',
+  'hockey',
+  'golf',
+  'track_field',
+  'swimming',
+  'speed_agility',
+  'strength_conditioning',
+  'general_performance',
+]);
+const SPORT_KEY_ALIASES = new Map([
+  ['football_american', 'football'],
+  ['american_football', 'football'],
+  ['ice_hockey', 'hockey'],
+  ['track', 'track_field'],
+  ['track_and_field', 'track_field'],
+  ['speed', 'speed_agility'],
+  ['agility', 'speed_agility'],
+  ['speed_and_agility', 'speed_agility'],
+  ['speed_agility_training', 'speed_agility'],
+  ['strength', 'strength_conditioning'],
+  ['conditioning', 'strength_conditioning'],
+  ['strength_and_conditioning', 'strength_conditioning'],
+  ['general_athletic_performance', 'general_performance'],
+]);
 
 function services() {
   const client = new Client()
@@ -54,6 +86,23 @@ function cleanText(value, max) {
   return String(value ?? '').replace(/<[^>]*>/g, '').trim().slice(0, max);
 }
 
+function normalizeSportLookup(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function canonicalSportKey(value) {
+  const normalized = normalizeSportLookup(value);
+  if (!normalized) return '';
+  if (KNOWN_SPORT_KEYS.has(normalized)) return normalized;
+  return SPORT_KEY_ALIASES.get(normalized) || '';
+}
+
 function validIsoDate(value) {
   const ms = Date.parse(String(value || ''));
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
@@ -66,13 +115,15 @@ function intInRange(value, min, max) {
 
 async function validSportKey(db, sportKey) {
   if (!sportKey) return '';
+  const canonical = canonicalSportKey(sportKey);
+  if (!canonical) return null;
   const rows = await db.listDocuments(DB_ID, 'sports', [
-    Query.equal('sport_key', sportKey),
+    Query.equal('sport_key', canonical),
     Query.limit(1),
   ]).catch(() => ({ documents: [] }));
   const sport = rows.documents[0];
-  if (!sport || sport.active === false) return null;
-  return sport.sport_key;
+  if (sport?.active === false) return null;
+  return sport?.sport_key || canonical;
 }
 
 // --- Athlete + coach resolution ------------------------------------------------

@@ -86,6 +86,26 @@ function legalPdfPermissions(accountId) {
   return permissions;
 }
 
+function unknownAttributeName(err) {
+  return /unknown attribute:?\s*"?([\w.-]+)"?/i.exec(err?.message || '')?.[1] || '';
+}
+
+async function updateDocumentResilient(databases, collectionId, documentId, data, optionalKeys = []) {
+  const optional = new Set(optionalKeys);
+  let payload = { ...data };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (Object.keys(payload).length === 0) return databases.getDocument(DB_ID, collectionId, documentId);
+    try {
+      return await databases.updateDocument(DB_ID, collectionId, documentId, payload);
+    } catch (err) {
+      const attr = unknownAttributeName(err);
+      if (!attr || !optional.has(attr) || !(attr in payload)) throw err;
+      delete payload[attr];
+    }
+  }
+  return databases.updateDocument(DB_ID, collectionId, documentId, payload);
+}
+
 function addWrapped(doc, text, x, y, width, lineHeight = 14) {
   const lines = doc.splitTextToSize(String(text || ''), width);
   for (const line of lines) {
@@ -160,9 +180,9 @@ export default async ({ req, res, error }) => {
       InputFile.fromBuffer(bytes, filename),
       legalPdfPermissions(agreement.signer_account_id),
     );
-    await databases.updateDocument(DB_ID, 'legal_agreements', agreement.$id, {
+    await updateDocumentResilient(databases, 'legal_agreements', agreement.$id, {
       pdf_file_id: created.$id,
-    });
+    }, ['pdf_file_id']);
 
     return res.json({ agreement_id: agreement.$id, pdf_file_id: created.$id });
   } catch (err) {

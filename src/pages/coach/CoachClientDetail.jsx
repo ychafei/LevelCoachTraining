@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatLongDateInTz, formatTimeInTz } from '@/lib/scheduleET';
+import { resolveSportKey } from '@/lib/sportsCatalog';
 
 const statusConfig = {
   pending:   { icon: Clock, color: 'bg-accent/10 text-accent border-accent/20', label: 'Pending' },
@@ -84,7 +85,7 @@ export default function CoachClientDetail() {
   // Fallback sport when the athlete has no training history yet: the coach's
   // primary (first selected) sport. TrainingToolkit prefers the athlete's own
   // sport derived from their existing assessments/goals/plans/homework.
-  const defaultSportKey = Array.isArray(coach?.sports) && coach.sports.length > 0 ? coach.sports[0] : '';
+  const defaultSportKey = Array.isArray(coach?.sports) && coach.sports.length > 0 ? resolveSportKey(coach.sports[0]) : '';
 
   const openMessaging = () => {
     if (existingConvo) {

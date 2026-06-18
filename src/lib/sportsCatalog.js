@@ -710,6 +710,56 @@ export function getSport(key) {
   return SPORTS_CATALOG.find((sport) => sport.sport_key === key) || null;
 }
 
+function normalizeSportLookup(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+const EXTRA_SPORT_ALIASES = new Map([
+  ['american_football', 'football'],
+  ['football_american', 'football'],
+  ['ice_hockey', 'hockey'],
+  ['track', 'track_field'],
+  ['track_and_field', 'track_field'],
+  ['speed', 'speed_agility'],
+  ['agility', 'speed_agility'],
+  ['speed_and_agility', 'speed_agility'],
+  ['speed_agility_training', 'speed_agility'],
+  ['strength', 'strength_conditioning'],
+  ['conditioning', 'strength_conditioning'],
+  ['strength_and_conditioning', 'strength_conditioning'],
+  ['general_athletic_performance', 'general_performance'],
+]);
+
+export function resolveSport(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const exact = getSport(raw) || getSport(raw.toLowerCase());
+  if (exact) return exact;
+
+  const normalized = normalizeSportLookup(raw);
+  const alias = EXTRA_SPORT_ALIASES.get(normalized);
+  if (alias) return getSport(alias);
+
+  return SPORTS_CATALOG.find((sport) => {
+    const keys = [
+      sport.sport_key,
+      sport.display_name,
+      String(sport.display_name || '').replace(/\([^)]*\)/g, ''),
+    ];
+    return keys.some((key) => normalizeSportLookup(key) === normalized);
+  }) || null;
+}
+
+export function resolveSportKey(value) {
+  return resolveSport(value)?.sport_key || '';
+}
+
 export function sportOptions() {
   return SPORTS_CATALOG.map((sport) => ({ value: sport.sport_key, label: sport.display_name }));
 }

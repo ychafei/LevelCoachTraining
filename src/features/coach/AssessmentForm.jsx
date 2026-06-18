@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SPORTS_CATALOG, getSport } from '@/lib/sportsCatalog';
+import { SPORTS_CATALOG, getSport, resolveSportKey } from '@/lib/sportsCatalog';
 import { trainingRepo } from '@/api/repo';
 import { toast } from 'sonner';
 
@@ -14,7 +14,8 @@ import { toast } from 'sonner';
 // Saves through the `training` function (assessment.create) which validates
 // the coach↔athlete relationship server-side.
 export default function AssessmentForm({ athleteId, defaultSportKey = '', onCreated, onCancel }) {
-  const [sportKey, setSportKey] = useState(defaultSportKey || SPORTS_CATALOG[0].sport_key);
+  const normalizedDefaultSportKey = resolveSportKey(defaultSportKey);
+  const [sportKey, setSportKey] = useState(normalizedDefaultSportKey || SPORTS_CATALOG[0].sport_key);
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -29,11 +30,11 @@ export default function AssessmentForm({ athleteId, defaultSportKey = '', onCrea
   // picked one themselves. Pre-selecting keeps the evaluation sport-tailored.
   useEffect(() => {
     if (userPicked.current) return;
-    if (defaultSportKey && defaultSportKey !== sportKey) {
-      setSportKey(defaultSportKey);
+    if (normalizedDefaultSportKey && normalizedDefaultSportKey !== sportKey) {
+      setSportKey(normalizedDefaultSportKey);
       setScores({});
     }
-  }, [defaultSportKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [normalizedDefaultSportKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickSport = (value) => {
     userPicked.current = true;
