@@ -155,6 +155,11 @@ function splitName(fullName) {
   return { first: parts[0].slice(0, 100), last: parts.slice(1).join(' ').slice(0, 100) };
 }
 
+function isRateLimitError(err) {
+  const code = Number(err?.code || err?.status || err?.response?.status);
+  return code === 429 || /too many requests|rate limit/i.test(err?.message || String(err || ''));
+}
+
 // --- ensure: create-or-get the caller's own profile -------------------------
 
 async function ensureProfile(db, users, accountId, res, error) {
@@ -201,7 +206,10 @@ async function ensureProfile(db, users, accountId, res, error) {
     return null;
   });
 
-  await touchLinkedCoachActivity(db, profile, accountId, error);
+  await touchLinkedCoachActivity(db, profile, accountId, error).catch((err) => {
+    error?.(`[accountProfile.ensure] coach activity touch skipped: ${err?.message || String(err)}`);
+    return null;
+  });
 
   return res.json({ profile, banned: Boolean(ban), labels });
 }
@@ -395,6 +403,9 @@ export default async ({ req, res, error }) => {
     return res.json({ error: 'Unknown action.' }, 400);
   } catch (err) {
     error?.(err?.message || String(err));
+    if (isRateLimitError(err)) {
+      return res.json({ error: 'Profile setup is busy. Wait a few seconds, then try again.' }, 429);
+    }
     return res.json({ error: 'Could not process profile request.' }, 500);
   }
 };

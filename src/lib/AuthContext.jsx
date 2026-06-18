@@ -53,18 +53,19 @@ export const AuthProvider = ({ children }) => {
     try { return sessionStorage.getItem('lc_view_as') || null; } catch { return null; }
   });
 
-  useEffect(() => {
-    void checkUserAuth();
-     
+  const adoptAuthenticatedUser = useCallback((fresh) => {
+    setUser(fresh || null);
+    setIsAuthenticated(Boolean(fresh));
+    if (fresh) setAuthError(null);
+    return fresh || null;
   }, []);
 
-  const checkUserAuth = async () => {
+  const checkUserAuth = useCallback(async () => {
     setIsLoadingAuth(true);
     setAuthError(null);
     try {
       const currentUser = await auth.getCurrentUser();
-      setUser(currentUser);
-      setIsAuthenticated(true);
+      adoptAuthenticatedUser(currentUser);
     } catch (err) {
       if (err?.type === 'account_banned') {
         setAuthError({ type: 'account_banned' });
@@ -80,13 +81,16 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setIsLoadingAuth(false);
     }
-  };
+  }, [adoptAuthenticatedUser]);
+
+  useEffect(() => {
+    void checkUserAuth();
+  }, [checkUserAuth]);
 
   const refetchUser = useCallback(async () => {
     try {
       const fresh = await auth.getCurrentUser();
-      setUser(fresh);
-      setIsAuthenticated(true);
+      adoptAuthenticatedUser(fresh);
       return fresh;
     } catch (err) {
       if (err?.type === 'account_banned') {
@@ -96,7 +100,7 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(false);
       return null;
     }
-  }, []);
+  }, [adoptAuthenticatedUser]);
 
   const logout = async (shouldRedirect = true) => {
     await auth.signOut();
@@ -163,6 +167,7 @@ export const AuthProvider = ({ children }) => {
       navigateToLogin,
       checkAppState: checkUserAuth,
       refetchUser,
+      adoptAuthenticatedUser,
     }}>
       {children}
     </AuthContext.Provider>

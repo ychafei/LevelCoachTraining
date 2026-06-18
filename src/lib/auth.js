@@ -2,13 +2,42 @@ import { account, databases, DB_ID, COL, Query, ID } from '@/api/appwriteClient'
 import { callFn } from '@/lib/rpc';
 import { OAuthProvider } from 'appwrite';
 
+const PROFILE_HYDRATE_CACHE_MS = 2500;
+
+let recentHydration = {
+  accountId: null,
+  user: null,
+  expiresAt: 0,
+  promise: null,
+};
+
+function clearHydratedUserCache() {
+  recentHydration = {
+    accountId: null,
+    user: null,
+    expiresAt: 0,
+    promise: null,
+  };
+}
+
+function rememberHydratedUser(user) {
+  if (!user?.account_id) return user;
+  recentHydration = {
+    accountId: user.account_id,
+    user,
+    expiresAt: Date.now() + PROFILE_HYDRATE_CACHE_MS,
+    promise: null,
+  };
+  return user;
+}
+
 // Hydrate the caller's `profiles` document through the server-side
 // `accountProfile` function (clients can no longer create or repair profile
 // rows directly — the collection is server-only writable), then merge account
 // + profile into a single app-shaped user object. The app reads `.email`,
 // `.role`, `.is_super_admin`, `.first_name`, `.last_name`, `.id` etc., so the
 // merge keeps those keys stable.
-async function hydrateProfile(acc) {
+async function hydrateProfileFresh(acc) {
   if (!acc) return null;
 
   // ensure → { profile, banned, labels }. The function creates the profile on
@@ -76,17 +105,45 @@ async function hydrateProfile(acc) {
   return merged;
 }
 
+async function hydrateProfile(acc, options = {}) {
+  if (!acc) return null;
+
+  const accountId = acc.$id;
+  const now = Date.now();
+  if (!options.force && recentHydration.accountId === accountId) {
+    if (recentHydration.user && recentHydration.expiresAt > now) return recentHydration.user;
+    if (recentHydration.promise) return recentHydration.promise;
+  }
+
+  const prior = recentHydration.accountId === accountId ? recentHydration : null;
+  const promise = hydrateProfileFresh(acc)
+    .then((user) => rememberHydratedUser(user))
+    .catch((err) => {
+      if (recentHydration.promise === promise) clearHydratedUserCache();
+      throw err;
+    });
+
+  recentHydration = {
+    accountId,
+    user: prior?.user || null,
+    expiresAt: prior?.expiresAt || 0,
+    promise,
+  };
+  return promise;
+}
+
 export const auth = {
   // Returns the merged profile+account object, or throws if not signed in.
-  getCurrentUser: async () => {
+  getCurrentUser: async (options = {}) => {
     const acc = await account.get();
-    return hydrateProfile(acc);
+    return hydrateProfile(acc, options);
   },
 
   // Email + password sign-in. Returns the hydrated user.
   signInWithPassword: async (email, password) => {
+    clearHydratedUserCache();
     await account.createEmailPasswordSession(email, password);
-    return auth.getCurrentUser();
+    return auth.getCurrentUser({ force: true });
   },
 
   // Create a brand-new Appwrite account, then immediately sign in. The
@@ -105,7 +162,8 @@ export const auth = {
     } catch (err) {
       console.error('[auth] createVerification failed', err);
     }
-    return auth.getCurrentUser();
+    clearHydratedUserCache();
+    return auth.getCurrentUser({ force: true });
   },
 
   // (Re)send the email-verification link for the current account.
@@ -116,7 +174,8 @@ export const auth = {
   // Finish email verification with the userId+secret captured from the URL.
   completeEmailVerification: async (userId, secret) => {
     await account.updateVerification(userId, secret);
-    return auth.getCurrentUser();
+    clearHydratedUserCache();
+    return auth.getCurrentUser({ force: true });
   },
 
   // Kick off an OAuth round-trip using Appwrite's TOKEN flow (not the cookie
@@ -151,7 +210,8 @@ export const auth = {
       try { await account.deleteSession('current'); } catch { /* already gone */ }
       await account.createSession({ userId, secret });
     }
-    return auth.getCurrentUser();
+    clearHydratedUserCache();
+    return auth.getCurrentUser({ force: true });
   },
 
   // Send a password-recovery email. Appwrite renders the link using its
@@ -182,6 +242,7 @@ export const auth = {
   // navigate themselves.
   signOut: async () => {
     try { await account.deleteSession('current'); } catch { /* already gone */ }
+    clearHydratedUserCache();
   },
 
   // Send the user to the in-app login page. Kept synchronous + named the
@@ -202,7 +263,8 @@ export const auth = {
       payload[key] = value;
     }
     await callFn('accountProfile', { action: 'update', ...payload });
-    return auth.getCurrentUser();
+    clearHydratedUserCache();
+    return auth.getCurrentUser({ force: true });
   },
 
   // Admin-only invite — routed through the consolidated adminOps function.

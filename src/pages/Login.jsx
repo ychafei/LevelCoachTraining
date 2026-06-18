@@ -27,14 +27,24 @@ function loginErrorMessage(err, fallback) {
     return 'Sign-in could not be completed — the link or sign-in attempt is invalid or expired. Please try again.';
   }
   if (err?.code === 429) return 'Too many attempts. Wait a minute, then try again.';
+  if (err?.status === 429 || /too many requests|rate limit|could not process profile request|accountProfile failed/i.test(err?.message || '')) {
+    return 'Your sign-in worked, but your profile is still loading. Wait a few seconds, then try again.';
+  }
   if (err?.code === 401) return 'Invalid email or password.';
   return err?.message || fallback;
+}
+
+function shouldRefetchAfterTokenError(err) {
+  if (!err) return false;
+  if (err?.status === 429) return false;
+  if (/too many requests|rate limit|could not process profile request|accountProfile failed/i.test(err?.message || '')) return false;
+  return err?.code === 401 || err?.type === 'user_invalid_token' || err?.type === 'user_session_already_exists';
 }
 
 export default function Login() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { refetchUser, isAuthenticated, isLoadingAuth, user } = useAuth();
+  const { refetchUser, adoptAuthenticatedUser, isAuthenticated, isLoadingAuth, user } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -82,7 +92,8 @@ export default function Login() {
       (async () => {
         try {
           setSubmitting(true);
-          const fresh = await auth.completeTokenSession(userId, secret).then(() => refetchUser());
+          const fresh = await auth.completeTokenSession(userId, secret);
+          adoptAuthenticatedUser(fresh);
           completingToken.current = false;
           navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
         } catch (err) {
@@ -92,7 +103,7 @@ export default function Login() {
           // Re-sync auth state: an existing session survives a stale token
           // (create-first semantics), and the redirect effect may then route
           // the still-signed-in user onward.
-          refetchUser().catch(() => null);
+          if (shouldRefetchAfterTokenError(err)) refetchUser().catch(() => null);
         }
       })();
     }
@@ -117,8 +128,8 @@ export default function Login() {
     try {
       setSubmitting(true);
       await auth.signOut();
-      await auth.signInWithPassword(email.trim(), password);
-      const fresh = await refetchUser();
+      const fresh = await auth.signInWithPassword(email.trim(), password);
+      adoptAuthenticatedUser(fresh);
       navigate(postAuthRedirectPath(fresh, safeNext), { replace: true });
     } catch (err) {
       setFormError(loginErrorMessage(err, 'Invalid email or password.'));
