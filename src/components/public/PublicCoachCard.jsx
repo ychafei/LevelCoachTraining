@@ -217,7 +217,7 @@ export default function PublicCoachCard({
         </div>
 
         <div className="border-t border-slate-100 pt-4 md:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
-          <div className="flex h-full flex-col gap-3">
+          <div className="flex h-full flex-col gap-2.5">
             <div className="flex flex-wrap items-start justify-between gap-3 xl:block">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Starting at</p>
@@ -230,8 +230,8 @@ export default function PublicCoachCard({
                   <p className="mt-1 text-sm font-bold text-slate-700">Shown at booking</p>
                 )}
               </div>
-              <div className="text-left xl:mt-3">
-                <p className="inline-flex items-center gap-1 font-display text-xl font-extrabold text-slate-950">
+              <div className="text-left xl:mt-2">
+                <p className="inline-flex items-center gap-1 font-display text-lg font-extrabold text-slate-950">
                   <Star className={`h-5 w-5 ${model.ratingLabel ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} aria-hidden="true" />
                   {model.ratingLabel || 'New'}
                 </p>
@@ -239,13 +239,13 @@ export default function PublicCoachCard({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 border-y border-slate-100 py-3">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs font-extrabold text-slate-800 ring-1 ring-slate-200">
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-800 ring-1 ring-slate-200">
                 <Trophy className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
                 {model.sessionsTaughtLabel}
               </span>
               {model.hasActiveAthleteStat && (
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs font-extrabold text-slate-800 ring-1 ring-slate-200">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-800 ring-1 ring-slate-200">
                   <Users className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
                   {model.activeAthletesLabel}
                 </span>
@@ -259,7 +259,7 @@ export default function PublicCoachCard({
               </p>
             )}
 
-            <div className="mt-auto">
+            <div>
               <CoachActionPanel coach={coach} bookHref={bookHref} />
             </div>
           </div>
