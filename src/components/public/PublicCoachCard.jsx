@@ -54,7 +54,7 @@ function PresenceDot({ model, className = '' }) {
 }
 
 function CoachCardPhoto({ model, compact = false }) {
-  const sizeClass = compact ? 'h-24 w-24' : 'h-28 w-28 sm:h-32 sm:w-32';
+  const sizeClass = compact ? 'h-24 w-24' : 'h-24 w-24 sm:h-28 sm:w-28';
 
   return (
     <div className={`relative mx-auto overflow-hidden rounded-lg bg-blue-50 ring-1 ring-slate-200 ${sizeClass}`}>
@@ -124,20 +124,20 @@ export default function PublicCoachCard({
       tabIndex={0}
       onClick={openProfile}
       onKeyDown={onKeyDown}
-      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-4 ${className}`}
+      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 ${className}`}
       aria-label={`View ${model.displayName}'s full profile`}
     >
       <span className="pointer-events-none absolute right-4 top-4 hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-blue-700 opacity-0 ring-1 ring-blue-100 transition group-hover:opacity-100 lg:inline-flex">
         View full profile
       </span>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[136px_1fr] xl:grid-cols-[144px_1fr_220px]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[120px_1fr] xl:grid-cols-[128px_1fr_200px]">
         <div className="flex flex-col items-center">
           <CoachCardPhoto model={model} compact={compact} />
           <SaveCoachButton
             coach={coach}
             showLabel
-            className="mt-3 inline-flex h-10 w-full max-w-[132px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+            className="mt-2 inline-flex h-9 w-full max-w-[116px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
             iconClassName="h-4 w-4"
           />
         </div>
@@ -165,11 +165,11 @@ export default function PublicCoachCard({
             )}
           </div>
 
-          <h2 className="mt-2 truncate font-display text-2xl font-extrabold tracking-normal text-slate-950 transition group-hover:text-blue-700">
+          <h2 className="mt-2 truncate font-display text-xl font-extrabold tracking-normal text-slate-950 transition group-hover:text-blue-700">
             {model.displayName}
           </h2>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-slate-600">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-slate-600">
             <span className="inline-flex items-center gap-1 text-blue-700">
               <Tag className="h-4 w-4" aria-hidden="true" />
               {model.primarySport}
@@ -189,9 +189,9 @@ export default function PublicCoachCard({
             )}
           </div>
 
-          <p className="mt-3 line-clamp-2 max-w-2xl text-sm leading-6 text-slate-600">{model.headline}</p>
+          <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-5 text-slate-600">{model.headline}</p>
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {visibleSpecs.map((tag) => (
               <span
                 key={tag}
@@ -216,14 +216,14 @@ export default function PublicCoachCard({
           </div>
         </div>
 
-        <div className="border-t border-slate-100 pt-4 md:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
+        <div className="border-t border-slate-100 pt-3 md:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
           <div className="flex h-full flex-col gap-2.5">
             <div className="flex flex-wrap items-start justify-between gap-3 xl:block">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Starting at</p>
                 {model.rateLabel ? (
                   <p className="mt-1">
-                    <span className="proof-number text-3xl text-slate-950">{model.rateLabel.replace(/^From\s+/i, '')}</span>
+                    <span className="proof-number text-2xl text-slate-950">{model.rateLabel.replace(/^From\s+/i, '')}</span>
                     <span className="ml-1 text-xs font-semibold text-slate-500">/ session</span>
                   </p>
                 ) : (

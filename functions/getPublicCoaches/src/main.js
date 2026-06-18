@@ -224,6 +224,16 @@ function perSessionPriceCents(pkg) {
   return Math.round(cents / sessions);
 }
 
+function singleSessionPriceCents(pkg) {
+  const sessions = Math.max(1, Number(pkg?.sessions) || 1);
+  if (sessions !== 1) return null;
+  const options = durationOptions(pkg);
+  if (options.length) return Math.round(options[0].price_cents);
+  const cents = Number(pkg.price_cents);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  return cents;
+}
+
 function parseJsonArray(value) {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -256,17 +266,45 @@ function durationOptions(pkg) {
   return [...byDuration.values()];
 }
 
-function setLowestHint(hints, coachId, perSession) {
-  if (!coachId || !Number.isInteger(perSession) || perSession <= 0) return;
-  const current = hints.get(coachId);
-  if (current == null || perSession < current) hints.set(coachId, perSession);
+function addPriceCandidate(candidates, coachId, pkg) {
+  if (!coachId) return;
+  const singleSession = singleSessionPriceCents(pkg);
+  const lowestPerSession = perSessionPriceCents(pkg);
+  if (
+    (!Number.isInteger(singleSession) || singleSession <= 0)
+    && (!Number.isInteger(lowestPerSession) || lowestPerSession <= 0)
+  ) return;
+  const current = candidates.get(coachId) || { single_session: null, lowest_per_session: null };
+  if (Number.isInteger(singleSession) && singleSession > 0) {
+    current.single_session = current.single_session == null
+      ? singleSession
+      : Math.min(current.single_session, singleSession);
+  }
+  if (Number.isInteger(lowestPerSession) && lowestPerSession > 0) {
+    current.lowest_per_session = current.lowest_per_session == null
+      ? lowestPerSession
+      : Math.min(current.lowest_per_session, lowestPerSession);
+  }
+  candidates.set(coachId, current);
 }
 
-// Lowest per-session price (cents) across active visible packages the coach can
-// actually offer: direct coach packages, active organization packages, then
-// platform defaults only when no coach/org package applies.
+function addDefaultPriceCandidate(candidate, pkg) {
+  const candidates = new Map([['default', candidate]]);
+  addPriceCandidate(candidates, 'default', pkg);
+}
+
+function candidatePriceHint(candidate) {
+  if (!candidate) return null;
+  if (Number.isInteger(candidate.single_session) && candidate.single_session > 0) return candidate.single_session;
+  if (Number.isInteger(candidate.lowest_per_session) && candidate.lowest_per_session > 0) return candidate.lowest_per_session;
+  return null;
+}
+
+// Public cards use the single-session package as the anchor price. Discounted
+// bundles can be cheaper per session, but they should not make the marketplace
+// imply a standalone session is cheaper than it is.
 async function packagePriceHints(databases, coachIds, orgsByCoach) {
-  const hints = new Map();
+  const candidates = new Map();
   for (let i = 0; i < coachIds.length; i += 100) {
     const page = await databases.listDocuments(DB_ID, 'pricing_packages', [
       Query.equal('coach_id', coachIds.slice(i, i + 100)),
@@ -275,7 +313,7 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
       Query.limit(500),
     ]).catch(() => ({ documents: [] }));
     for (const pkg of page.documents) {
-      setLowestHint(hints, pkg.coach_id, perSessionPriceCents(pkg));
+      addPriceCandidate(candidates, pkg.coach_id, pkg);
     }
   }
 
@@ -299,7 +337,7 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
       const eligibleCoachIds = coachesByOrg.get(pkg.organization_id) || [];
       for (const coachId of eligibleCoachIds) {
         if (pkg.coach_id && pkg.coach_id !== coachId) continue;
-        setLowestHint(hints, coachId, perSessionPriceCents(pkg));
+        addPriceCandidate(candidates, coachId, pkg);
       }
     }
   }
@@ -311,18 +349,24 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
     Query.equal('is_visible', true),
     Query.limit(100),
   ]).catch(() => ({ documents: [] }));
-  let defaultHint = null;
+  const defaultCandidate = { single_session: null, lowest_per_session: null };
   for (const pkg of defaults.documents) {
-    const perSession = perSessionPriceCents(pkg);
-    if (perSession == null) continue;
-    if (defaultHint == null || perSession < defaultHint) defaultHint = perSession;
+    addDefaultPriceCandidate(defaultCandidate, pkg);
   }
+  const defaultHint = candidatePriceHint(defaultCandidate);
   if (defaultHint != null) {
     for (const coachId of coachIds) {
-      if (!hints.has(coachId)) hints.set(coachId, defaultHint);
+      if (!candidates.has(coachId)) {
+        candidates.set(coachId, { single_session: defaultHint, lowest_per_session: defaultHint });
+      }
     }
   }
 
+  const hints = new Map();
+  for (const [coachId, candidate] of candidates.entries()) {
+    const hint = candidatePriceHint(candidate);
+    if (hint != null) hints.set(coachId, hint);
+  }
   return hints;
 }
 

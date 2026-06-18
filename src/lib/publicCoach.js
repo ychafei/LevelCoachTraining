@@ -211,6 +211,20 @@ function packagePerSessionDollars(pkg) {
   return Number.isFinite(dollars) && dollars > 0 ? dollars / sessions : NaN;
 }
 
+function packageSingleSessionDollars(pkg) {
+  const sessions = Number(pkg?.sessions) || 1;
+  if (sessions !== 1) return NaN;
+  return packagePerSessionDollars(pkg);
+}
+
+function publicPackageSessionDollars(packages) {
+  const pool = Array.isArray(packages) ? packages : [];
+  const singleSessionPrices = pool.map(packageSingleSessionDollars).filter(Number.isFinite);
+  if (singleSessionPrices.length) return Math.min(...singleSessionPrices);
+  const discountedPrices = pool.map(packagePerSessionDollars).filter(Number.isFinite);
+  return discountedPrices.length ? Math.min(...discountedPrices) : null;
+}
+
 export function formatAvailabilityTime(time) {
   if (!time || !String(time).includes(':')) return time || '';
   const [rawHour, rawMinute] = String(time).split(':').map(Number);
@@ -326,9 +340,10 @@ export function publicCoachDisplay(coach, options = {}) {
     'academy_name',
   ]);
   const primarySport = inferSport(normalized, specializations);
-  // Server-set price hint (integer cents). No client-side fee math. The hint
-  // is the MINIMUM per-session price across the coach's active packages
-  // (getPublicCoaches), so the label always carries a "From" qualifier.
+  // Server-set price hint (integer cents). No client-side fee math. The hint is
+  // anchored to the coach's active Single Session package when one exists, so a
+  // discounted bundle never makes the public card imply standalone training is
+  // cheaper than it is.
   const priceHintCents = Number(normalized?.price_hint_cents);
   // Fallback only over packages this coach can offer (direct coach packages,
   // active org packages, then platform defaults). Never another coach's
@@ -347,11 +362,9 @@ export function publicCoachDisplay(coach, options = {}) {
     ? options.packages.filter((pkg) => visiblePackage(pkg) && !pkg.coach_id && !pkg.organization_id)
     : [];
   const packagePool = ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages;
-  const minPackagePrice = packagePool.length
-    ? Math.min(...packagePool.map(packagePerSessionDollars).filter(Number.isFinite))
-    : null;
+  const publicPackagePrice = publicPackageSessionDollars(packagePool);
   const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? `From ${money(priceHintCents / 100)}` : '')
-    || (Number.isFinite(minPackagePrice) ? `From $${Math.round(minPackagePrice)}` : '');
+    || (Number.isFinite(publicPackagePrice) ? `From $${Math.round(publicPackagePrice)}` : '');
   // Rating aggregates are server-maintained (reviews function). Never derived client-side.
   const rating = Number(normalized?.rating_avg);
   const reviewCount = Number(normalized?.review_count);

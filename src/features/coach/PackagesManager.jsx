@@ -44,6 +44,40 @@ const cleanPackageId = (value) => {
   const id = String(value || '').trim();
   return id && id !== 'null' && id !== 'undefined' ? id : '';
 };
+const priceInput = (cents) => {
+  const value = Number(cents);
+  if (!Number.isInteger(value) || value <= 0) return '';
+  return String(value / 100);
+};
+const centsFromInput = (value) => {
+  const dollars = Number(value);
+  return Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : 0;
+};
+const isSingleSessionPackage = (pkg) => (Number(pkg?.sessions) || 1) === 1;
+const isStarterPackage = (pkg) =>
+  isSingleSessionPackage(pkg) && String(pkg?.name || '').trim().toLowerCase() === 'single session';
+const comparePackages = (a, b) => {
+  if (isStarterPackage(a) !== isStarterPackage(b)) return isStarterPackage(a) ? -1 : 1;
+  return (Number(a.display_order) || 0) - (Number(b.display_order) || 0)
+    || (Number(a.price_cents) || 0) - (Number(b.price_cents) || 0);
+};
+const starterDraftFromCoach = (coach) => {
+  const hint = Number(coach?.price_hint_cents);
+  const priceCents = Number.isInteger(hint) && hint > 0 ? hint : 0;
+  return {
+    ...emptyDraft,
+    name: 'Single Session',
+    sessions: '1',
+    duration_minutes: '60',
+    price_dollars: priceInput(priceCents),
+    duration_options: [{ duration_minutes: 60, price_cents: priceCents }],
+    session_type: 'private',
+    description: 'One private training session.',
+    badge: '',
+    sport_keys: [],
+    is_active: true,
+  };
+};
 
 function PackageRow({ pkg, onEdit, onDelete, busy }) {
   const options = normalizeDurationOptions(pkg);
@@ -94,15 +128,20 @@ export default function PackagesManager() {
       coachRepo.getSelf().catch(() => null),
     ])
       .then(([rows, coachRow]) => {
-        setPackages(rows || []);
+        const sorted = [...(rows || [])].sort(comparePackages);
+        setPackages(sorted);
         setCoach(coachRow);
+        if (!sorted.length) setDraft(starterDraftFromCoach(coachRow));
       })
       .catch((err) => toast.error(err?.message || 'Could not load your packages.'))
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
 
-  const startNew = () => setDraft({ ...emptyDraft });
+  const startNew = () => {
+    const hasStarter = packages.some(isStarterPackage);
+    setDraft(hasStarter ? { ...emptyDraft } : starterDraftFromCoach(coach));
+  };
   const optionDrafts = (pkg) => {
     const options = normalizeDurationOptions(pkg);
     return options.length ? options : [{ duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: Number(pkg.price_cents) || 0 }];
@@ -112,7 +151,7 @@ export default function PackagesManager() {
     name: pkg.name,
     sessions: String(pkg.sessions),
     duration_minutes: String(pkg.duration_minutes),
-    price_dollars: String(pkg.price_cents / 100),
+    price_dollars: priceInput(pkg.price_cents),
     duration_options: optionDrafts(pkg),
     session_type: pkg.session_type || 'private',
     description: pkg.description || '',
@@ -218,12 +257,13 @@ export default function PackagesManager() {
   const coachSportOptions = (Array.isArray(coach?.sports) && coach.sports.length ? coach.sports : SPORTS_CATALOG.map((sport) => sport.sport_key))
     .map((sportKey) => ({ value: sportKey, label: SPORT_LABELS.get(sportKey) || sportKey }))
     .filter((item, index, arr) => item.value && arr.findIndex((other) => other.value === item.value) === index);
+  const singleSessionDraft = draft ? isStarterPackage(draft) : false;
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        You set your own prices. Each package gives athletes credits to book sessions with you.
-        Athletes only see <strong>your</strong> packages when they book.
+        Your Single Session price is what athletes see first on your public coach card.
+        Bundles can offer discounts, but they will not lower that public single-session price.
       </p>
 
       {packages.length === 0 && !draft ? (
@@ -241,35 +281,68 @@ export default function PackagesManager() {
 
       {draft ? (
         <div className="rounded-lg border border-accent/40 bg-card p-4 space-y-3">
+          {singleSessionDraft && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3">
+              <p className="text-sm font-bold text-slate-950">Default public package: Single Session</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Set your price below. This is the amount shown as your public “From $X / session” price.
+              </p>
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <Label htmlFor="pkg-name">Package name</Label>
-              <Input id="pkg-name" value={draft.name} onChange={(e) => update({ name: e.target.value })} placeholder="e.g. 5-Session Skills Package" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="pkg-sessions">Sessions (credits)</Label>
-              <Input id="pkg-sessions" type="number" min="1" max="100" value={draft.sessions} onChange={(e) => update({ sessions: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="pkg-type">Session type</Label>
-              <Select value={draft.session_type} onValueChange={(v) => update({ session_type: v })}>
-                <SelectTrigger id="pkg-type" className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SESSION_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="pkg-badge">Badge (optional)</Label>
-              <Input id="pkg-badge" value={draft.badge} onChange={(e) => update({ badge: e.target.value })} placeholder="Most popular" className="mt-1" />
-            </div>
+            {singleSessionDraft ? (
+              <div className="sm:col-span-2 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label>Package</Label>
+                  <Input value="Single Session" readOnly className="mt-1 bg-secondary text-muted-foreground" />
+                </div>
+                <div>
+                  <Label>Credits</Label>
+                  <Input value="1 session" readOnly className="mt-1 bg-secondary text-muted-foreground" />
+                </div>
+                <div>
+                  <Label>Type</Label>
+                  <Input value="Private (1-on-1)" readOnly className="mt-1 bg-secondary text-muted-foreground" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="pkg-name">Package name</Label>
+                  <Input id="pkg-name" value={draft.name} onChange={(e) => update({ name: e.target.value })} placeholder="e.g. 5-Session Skills Package" className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="pkg-sessions">Sessions (credits)</Label>
+                  <Input id="pkg-sessions" type="number" min="1" max="100" value={draft.sessions} onChange={(e) => update({ sessions: e.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="pkg-type">Session type</Label>
+                  <Select value={draft.session_type} onValueChange={(v) => update({ session_type: v })}>
+                    <SelectTrigger id="pkg-type" className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SESSION_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="pkg-badge">Badge (optional)</Label>
+                  <Input id="pkg-badge" value={draft.badge} onChange={(e) => update({ badge: e.target.value })} placeholder="Most popular" className="mt-1" />
+                </div>
+              </>
+            )}
             <div className="sm:col-span-2 rounded-lg border border-border bg-secondary/30 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label>Duration options</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">Set the total package price for each session length. Discounts calculate from the shortest option.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {singleSessionDraft
+                      ? 'The default is a one-hour private session. Change the duration only if your standard session is different.'
+                      : 'Set the total package price for each session length. Discounts calculate from the shortest option.'}
+                  </p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={addDurationOption}>Add duration</Button>
+                {!singleSessionDraft && (
+                  <Button type="button" variant="outline" size="sm" onClick={addDurationOption}>Add duration</Button>
+                )}
               </div>
               <div className="mt-3 space-y-2">
                 {(draft.duration_options || []).map((option, index) => {
@@ -287,47 +360,56 @@ export default function PackagesManager() {
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-[11px]">Total price cents</Label>
+                        <Label className="text-[11px]">{singleSessionDraft ? 'Session price (USD)' : 'Total package price (USD)'}</Label>
                         <Input
-                          inputMode="numeric"
-                          value={option.price_cents || ''}
-                          onChange={(e) => updateDurationOption(index, { price_cents: Number(e.target.value) || 0 })}
-                          placeholder="10000"
+                          type="number"
+                          min="5"
+                          step="1"
+                          inputMode="decimal"
+                          value={priceInput(option.price_cents)}
+                          onChange={(e) => updateDurationOption(index, { price_cents: centsFromInput(e.target.value) })}
+                          placeholder="100"
                           className="mt-1"
                         />
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          {option.price_cents > 0 ? `${usd(option.price_cents)} total${discount > 0 ? ` · ${discount}% off hourly rate` : ''}` : 'Use integer cents only'}
+                          {option.price_cents > 0 ? `${usd(option.price_cents)} total${discount > 0 ? ` · ${discount}% off hourly rate` : ''}` : 'Minimum $5'}
                         </p>
                       </div>
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeDurationOption(index)} aria-label="Remove duration option">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      {!singleSessionDraft && (
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDurationOption(index)} aria-label="Remove duration option">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="pkg-desc">Description (optional)</Label>
-              <Textarea id="pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
-            </div>
-            <div className="sm:col-span-2">
-              <Label>Sports</Label>
-              <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for every sport on your profile.</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {coachSportOptions.map((sport) => (
-                  <button
-                    key={sport.value}
-                    type="button"
-                    onClick={() => toggleList('sport_keys', sport.value)}
-                    aria-pressed={draft.sport_keys.includes(sport.value)}
-                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                  >
-                    {sport.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {!singleSessionDraft && (
+              <>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="pkg-desc">Description (optional)</Label>
+                  <Textarea id="pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Sports</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for every sport on your profile.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {coachSportOptions.map((sport) => (
+                      <button
+                        key={sport.value}
+                        type="button"
+                        onClick={() => toggleList('sport_keys', sport.value)}
+                        aria-pressed={draft.sport_keys.includes(sport.value)}
+                        className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                      >
+                        {sport.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.is_active} onChange={(e) => update({ is_active: e.target.checked })} />
               Visible to athletes (uncheck to hide without deleting)

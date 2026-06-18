@@ -135,6 +135,7 @@ test('public marketplace: coach cards use gated save/message/book actions and sa
   const publicModel = source('src/lib/publicCoach.js');
   const coachSelf = source('functions/coachSelf/src/main.js');
   const accountProfile = source('functions/accountProfile/src/main.js');
+  const packagesManager = source('src/features/coach/PackagesManager.jsx');
   assert(card.includes('role="link"') && card.includes('View full profile'), 'coach card must navigate to the full public profile from the card surface');
   assert(card.includes('SaveCoachButton') && card.includes('CoachActionPanel'), 'coach card must expose save, message, and book actions');
   assert(card.includes('model.presenceLabel'), 'coach cards must use the shared active/not-active label');
@@ -145,10 +146,14 @@ test('public marketplace: coach cards use gated save/message/book actions and sa
   assert(search.includes('Saved coaches') && search.includes('showSavedOnly') && search.includes('savedCoachIds.has'), 'coach search must expose a signed-in saved-coaches list filter');
   assert(detail.includes('IntroVideo') && detail.includes('CoachActionPanel') && detail.includes('BookCoachButton'), 'public coach profile must render intro video and gated actions');
   assert(publicFn.includes('sessions_taught') && publicFn.includes('active_athletes') && publicFn.includes('last_active_at'), 'public coaches function must return only safe coach aggregate/presence fields');
+  assert(publicFn.includes('singleSessionPriceCents') && publicFn.includes('candidatePriceHint'), 'public function must anchor display price to Single Session before discounted bundles');
   assert(publicModel.includes('coachIntroEmbedUrl') && publicModel.includes('sessionsTaughtLabel') && publicModel.includes('activeAthletesLabel'), 'public coach display model must normalize video and stats');
+  assert(publicModel.includes('publicPackageSessionDollars') && publicModel.includes('packageSingleSessionDollars'), 'frontend package fallback must anchor display price to Single Session');
   assert(publicModel.includes('end <= today.minutes') && publicModel.includes('Available today'), 'public next availability must not advertise past slots today');
   assert(publicModel.includes('showActiveAthletes = safeActiveAthletes >= 2'), 'public model must hide active-athlete stat until it is meaningful');
   assert(coachSelf.includes('last_active_at: new Date().toISOString()'), 'coach portal reads must update the public recent-activity signal');
+  assert(coachSelf.includes('price_hint_cents: primary.price_cents'), 'saving Single Session must sync the coach public price hint');
+  assert(packagesManager.includes('Default public package: Single Session') && packagesManager.includes('Session price (USD)'), 'coach package editor must default to a simple Single Session price flow');
   assert(accountProfile.includes('touchLinkedCoachActivity') && accountProfile.includes('last_active_at'), 'normal logged-in profile reads must update linked coach recent activity');
 });
 

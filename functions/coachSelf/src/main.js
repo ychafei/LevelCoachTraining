@@ -567,6 +567,7 @@ async function savePackage(databases, coach, payload) {
   const displayOrder = int(payload.display_order, 0, 9999) ?? 0;
   const isActive = payload.is_active !== false;
   const sportKeys = cleanList(payload.sport_keys || payload.sports);
+  const isSingleSession = sessions === 1 && name.trim().toLowerCase() === 'single session';
 
   const data = {
     coach_id: coach.$id,
@@ -581,7 +582,7 @@ async function savePackage(databases, coach, payload) {
     badge,
     sport_keys: sportKeys,
     location_formats: [],
-    display_order: displayOrder,
+    display_order: isSingleSession ? 0 : displayOrder,
     is_active: isActive,
     is_visible: isActive,                  // legacy visibility mirror
   };
@@ -608,6 +609,9 @@ async function savePackage(databases, coach, payload) {
       : await createDocumentResilient(databases, 'pricing_packages', data);
   } else {
     doc = await createDocumentResilient(databases, 'pricing_packages', data);
+  }
+  if (isSingleSession && isActive) {
+    await updateCoach(databases, coach.$id, { price_hint_cents: primary.price_cents }).catch(() => null);
   }
   return { status: 200, body: { ok: true, package: packageView(doc) } };
 }

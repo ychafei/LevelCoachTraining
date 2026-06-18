@@ -284,17 +284,17 @@ export default function CoachDetail() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_58%,#eef5ff_100%)]">
-        <div className="mx-auto max-w-[1240px] px-4 py-7 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6 lg:px-8">
           <Link to="/coaches" className="inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:underline">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to coach search
           </Link>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
-            <div className="self-start rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] lg:items-start">
+            <div className="self-start rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <IntroVideo model={model} />
 
-              <div className={`flex flex-col gap-5 sm:flex-row sm:items-start ${model.introVideoUrl ? 'mt-5' : ''}`}>
+              <div className={`flex flex-col gap-4 sm:flex-row sm:items-start ${model.introVideoUrl ? 'mt-5' : ''}`}>
                 <CoachAvatar coach={coach} size="xl" className="sm:mt-1" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -316,7 +316,7 @@ export default function CoachDetail() {
                     </span>
                   </div>
 
-                  <h1 className="mt-4 font-display text-3xl font-bold leading-tight tracking-normal text-slate-950 sm:text-4xl">
+                  <h1 className="mt-3 font-display text-3xl font-bold leading-tight tracking-normal text-slate-950 sm:text-4xl">
                     {model.displayName}
                   </h1>
                   <p className="mt-2 text-base font-semibold text-slate-700">{model.organizationName}</p>
@@ -339,12 +339,12 @@ export default function CoachDetail() {
                   </div>
 
                   {coach.quote && (
-                    <blockquote className="mt-4 max-w-3xl border-l-4 border-blue-200 pl-4 text-lg italic leading-8 text-slate-600">
+                    <blockquote className="mt-3 max-w-3xl border-l-4 border-blue-200 pl-4 text-base italic leading-7 text-slate-600">
                       "{coach.quote}"
                     </blockquote>
                   )}
 
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {[...model.sports, ...model.specializations].filter(Boolean).slice(0, 8).map((tag) => (
                       <span key={tag} className="rounded-md bg-blue-50 px-3 py-1.5 text-xs font-bold capitalize text-blue-700 ring-1 ring-blue-100">
                         {String(tag).replace(/_/g, ' ')}
@@ -352,7 +352,7 @@ export default function CoachDetail() {
                     ))}
                   </div>
 
-                  <div className={`mt-5 grid grid-cols-2 gap-2 ${model.hasActiveAthleteStat ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+                  <div className={`mt-4 grid grid-cols-2 gap-2 ${model.hasActiveAthleteStat ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
                     <HeroMetric
                       icon={Star}
                       label="Rating"
@@ -368,14 +368,13 @@ export default function CoachDetail() {
               </div>
             </div>
 
-            <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24 lg:self-start" aria-label="Book training">
+            <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:self-start" aria-label="Book training">
               <p className="eyebrow text-blue-700">Book training</p>
-              <h2 className="mt-2 font-display text-2xl font-bold text-slate-950">Train with {model.firstName}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Open the booking flow to see {model.firstName}'s live open times and session options.
-                Every booking is confirmed securely through Stripe.
+              <h2 className="mt-1 font-display text-xl font-bold text-slate-950">Train with {model.firstName}</h2>
+              <p className="mt-1 text-sm leading-5 text-slate-600">
+                See live times, choose a package, and check out securely.
               </p>
-              <div className="mt-4 space-y-2">
+              <div className="mt-3 space-y-2">
                 {model.serviceTypeLabel && (
                   <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                     <Target className="h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
@@ -389,7 +388,7 @@ export default function CoachDetail() {
                   </div>
                 )}
               </div>
-              <div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200 pt-4">
+              <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200 pt-3">
                 {model.rateLabel ? (
                   <p className="text-slate-950">
                     <span className="proof-number text-2xl">{model.rateLabel}</span>
@@ -410,16 +409,10 @@ export default function CoachDetail() {
               <div className="mt-3">
                 <CoachActionPanel coach={coach} bookHref={bookHref} mode="profile" />
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500">{CANCEL_POLICY_COPY}</p>
-              <div className="mt-4">
-                <p className="eyebrow text-slate-500">What happens next</p>
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-slate-600">
-                  <li>Choose the athlete, sport, format, and package</li>
-                  <li>Pay LevelCoach securely for prepaid credit</li>
-                  <li>Schedule now, schedule later, or use remaining credit elsewhere</li>
-                </ol>
-              </div>
-              <Button asChild variant="outline" className="mt-4 h-11 w-full rounded-lg border-blue-200 bg-white text-sm font-bold text-blue-700 hover:bg-blue-50">
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Cancel or reschedule 24+ hours before a session to restore credit.
+              </p>
+              <Button asChild variant="outline" className="mt-3 h-10 w-full rounded-lg border-blue-200 bg-white text-sm font-bold text-blue-700 hover:bg-blue-50">
                 <Link to="/coaches">Compare other coaches</Link>
               </Button>
             </aside>
@@ -427,8 +420,8 @@ export default function CoachDetail() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-[1240px] grid-cols-1 gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
-        <div className="space-y-5">
+      <section className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_340px] lg:px-8">
+        <div className="space-y-4">
           <InfoSection title={`About ${model.firstName}`} icon={Users}>
             {model.bio ? (
               <p className="whitespace-pre-line text-base leading-8 text-slate-600">{model.bio}</p>
@@ -598,7 +591,7 @@ export default function CoachDetail() {
           </InfoSection>
         </div>
 
-        <aside className="space-y-5">
+        <aside className="space-y-4">
           {org?.name && (
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <p className="eyebrow text-slate-500">Affiliated organization</p>
@@ -719,12 +712,12 @@ export default function CoachDetail() {
 
 function InfoSection({ title, icon: Icon, children }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
           <Icon className="h-5 w-5" aria-hidden="true" />
         </div>
-        <h2 className="font-display text-2xl font-bold tracking-normal text-slate-950">{title}</h2>
+        <h2 className="font-display text-xl font-bold tracking-normal text-slate-950">{title}</h2>
       </div>
       {children}
     </section>
@@ -734,7 +727,7 @@ function InfoSection({ title, icon: Icon, children }) {
 function FocusList({ title, items, fallback }) {
   const list = items?.length ? items : [fallback];
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <p className="eyebrow text-slate-500">{title}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {list.map((item) => (

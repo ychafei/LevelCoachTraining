@@ -681,7 +681,7 @@ export default function CoachProfile() {
               />
             </div>
             <div className="mt-4">
-              <Label htmlFor="price-hint" className="text-xs font-semibold">Starting price (USD per session)</Label>
+              <Label htmlFor="price-hint" className="text-xs font-semibold">Fallback starting price (optional)</Label>
               <div className="relative mt-1 w-44">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true">$</span>
                 <Input
@@ -696,7 +696,9 @@ export default function CoachProfile() {
                   placeholder="0"
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Shown as "From $X / session" on your card. Actual prices come from your packages.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Used only before you create packages. Your active Single Session package controls the public “From $X / session” price.
+              </p>
             </div>
           </Section>
 
