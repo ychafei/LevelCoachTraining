@@ -290,6 +290,16 @@ export function nextAvailabilityLabel(coach, windowDays = 21) {
   return '';
 }
 
+export function isCoachAvailableNow(coach) {
+  const availability = coach?.availability || {};
+  const today = coachTimeParts(coach, new Date());
+  const slot = availability?.[today.weekday];
+  if (!slot?.enabled || !slot.start || !slot.end) return false;
+  const start = minutes(slot.start);
+  const end = minutes(slot.end);
+  return start !== null && end !== null && start <= today.minutes && end > today.minutes;
+}
+
 export function availabilitySummary(coach) {
   const availability = coach?.availability || {};
   const enabledDays = enabledAvailabilityDays(availability);
@@ -376,6 +386,7 @@ export function publicCoachDisplay(coach, options = {}) {
   const showActiveAthletes = safeActiveAthletes >= 2;
   const lastActiveAt = compact(normalized?.last_active_at) || '';
   const recentlyActive = recentActivity(lastActiveAt);
+  const availableNow = isCoachAvailableNow(normalized);
 
   return {
     raw: normalized,
@@ -431,7 +442,8 @@ export function publicCoachDisplay(coach, options = {}) {
       : '',
     lastActiveAt,
     recentlyActive,
-    presenceLabel: recentlyActive ? 'Active' : 'Not active in 24h',
+    availableNow,
+    presenceLabel: recentlyActive ? (availableNow ? 'Available' : 'Active') : 'Not active in 24h',
     distanceMiles: distance,
     profileHref: coachProfileHref(normalized),
     bookIntroHref: coachBookHref(normalized, { intro: '1' }),

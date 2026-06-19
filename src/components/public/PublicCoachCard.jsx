@@ -124,14 +124,14 @@ export default function PublicCoachCard({
       tabIndex={0}
       onClick={openProfile}
       onKeyDown={onKeyDown}
-      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 ${className}`}
+      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-lg hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 ${className}`}
       aria-label={`View ${model.displayName}'s full profile`}
     >
       <span className="pointer-events-none absolute right-4 top-4 hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-blue-700 opacity-0 ring-1 ring-blue-100 transition group-hover:opacity-100 lg:inline-flex">
         View full profile
       </span>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[120px_1fr] xl:grid-cols-[128px_1fr_200px]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[120px_1fr] xl:grid-cols-[128px_minmax(0,1fr)_232px]">
         <div className="flex flex-col items-center">
           <CoachCardPhoto model={model} compact={compact} />
           <SaveCoachButton
@@ -189,7 +189,7 @@ export default function PublicCoachCard({
             )}
           </div>
 
-          <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-5 text-slate-600">{model.headline}</p>
+          <p className="mt-2 line-clamp-2 text-sm leading-5 text-slate-600">{model.headline}</p>
 
           <div className="mt-2 flex flex-wrap gap-2">
             {visibleSpecs.map((tag) => (
@@ -218,7 +218,7 @@ export default function PublicCoachCard({
 
         <div className="border-t border-slate-100 pt-3 md:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
           <div className="flex h-full flex-col gap-2.5">
-            <div className="flex flex-wrap items-start justify-between gap-3 xl:block">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Starting at</p>
                 {model.rateLabel ? (
@@ -230,10 +230,10 @@ export default function PublicCoachCard({
                   <p className="mt-1 text-sm font-bold text-slate-700">Shown at booking</p>
                 )}
               </div>
-              <div className="text-left xl:mt-2">
+              <div className="text-left">
                 <p className="inline-flex items-center gap-1 font-display text-lg font-extrabold text-slate-950">
                   <Star className={`h-5 w-5 ${model.ratingLabel ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} aria-hidden="true" />
-                  {model.ratingLabel || 'New'}
+                  {model.ratingLabel || 'New coach'}
                 </p>
                 <p className="text-xs font-semibold text-slate-500">{model.reviewLabel}</p>
               </div>

@@ -29,9 +29,9 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
   const reviewCount = Number(c.review_count);
 
   return (
-    <div className={`group relative bg-card border border-border rounded-lg overflow-hidden ${className}`}>
+    <div className={`group relative overflow-hidden rounded-lg border border-border bg-card ${className}`}>
       {/* Photo */}
-      <div className="aspect-[3/4] bg-secondary relative overflow-hidden">
+      <div className="aspect-[4/3] bg-secondary relative overflow-hidden">
         {c.photo_url ? (
           <img
             src={c.photo_url}
@@ -40,7 +40,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="font-display text-6xl font-bold text-muted-foreground/20">
+            <span className="font-display text-4xl font-bold text-muted-foreground/20">
               {initials}
             </span>
           </div>
@@ -63,7 +63,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
       </div>
 
       {/* Info */}
-      <div className="p-6 -mt-16 relative">
+      <div className="relative -mt-10 p-4">
         <div className="flex items-center gap-2 mb-2">
           <MapPin className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
           <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">
@@ -72,7 +72,7 @@ export default function CoachProfilePreviewCard({ coach, className = '' }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <h3 className="text-xl font-bold tracking-[-0.01em] text-foreground">
+          <h3 className="text-lg font-bold tracking-normal text-foreground">
             {fullName}
           </h3>
           {c.email_verified_at && (

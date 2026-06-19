@@ -385,22 +385,23 @@ export default function CoachSearch() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_58%,#eef5ff_100%)]">
-        <div className="mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2">
+        <div className="mx-auto max-w-[1180px] px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="font-display text-3xl font-extrabold leading-tight tracking-normal text-slate-950 sm:text-4xl">
+                Find a coach
+              </h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                Published coach profiles with package prices, reviews, and live booking paths.
+              </p>
+            </div>
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5">
               <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
               <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
             </div>
-            <h1 className="mt-5 font-display text-4xl font-extrabold leading-tight tracking-[-0.02em] text-slate-950 sm:text-5xl lg:text-6xl">
-              Find a coach
-            </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              Every result is a published coach profile. Ratings and reviews come from completed
-              sessions; prices and availability come from each coach's own settings.
-            </p>
           </div>
 
-          <form onSubmit={applyFilters} className="mt-6 rounded-lg border border-slate-200 bg-white p-3 shadow-xl shadow-blue-600/10">
+          <form onSubmit={applyFilters} className="mt-3 rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg shadow-blue-600/5">
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.3fr_0.7fr_1fr_auto]">
               <FilterSelect
                 label="Sport"
@@ -436,7 +437,7 @@ export default function CoachSearch() {
                 onChange={(value) => setFilters((prev) => ({ ...prev, availability: value }))}
                 options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
               />
-              <Button type="submit" className="h-14 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+              <Button type="submit" className="h-12 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
                 <Search className="h-4 w-4" aria-hidden="true" />
                 Search
               </Button>
@@ -496,8 +497,8 @@ export default function CoachSearch() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <section className="mx-auto max-w-[1180px] px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mb-3 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-display text-xl font-bold tracking-normal text-slate-950">
               {loading ? 'Searching...' : `${filtered.rows.length} coach${filtered.rows.length === 1 ? '' : 'es'}`}
@@ -550,7 +551,7 @@ export default function CoachSearch() {
         {loading && (
           <div className="space-y-3" aria-busy="true" aria-label="Loading coaches">
             {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="h-40 animate-pulse rounded-lg border border-slate-200 bg-white" />
+              <div key={item} className="h-36 animate-pulse rounded-lg border border-slate-200 bg-white" />
             ))}
           </div>
         )}
@@ -656,10 +657,10 @@ export default function CoachSearch() {
   );
 }
 
-function FilterSelect({ label, icon: Icon, value, options, onChange, compact = false }) {
+function FilterSelect({ label, icon: Icon, value, options, onChange }) {
   return (
-    <div className={`flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 ${compact ? 'py-1.5' : 'py-2'}`}>
-      <span className={`grid shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 ${compact ? 'h-8 w-8' : 'h-9 w-9'}`}>
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
@@ -680,8 +681,8 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
   const showSuggestions = value && suggestions.length > 0 && value !== selectedPlaceLabel;
 
   return (
-    <div className="relative flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+    <div className="relative flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
         <MapPin className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">

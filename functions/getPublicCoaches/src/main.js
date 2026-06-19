@@ -67,7 +67,7 @@ function publicCard(doc, organization, stats = null) {
     price_hint_cents: Number.isInteger(Number(doc.price_hint_cents)) ? Number(doc.price_hint_cents) : null,
     sessions_taught: Number.isInteger(Number(publicStats.sessions_taught)) ? Number(publicStats.sessions_taught) : 0,
     active_athletes: Number.isInteger(Number(publicStats.active_athletes)) ? Number(publicStats.active_athletes) : 0,
-    last_active_at: doc.last_active_at || doc.$updatedAt || '',
+    last_active_at: doc.last_active_at || '',
     county: doc.county || '',
     training_area: doc.training_area || '',
     service_city: doc.service_city || '',
@@ -263,7 +263,7 @@ function durationOptions(pkg) {
     if (!Number.isInteger(priceCents) || priceCents <= 0) continue;
     byDuration.set(duration, { duration_minutes: duration, price_cents: priceCents });
   }
-  return [...byDuration.values()];
+  return [...byDuration.values()].sort((a, b) => a.duration_minutes - b.duration_minutes);
 }
 
 function addPriceCandidate(candidates, coachId, pkg) {
