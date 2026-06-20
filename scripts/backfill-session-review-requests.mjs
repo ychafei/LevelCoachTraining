@@ -194,7 +194,7 @@ async function createDocumentResilient(collection, data, permissions) {
 
 async function sendEmail({ to, subject, html }) {
   if (!process.env.RESEND_API_KEY || !to) return false;
-  const from = process.env.EMAIL_FROM || 'LevelCoach Training <notifications@levelcoachtraining.com>';
+  const from = process.env.EMAIL_FROM || 'LevelCoach Training <support@lctrainings.com>';
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {

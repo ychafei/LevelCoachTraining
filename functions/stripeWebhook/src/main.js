@@ -248,7 +248,7 @@ async function notifyProfile(db, { profileId, accountId = '', type, title, body,
 async function sendEmail({ to, subject, html }, error) {
   try {
     if (!process.env.RESEND_API_KEY || !to) return;
-    const from = process.env.EMAIL_FROM || 'LevelCoach Training <notifications@levelcoachtraining.com>';
+    const from = process.env.EMAIL_FROM || 'LevelCoach Training <support@lctrainings.com>';
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {

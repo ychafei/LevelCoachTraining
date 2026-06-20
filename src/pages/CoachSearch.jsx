@@ -4,11 +4,14 @@ import {
   ArrowRight,
   Building2,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   GraduationCap,
   Heart,
+  LayoutList,
+  Map as MapIcon,
   MapPin,
   RefreshCcw,
   Search,
@@ -38,6 +41,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { savedCoachIdsFromPrefs } from '@/lib/savedCoachPrefs';
 
 const PAGE_SIZE = 12;
+const MARKETPLACE_CONTAINER = 'mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8 2xl:px-10';
 const RADII = ['10', '15', '25', '50', '100'];
 const EXPANSION_RADII = [10, 15, 25, 50, 100];
 const AVAILABILITY_OPTIONS = ['Any time', 'Has set availability', 'Weekends', 'Evenings'];
@@ -383,26 +387,42 @@ export default function CoachSearch() {
     : {};
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_58%,#eef5ff_100%)]">
-        <div className="mx-auto max-w-[1180px] px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="font-display text-3xl font-extrabold leading-tight tracking-normal text-slate-950 sm:text-4xl">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f5f8fc_100%)] text-slate-950">
+      <section className="relative overflow-hidden border-b border-blue-100 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_55%,#edf5ff_100%)]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[radial-gradient(75%_100%_at_50%_100%,rgba(37,99,235,0.10),transparent_72%)]" aria-hidden="true" />
+        <div className={`${MARKETPLACE_CONTAINER} relative py-6 sm:py-8`}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-white/85 px-3 py-1.5 shadow-sm shadow-blue-900/5">
+                <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
+              </div>
+              <h1 className="mt-4 font-display text-4xl font-extrabold leading-tight tracking-normal text-slate-950 sm:text-5xl">
                 Find a coach
               </h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                Published coach profiles with package prices, reviews, and live booking paths.
+              <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
+                Discover vetted coaches with transparent pricing, real reviews, and live booking availability.
               </p>
             </div>
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5">
-              <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
+            <div className="grid max-w-xl grid-cols-1 gap-2 text-sm sm:grid-cols-3 lg:min-w-[520px]">
+              {[
+                ['Verified profiles', 'Email and legal checks'],
+                ['Secure booking', 'Stripe-protected checkout'],
+                ['Clear pricing', 'Package totals before pay'],
+              ].map(([title, body]) => (
+                <div key={title} className="rounded-2xl border border-blue-100 bg-white/80 p-3 shadow-sm shadow-blue-900/5">
+                  <div className="flex items-center gap-2 font-extrabold text-slate-950">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                    {title}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{body}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          <form onSubmit={applyFilters} className="mt-3 rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg shadow-blue-600/5">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.3fr_0.7fr_1fr_auto]">
+          <form onSubmit={applyFilters} className="mt-6 rounded-3xl border border-blue-100 bg-white/95 p-3 shadow-2xl shadow-blue-900/10 backdrop-blur">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.05fr_1.35fr_0.72fr_1.05fr_152px]">
               <FilterSelect
                 label="Sport"
                 icon={Trophy}
@@ -437,13 +457,13 @@ export default function CoachSearch() {
                 onChange={(value) => setFilters((prev) => ({ ...prev, availability: value }))}
                 options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
               />
-              <Button type="submit" className="h-12 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+              <Button type="submit" className="h-16 rounded-2xl bg-blue-600 px-6 text-base font-extrabold text-white shadow-xl shadow-blue-600/25 hover:bg-blue-700">
                 <Search className="h-4 w-4" aria-hidden="true" />
                 Search
               </Button>
             </div>
 
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <FilterSelect
                 label="Level"
                 icon={GraduationCap}
@@ -457,7 +477,7 @@ export default function CoachSearch() {
                 icon={Users}
                 value={filters.age}
                 onChange={(value) => setFilters((prev) => ({ ...prev, age: value }))}
-                options={AGE_GROUPS.map((value) => ({ value, label: value }))}
+                options={AGE_GROUPS.map((value) => ({ value, label: value === 'Any age group' ? 'Any age' : value }))}
                 compact
               />
               <FilterSelect
@@ -465,7 +485,7 @@ export default function CoachSearch() {
                 icon={Building2}
                 value={filters.org}
                 onChange={(value) => setFilters((prev) => ({ ...prev, org: value }))}
-                options={[{ value: 'any', label: 'Any organization' }, ...organizationOptions]}
+                options={[{ value: 'any', label: 'Any org' }, ...organizationOptions]}
                 compact
               />
               <FilterSelect
@@ -489,7 +509,7 @@ export default function CoachSearch() {
                 icon={SlidersHorizontal}
                 value={filters.type}
                 onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
-                options={SESSION_TYPES.map(({ value, label }) => ({ value, label }))}
+                options={SESSION_TYPES.map(({ value, label }) => ({ value, label: value === 'any' ? 'Any session' : label }))}
                 compact
               />
             </div>
@@ -497,8 +517,8 @@ export default function CoachSearch() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1180px] px-4 py-4 sm:px-6 lg:px-8">
-        <div className="mb-3 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <section className={`${MARKETPLACE_CONTAINER} py-6`}>
+        <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="font-display text-xl font-bold tracking-normal text-slate-950">
               {loading ? 'Searching...' : `${filtered.rows.length} coach${filtered.rows.length === 1 ? '' : 'es'}`}
@@ -508,7 +528,7 @@ export default function CoachSearch() {
                 ? 'Loading published coach profiles.'
                 : activePlace
                   ? `Serving ${activePlace.label} within ${filtered.effectiveRadius} miles`
-                  : 'Across all locations'}
+              : 'Across all locations'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -528,6 +548,26 @@ export default function CoachSearch() {
                 Saved coaches ({savedCoachIds.size})
               </Button>
             )}
+            <div className="inline-flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-sm font-extrabold text-blue-700 shadow-sm"
+                aria-pressed="true"
+              >
+                <LayoutList className="h-4 w-4" aria-hidden="true" />
+                List
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-9 cursor-not-allowed items-center gap-2 rounded-lg px-3 text-sm font-extrabold text-slate-400"
+                title="Map view is coming soon"
+                aria-pressed="false"
+              >
+                <MapIcon className="h-4 w-4" aria-hidden="true" />
+                Map
+              </button>
+            </div>
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
               <span>Sort</span>
               <SelectMenu
@@ -538,7 +578,7 @@ export default function CoachSearch() {
                 }}
                 ariaLabel="Sort coaches"
                 options={SORT_OPTIONS}
-                triggerClassName="w-auto min-w-[150px] border-slate-200 bg-white text-sm font-bold text-slate-950"
+                triggerClassName="h-11 w-auto min-w-[160px] rounded-xl border-slate-200 bg-white text-sm font-bold text-slate-950 shadow-sm"
               />
             </div>
             <Link to="/for-coaches" className="hidden items-center gap-1 text-sm font-bold text-blue-700 hover:underline sm:inline-flex">
@@ -551,7 +591,7 @@ export default function CoachSearch() {
         {loading && (
           <div className="space-y-3" aria-busy="true" aria-label="Loading coaches">
             {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="h-36 animate-pulse rounded-lg border border-slate-200 bg-white" />
+              <div key={item} className="h-48 animate-pulse rounded-2xl border border-slate-200 bg-white" />
             ))}
           </div>
         )}
@@ -598,6 +638,24 @@ export default function CoachSearch() {
                   bookingParams={bookingParams}
                 />
               ))}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-blue-700 ring-1 ring-blue-100">
+                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="font-extrabold">All public coaches are verified for your peace of mind.</p>
+                  <p className="mt-1 text-blue-800/80">
+                    Profiles only appear here after the coach is published, email-verified, and eligible for booking.
+                  </p>
+                </div>
+              </div>
+              <Link to="/safety" className="inline-flex shrink-0 items-center gap-1 font-extrabold text-blue-700 hover:underline">
+                Safety standards
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
             </div>
 
             {totalPages > 1 && (
@@ -659,18 +717,18 @@ export default function CoachSearch() {
 
 function FilterSelect({ label, icon: Icon, value, options, onChange }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-        <Icon className="h-4 w-4" aria-hidden="true" />
+    <div className="group flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
+        <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</span>
+        <span className="block text-xs font-extrabold uppercase tracking-[0.2em] text-slate-500">{label}</span>
         <SelectMenu
           value={value}
           onChange={onChange}
           ariaLabel={label}
           options={options}
-          triggerClassName="mt-0.5 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 text-sm font-bold text-slate-950 shadow-none hover:border-0 focus:ring-0 focus:border-0"
+          triggerClassName="mt-1 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 text-base font-extrabold text-slate-950 shadow-none hover:border-0 focus:border-0 focus:ring-0"
         />
       </span>
     </div>
@@ -681,22 +739,22 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
   const showSuggestions = value && suggestions.length > 0 && value !== selectedPlaceLabel;
 
   return (
-    <div className="relative flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-        <MapPin className="h-4 w-4" aria-hidden="true" />
+    <div className="group relative flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
+        <MapPin className="h-5 w-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Location</span>
+        <span className="block text-xs font-extrabold uppercase tracking-[0.2em] text-slate-500">Location</span>
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="mt-1 h-auto border-0 bg-transparent p-0 text-sm font-bold text-slate-950 shadow-none outline-none focus-visible:ring-0"
+          className="mt-1 h-auto border-0 bg-transparent p-0 text-base font-extrabold text-slate-950 shadow-none outline-none placeholder:text-slate-500 focus-visible:ring-0"
           placeholder="City, county, or ZIP"
           aria-label="Location"
         />
       </span>
       {showSuggestions && (
-        <span className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-xl shadow-slate-900/10">
+        <span className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-xl shadow-slate-900/10">
           {suggestions.map((place) => (
             <button
               key={place.label}

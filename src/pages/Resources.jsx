@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { Reveal, HeroPattern } from '@/features/marketing/MarketingMotion';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 const audiences = [
   { id: 'athletes', label: 'Athletes', icon: Trophy },

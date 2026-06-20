@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { Reveal } from '@/features/marketing/MarketingMotion';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 // Every entry routes to a real page or a real inbox — no chat widgets,
 // phone trees, or help-center shells that go nowhere.

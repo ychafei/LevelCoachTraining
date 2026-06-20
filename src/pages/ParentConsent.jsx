@@ -97,8 +97,8 @@ export default function ParentConsent() {
 
         <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
           You can revoke an athlete's permissions anytime from your parent portal. Questions? Email{' '}
-          <a href="mailto:contact@levelcoachtraining.com" className="text-accent underline">
-            contact@levelcoachtraining.com
+          <a href="mailto:support@lctrainings.com" className="text-accent underline">
+            support@lctrainings.com
           </a>.
         </p>
       </div>

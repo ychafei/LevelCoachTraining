@@ -3,4 +3,4 @@
 // OG URL, JSON-LD url, and sitemap entry should use the www host.
 export const SITE_ORIGIN = 'https://www.lctrainings.com';
 export const SITE_NAME = 'LevelCoach Training';
-export const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+export const SUPPORT_EMAIL = 'support@lctrainings.com';

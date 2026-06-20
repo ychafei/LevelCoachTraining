@@ -4,7 +4,7 @@ import { Mail } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 
-const SUPPORT_EMAIL = 'contact@levelcoachtraining.com';
+const SUPPORT_EMAIL = 'support@lctrainings.com';
 
 const COLUMNS = [
   {

@@ -386,7 +386,7 @@ export default function Landing() {
     name: 'LevelCoach Training',
     url: `${SITE_ORIGIN}/`,
     logo: `${SITE_ORIGIN}/levelcoach-mark.png`,
-    email: 'contact@levelcoachtraining.com',
+    email: 'support@lctrainings.com',
     description: 'Multi-sport coaching marketplace: athletes and families find and book vetted coaches; coaches and training organizations run sessions, progress, messaging, and Stripe payouts from one platform.',
   }), []);
 
