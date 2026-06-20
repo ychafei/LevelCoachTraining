@@ -132,6 +132,8 @@ test('public marketplace: coach cards use gated save/message/book actions and sa
   const actions = source('src/components/public/CoachActionControls.jsx');
   const search = source('src/pages/CoachSearch.jsx');
   const detail = source('src/pages/CoachDetail.jsx');
+  const navbar = source('src/components/layout/Navbar.jsx');
+  const creditsModal = source('src/components/layout/CreditsModal.jsx');
   const publicFn = source('functions/getPublicCoaches/src/main.js');
   const publicModel = source('src/lib/publicCoach.js');
   const coachSelf = source('functions/coachSelf/src/main.js');
@@ -145,6 +147,9 @@ test('public marketplace: coach cards use gated save/message/book actions and sa
   assert(actions.includes("conversationRepo.start({ coach_id: model.id") && actions.includes("navigate('/messages')"), 'message action must start/reuse a real coach conversation');
   assert(actions.includes('saved_coach_ids') && actions.includes('auth.updateCurrentUser'), 'save action must persist to the signed-in profile preferences');
   assert(search.includes('Saved coaches') && search.includes('showSavedOnly') && search.includes('savedCoachIds.has'), 'coach search must expose a signed-in saved-coaches list filter');
+  assert(navbar.includes('CreditsModal') && navbar.includes('Credits: ${count} session') && !navbar.includes('Balance:'), 'top nav credit affordance must be a Credits pill, not a Balance link');
+  assert(creditsModal.includes('Use Your Credits') && creditsModal.includes('Recent coaches are shown from most recent to least recent') && creditsModal.includes('Book with credit'), 'credits pill must open a recent-coach booking modal');
+  assert(creditsModal.includes('remaining credit value can be applied toward another coach') && creditsModal.includes('sessionRepo.list') && creditsModal.includes('coachRepo.get'), 'credits modal must explain transferable value and load real recent coach rows');
   assert(detail.includes('IntroVideo') && detail.includes('CoachActionPanel') && detail.includes('BookCoachButton'), 'public coach profile must render intro video and gated actions');
   assert(publicFn.includes('sessions_taught') && publicFn.includes('active_athletes') && publicFn.includes('last_active_at'), 'public coaches function must return only safe coach aggregate/presence fields');
   assert(publicFn.includes('singleSessionPriceCents') && publicFn.includes('candidatePriceHint'), 'public function must anchor display price to Single Session before discounted bundles');

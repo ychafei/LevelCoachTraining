@@ -14,20 +14,19 @@ import { useAuth } from '@/lib/AuthContext';
 import { fullName, initialsOf } from '@/lib/displayName';
 import NotificationsBell from '@/features/coach/NotificationsBell';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
-import { formatCreditMoney, useCreditBalance } from '@/hooks/useCreditBalance';
+import CreditsModal from '@/components/layout/CreditsModal';
+import { useCreditBalance } from '@/hooks/useCreditBalance';
 
-function creditBalanceCopy(balance) {
-  if (balance.loading) return 'Balance: ...';
-  if (balance.remainingCents > 0) return `Balance: ${formatCreditMoney(balance.remainingCents)}`;
-  if (balance.remainingSessions > 0) {
-    return `Balance: ${balance.remainingSessions} credit${balance.remainingSessions === 1 ? '' : 's'}`;
-  }
-  return 'Balance: $0';
+function creditButtonCopy(balance) {
+  if (balance.loading) return 'Credits: ...';
+  const count = Math.max(0, Number(balance.remainingSessions) || 0);
+  return `Credits: ${count} session${count === 1 ? '' : 's'}`;
 }
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user, isAuthenticated, isAdmin, isSuperAdmin, isCoach, isOrganizationAdmin, isGuardian, logout } = useAuth();
   const authenticated = isAuthenticated;
@@ -248,9 +247,12 @@ export default function Navbar() {
               {authenticated ? (
                 <div className="flex items-center gap-2">
                   {showCreditBalance && (
-                    <Link
-                      to="/dashboard"
+                    <button
+                      type="button"
+                      onClick={() => setCreditsOpen(true)}
                       className="hidden h-10 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-xs font-extrabold text-blue-800 shadow-sm transition hover:border-blue-200 hover:bg-white lg:inline-flex"
+                      aria-haspopup="dialog"
+                      aria-label="Open training credits"
                       title={
                         creditBalance.remainingSessions > 0
                           ? `${creditBalance.remainingSessions} credit${creditBalance.remainingSessions === 1 ? '' : 's'} available`
@@ -258,8 +260,8 @@ export default function Navbar() {
                       }
                     >
                       <WalletCards className="h-4 w-4" aria-hidden="true" />
-                      {creditBalanceCopy(creditBalance)}
-                    </Link>
+                      {creditButtonCopy(creditBalance)}
+                    </button>
                   )}
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -454,17 +456,21 @@ export default function Navbar() {
               {authenticated ? (
                 <>
                   {showCreditBalance && (
-                    <Link
-                      to="/dashboard"
-                      onClick={closeMobile}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeMobile();
+                        setCreditsOpen(true);
+                      }}
                       className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm font-extrabold text-blue-800"
+                      aria-haspopup="dialog"
                     >
                       <span className="inline-flex items-center gap-2">
                         <WalletCards className="h-4 w-4" aria-hidden="true" />
-                        Training credit
+                        Training credits
                       </span>
-                      <span>{creditBalance.loading ? '...' : formatCreditMoney(creditBalance.remainingCents)}</span>
-                    </Link>
+                      <span>{creditButtonCopy(creditBalance).replace('Credits: ', '')}</span>
+                    </button>
                   )}
                   <div className="flex items-center gap-3 px-4 py-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
@@ -523,6 +529,14 @@ export default function Navbar() {
             </div>
           </div>
         </div>
+      )}
+      {showCreditBalance && (
+        <CreditsModal
+          open={creditsOpen}
+          onOpenChange={setCreditsOpen}
+          user={user}
+          creditBalance={creditBalance}
+        />
       )}
     </nav>
   );
