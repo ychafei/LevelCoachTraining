@@ -225,10 +225,15 @@ test('parent/minor booking: guardian consent must be exact-child bound', () => {
   const checkout = source('functions/createStripeCheckout/src/main.js');
   const booking = source('functions/booking/src/main.js');
   const sign = source('functions/signLegalAgreement/src/main.js');
+  const pdf = source('functions/generateLegalAgreementPdf/src/main.js');
   assert(!checkout.includes('!agreement.athlete_id || agreement.athlete_id === athleteId'), 'checkout must not accept unbound guardian agreements');
   assert(!booking.includes('!agreement.athlete_id || agreement.athlete_id === athleteId'), 'booking must not accept unbound guardian agreements');
   assert(sign.includes('Guardian signings require an athlete_id'), 'guardian signing must require athlete_id');
   assert(sign.includes('legalAgreementPermissions(accountId)'), 'signed legal agreements must be readable by the signer');
+  assert(!sign.includes("Role.label('super_admin')"), 'legal signing permissions must not use invalid Appwrite label super_admin');
+  assert(!pdf.includes("Role.label('super_admin')"), 'legal PDF permissions must not use invalid Appwrite label super_admin');
+  assert(sign.includes("Role.label('superadmin')"), 'legal signing permissions must grant the valid superadmin label');
+  assert(pdf.includes("Role.label('superadmin')"), 'legal PDF permissions must grant the valid superadmin label');
 });
 
 test('coach session management: session state changes stay server-side', () => {

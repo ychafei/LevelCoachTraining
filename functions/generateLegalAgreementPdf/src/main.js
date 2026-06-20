@@ -80,7 +80,7 @@ async function canGenerate(databases, users, accountId, actor, agreement) {
 function legalPdfPermissions(accountId) {
   const permissions = [
     Permission.read(Role.label('admin')),
-    Permission.read(Role.label('super_admin')),
+    Permission.read(Role.label('superadmin')),
   ];
   if (accountId) permissions.unshift(Permission.read(Role.user(accountId)));
   return permissions;

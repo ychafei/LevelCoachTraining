@@ -250,7 +250,7 @@ function signatureMethod(payload) {
 function legalPdfPermissions(accountId) {
   const permissions = [
     Permission.read(Role.label('admin')),
-    Permission.read(Role.label('super_admin')),
+    Permission.read(Role.label('superadmin')),
   ];
   if (accountId) permissions.unshift(Permission.read(Role.user(accountId)));
   return permissions;
@@ -259,7 +259,7 @@ function legalPdfPermissions(accountId) {
 function legalAgreementPermissions(accountId) {
   const permissions = [
     Permission.read(Role.label('admin')),
-    Permission.read(Role.label('super_admin')),
+    Permission.read(Role.label('superadmin')),
   ];
   if (accountId) permissions.unshift(Permission.read(Role.user(accountId)));
   return permissions;
