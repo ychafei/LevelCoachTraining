@@ -313,7 +313,7 @@ function BrowseCoachesCallout({ onBrowseCoaches }) {
   );
 }
 
-function RecentCoachRow({ row }) {
+function RecentCoachRow({ row, onBookSession }) {
   const model = publicCoachDisplay(row.coach);
   const priceLabel = row.priceCents
     ? `${formatCreditMoney(row.priceCents)}/session`
@@ -349,7 +349,7 @@ function RecentCoachRow({ row }) {
           <p className="text-xs font-extrabold text-blue-700">{row.creditsApply}</p>
         </div>
         <Button asChild className="h-10 shrink-0 rounded-xl bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700">
-          <Link to={bookWithCreditHref(row.coachId, row.credit)}>Book with credit</Link>
+          <Link to={bookWithCreditHref(row.coachId, row.credit)} onClick={onBookSession}>Book session</Link>
         </Button>
       </div>
     </div>
@@ -387,6 +387,7 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
     ? `You have ${remainingSessions} ${creditWord} available. Here are published coaches near your area.`
     : `You have ${remainingSessions} ${creditWord} available. Recent coaches are shown from most recent to least recent.`;
   const onBrowseCoaches = () => onOpenChange(false);
+  const onBookSession = () => onOpenChange(false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -433,7 +434,13 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
                 Loading recent coaches...
               </div>
             ) : rows.length > 0 ? (
-              rows.map((row) => <RecentCoachRow key={row.coachId} row={row} />)
+              rows.map((row) => (
+                <RecentCoachRow
+                  key={row.coachId}
+                  row={row}
+                  onBookSession={onBookSession}
+                />
+              ))
             ) : (
               <div className="py-10 text-center">
                 <p className="font-display text-xl font-extrabold tracking-normal text-slate-950">No coaches available yet</p>
