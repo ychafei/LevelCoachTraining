@@ -161,7 +161,7 @@ export default function OrgMembersTab({ organizationId, isOrgAdmin, isOwner, cur
         <form onSubmit={invite} className="rounded-lg border border-border bg-card p-5">
           <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Invite a team member</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            The person needs an existing LevelCoach account with this email. Owner and admin roles can only be granted by the organization owner.
+            Enter their email and LevelCoach will create or link the account to this organization invite. Owner and admin roles can only be granted by the organization owner.
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_190px_auto]">
             <div>

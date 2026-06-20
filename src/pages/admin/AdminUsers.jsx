@@ -324,8 +324,8 @@ export default function AdminUsers() {
           <p className="text-sm text-muted-foreground">{displayName(roleDialog)} ({roleDialog?.email})</p>
           <p className="text-xs text-muted-foreground">
             Roles stack — someone can be Coach and Super admin at once. &ldquo;Coach&rdquo; grants the
-            coach label; the coach record itself is created/linked from Admin → Coaches or
-            application approval. Saving applies the exact set selected below.
+            coach label; invitations and application approval now create/link the backing coach
+            record automatically. Saving applies the exact set selected below.
           </p>
           <div className="mt-2">
             {roleDialog && <RoleEditor profile={roleDialog} onSaved={onRolesSaved} />}
@@ -375,11 +375,11 @@ export default function AdminUsers() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">Client — Regular user</SelectItem>
-                  <SelectItem value="coach">Coach — Granted the coach label</SelectItem>
+                  <SelectItem value="coach">Coach — Create/link coach workspace</SelectItem>
                 </SelectContent>
               </Select>
               {inviteRole === 'coach' && (
-                <p className="text-xs text-accent mt-2">They get the coach label and complete coach onboarding (profile, legal packet, payouts) on first login.</p>
+                <p className="text-xs text-accent mt-2">Their coach workspace is created or linked to this email. They complete profile, legal packet, and payouts before publishing.</p>
               )}
               <p className="text-xs text-muted-foreground mt-2">Platform admin access is granted separately from the master admin portal.</p>
             </div>

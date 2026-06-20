@@ -398,6 +398,105 @@ async function accountOwnsOtherCoach(databases, accountId, exceptCoachId) {
   return rows.documents.find((doc) => doc.$id !== exceptCoachId) || null;
 }
 
+async function accountOwnedCoach(databases, accountId) {
+  if (!accountId) return null;
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function ensureAccountForProfile(ctx, profile, email) {
+  const { databases, users, error } = ctx;
+  if (profile?.account_id) {
+    const existing = await users.get(profile.account_id).catch(() => null);
+    if (existing) return { profile, account: existing };
+  }
+
+  const password = randomBytes(32).toString('hex');
+  let account;
+  try {
+    account = await users.create(ID.unique(), email, undefined, password);
+  } catch (err) {
+    error?.(err?.message || String(err));
+    return { error: 'Could not create an account for this email.' };
+  }
+
+  if (profile) {
+    const updated = await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
+      account_id: account.$id,
+      email,
+    });
+    return { profile: updated, account };
+  }
+
+  const created = await databases.createDocument(DB_ID, 'profiles', ID.unique(), {
+    account_id: account.$id,
+    email,
+    role: 'user',
+  }, [Permission.read(Role.user(account.$id))]);
+  return { profile: created, account };
+}
+
+async function ensureCoachForProfile(ctx, profile, defaults = {}) {
+  const { databases, users, error } = ctx;
+  if (!profile?.account_id) return { error: 'Profile has no account to link as a coach.' };
+
+  const linked = profile.coach_id
+    ? await databases.getDocument(DB_ID, 'coaches', profile.coach_id).catch(() => null)
+    : null;
+  const owned = await accountOwnedCoach(databases, profile.account_id);
+  if (linked && owned && linked.$id !== owned.$id) {
+    return { error: 'This profile is linked to a different coach record than the account owns.' };
+  }
+
+  let coach = linked || owned || null;
+  if (!coach) {
+    const email = String(defaults.email || profile.email || '').trim().toLowerCase();
+    const fallbackName = email ? email.split('@')[0] : 'Coach';
+    coach = await createCoachResilient(databases, {
+      first_name: profile.first_name || defaults.first_name || fallbackName,
+      last_name: profile.last_name || defaults.last_name || '',
+      is_active: false,
+      published: false,
+      user_id: profile.account_id,
+    });
+  }
+
+  if (coach.user_id && coach.user_id !== profile.account_id) {
+    return { error: 'This coach record is already linked to another account.' };
+  }
+  const duplicate = await accountOwnsOtherCoach(databases, profile.account_id, coach.$id);
+  if (duplicate) {
+    return { error: 'This account already owns a different coach record.' };
+  }
+
+  const account = await users.get(profile.account_id).catch(() => null);
+  const updatedCoach = await updateCoachResilient(databases, coach.$id, {
+    user_id: profile.account_id,
+  }).catch((err) => {
+    error?.(`ensureCoachForProfile: failed to set coach.user_id: ${err?.message || err}`);
+    return null;
+  });
+  await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
+    role: preservedRole(account, profile, 'coach'),
+    coach_id: coach.$id,
+  });
+  if (account) {
+    await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
+  }
+  const privateFields = {};
+  if (defaults.email || profile.email) privateFields.email = String(defaults.email || profile.email).trim().toLowerCase();
+  if (defaults.phone !== undefined) privateFields.phone = defaults.phone || '';
+  if (Object.keys(privateFields).length > 0) {
+    await upsertCoachPrivate(databases, coach.$id, privateFields).catch((err) => {
+      error?.(`ensureCoachForProfile: failed to write coach_private: ${err?.message || err}`);
+    });
+  }
+  return { coach: updatedCoach || coach };
+}
+
 // --- Action handlers ----------------------------------------------------------
 
 async function inviteUser(ctx, payload) {
@@ -416,28 +515,43 @@ async function inviteUser(ctx, payload) {
     Query.equal('email', email),
     Query.limit(1),
   ]);
-  if (existingProfiles.documents[0]) {
-    return { status: 409, body: { error: 'An account with this email already exists.' } };
+  let profile = existingProfiles.documents[0] || null;
+  let account = null;
+  let createdAccount = false;
+
+  if (profile) {
+    const ensured = await ensureAccountForProfile(ctx, profile, email);
+    if (ensured.error) return { status: 409, body: { error: ensured.error } };
+    profile = ensured.profile;
+    account = ensured.account;
+  } else {
+    // Random throwaway password — the invitee sets their own via password reset.
+    const password = randomBytes(32).toString('hex');
+    try {
+      account = await users.create(ID.unique(), email, undefined, password);
+      createdAccount = true;
+    } catch (err) {
+      error?.(err?.message || String(err));
+      return { status: 409, body: { error: 'Could not create an account for this email.' } };
+    }
+
+    profile = await databases.createDocument(DB_ID, 'profiles', ID.unique(), {
+      account_id: account.$id,
+      email,
+      role,
+    }, [Permission.read(Role.user(account.$id))]);
   }
 
-  // Random throwaway password — the invitee sets their own via password reset.
-  const password = randomBytes(32).toString('hex');
-  let account;
-  try {
-    account = await users.create(ID.unique(), email, undefined, password);
-  } catch (err) {
-    error?.(err?.message || String(err));
-    return { status: 409, body: { error: 'Could not create an account for this email.' } };
-  }
+  let coachId = '';
   if (role === 'coach') {
-    await users.updateLabels(account.$id, ['coach']).catch(() => {});
+    const ensured = await ensureCoachForProfile(ctx, profile, { email });
+    if (ensured.error) return { status: 409, body: { error: ensured.error } };
+    coachId = ensured.coach?.$id || '';
+  } else if (profile.role !== 'user') {
+    await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
+      role: preservedRole(account, profile, profile.role || 'user'),
+    }).catch(() => {});
   }
-
-  const profile = await databases.createDocument(DB_ID, 'profiles', ID.unique(), {
-    account_id: account.$id,
-    email,
-    role,
-  }, [Permission.read(Role.user(account.$id))]);
 
   const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
   await sendEmail({
@@ -446,6 +560,7 @@ async function inviteUser(ctx, payload) {
     html: `
       <p>You have been invited to LevelCoach Training.</p>
       <p>Visit <a href="${appBaseUrl}">${appBaseUrl}</a>, choose "Forgot password", and enter this email address to set your password and sign in.</p>
+      ${role === 'coach' ? '<p>Your coach workspace has been created and linked to this email. Complete your profile, legal packet, and payouts before publishing.</p>' : ''}
     `,
   }, error);
 
@@ -455,10 +570,10 @@ async function inviteUser(ctx, payload) {
     action: 'admin.invite_user',
     entity_type: 'Profile',
     entity_id: profile.$id,
-    after: JSON.stringify({ email, role }),
-    metadata: JSON.stringify({ account_id: account.$id }),
+    after: JSON.stringify({ email, role, coach_id: coachId }),
+    metadata: JSON.stringify({ account_id: account.$id, existing_profile: !createdAccount && !!existingProfiles.documents[0] }),
   });
-  return { status: 200, body: { ok: true, profile_id: profile.$id, account_id: account.$id } };
+  return { status: 200, body: { ok: true, profile_id: profile.$id, account_id: account.$id, coach_id: coachId || undefined } };
 }
 
 async function grantCredits(ctx, payload) {

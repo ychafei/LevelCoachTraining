@@ -1,4 +1,5 @@
 import { Client, Databases, Users, ID, Permission, Query, Role } from 'node-appwrite';
+import { randomBytes } from 'node:crypto';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -211,6 +212,150 @@ async function notify(databases, recipientProfile, type, title, text) {
   }, grants).catch(() => {});
 }
 
+async function profileByEmail(databases, email) {
+  const rows = await databases.listDocuments(DB_ID, 'profiles', [
+    Query.equal('email', email),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function ensureProfileAccount(databases, users, email, role = 'user', error) {
+  let profile = await profileByEmail(databases, email);
+  if (profile?.account_id) {
+    const account = await users.get(profile.account_id).catch(() => null);
+    if (account) return { profile, account, created: false };
+  }
+
+  const password = randomBytes(32).toString('hex');
+  let account;
+  try {
+    account = await users.create(ID.unique(), email, undefined, password);
+  } catch (err) {
+    error?.(err?.message || String(err));
+    return { error: 'Could not create an account for this email.' };
+  }
+
+  if (profile) {
+    profile = await updateDocumentResilient(databases, 'profiles', profile.$id, {
+      account_id: account.$id,
+      email,
+    });
+  } else {
+    profile = await createDocumentResilient(databases, 'profiles', {
+      account_id: account.$id,
+      email,
+      role,
+    }, [Permission.read(Role.user(account.$id))]);
+  }
+  return { profile, account, created: true };
+}
+
+function preservedRole(account, profile, fallback) {
+  const labels = account?.labels || [];
+  if (labels.includes('superadmin')) return 'super_admin';
+  if (labels.includes('admin')) return 'admin';
+  if (!account && ['admin', 'super_admin'].includes(profile?.role)) return profile.role;
+  return fallback;
+}
+
+async function getCoachPrivate(databases, coachId) {
+  const rows = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('coach_id', coachId),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function upsertCoachPrivate(databases, coachId, fields) {
+  const existing = await getCoachPrivate(databases, coachId);
+  if (existing) return updateDocumentResilient(databases, 'coach_private', existing.$id, fields);
+  return createDocumentResilient(databases, 'coach_private', { coach_id: coachId, ...fields });
+}
+
+async function coachByPrivateEmail(databases, email) {
+  const rows = await databases.listDocuments(DB_ID, 'coach_private', [
+    Query.equal('email', email),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  const row = rows.documents[0];
+  if (!row?.coach_id) return null;
+  return databases.getDocument(DB_ID, 'coaches', row.coach_id).catch(() => null);
+}
+
+async function accountOwnedCoach(databases, accountId) {
+  if (!accountId) return null;
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(1),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function accountOwnsOtherCoach(databases, accountId, exceptCoachId) {
+  if (!accountId) return null;
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(2),
+  ]);
+  return rows.documents.find((doc) => doc.$id !== exceptCoachId) || null;
+}
+
+async function ensureCoachForProfile(databases, users, profile, defaults = {}, error) {
+  if (!profile?.account_id) return { error: 'Profile has no account to link as a coach.' };
+  const preferred = defaults.coach || null;
+  const linked = profile.coach_id
+    ? await databases.getDocument(DB_ID, 'coaches', profile.coach_id).catch(() => null)
+    : null;
+  const owned = await accountOwnedCoach(databases, profile.account_id);
+  const candidates = [preferred, linked, owned].filter(Boolean);
+  const uniqueIds = [...new Set(candidates.map((coach) => coach.$id))];
+  if (uniqueIds.length > 1) {
+    return { error: 'This email is already tied to a different coach record.' };
+  }
+
+  let coach = candidates[0] || null;
+  if (!coach) {
+    const email = String(defaults.email || profile.email || '').trim().toLowerCase();
+    const fallbackName = email ? email.split('@')[0] : 'Coach';
+    coach = await createDocumentResilient(databases, 'coaches', {
+      first_name: profile.first_name || defaults.first_name || fallbackName,
+      last_name: profile.last_name || defaults.last_name || '',
+      is_active: false,
+      published: false,
+      user_id: profile.account_id,
+    });
+  }
+
+  if (coach.user_id && coach.user_id !== profile.account_id) {
+    return { error: 'This coach record is already linked to another account.' };
+  }
+  const duplicate = await accountOwnsOtherCoach(databases, profile.account_id, coach.$id);
+  if (duplicate) return { error: 'This account already owns a different coach record.' };
+
+  const account = await users.get(profile.account_id).catch(() => null);
+  const updatedCoach = await updateDocumentResilient(databases, 'coaches', coach.$id, {
+    user_id: profile.account_id,
+  }).catch((err) => {
+    error?.(`ensureCoachForProfile: failed to set coach.user_id: ${err?.message || err}`);
+    return null;
+  });
+  await updateDocumentResilient(databases, 'profiles', profile.$id, {
+    role: preservedRole(account, profile, 'coach'),
+    coach_id: coach.$id,
+  });
+  if (account) {
+    await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
+  }
+  const email = String(defaults.email || profile.email || '').trim().toLowerCase();
+  if (email) {
+    await upsertCoachPrivate(databases, coach.$id, { email }).catch((err) => {
+      error?.(`ensureCoachForProfile: failed to write coach_private: ${err?.message || err}`);
+    });
+  }
+  return { coach: updatedCoach || coach };
+}
+
 // --- Action handlers ----------------------------------------------------------
 
 async function createOrg(databases, profile, accountId, payload) {
@@ -312,22 +457,29 @@ async function updateOrg(databases, profile, payload) {
   return { status: 200, body: { organization: org } };
 }
 
-async function inviteCoach(databases, profile, payload, error) {
+async function inviteCoach(databases, users, profile, payload, error) {
   const orgId = String(payload.organization_id || '');
   const member = await requireRole(databases, orgId, profile, ORG_ADMIN_ROLES);
   if (!member) return { status: 403, body: { error: 'Organization owner or admin access required.' } };
 
   let coach = null;
+  let targetProfile = null;
+  let createdAccount = false;
+  let coachInviteEmail = '';
   if (payload.coach_id) {
     coach = await databases.getDocument(DB_ID, 'coaches', String(payload.coach_id)).catch(() => null);
   } else if (payload.email) {
     const email = String(payload.email).trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return { status: 400, body: { error: 'A valid coach email is required.' } };
-    const rows = await databases.listDocuments(DB_ID, 'coaches', [
-      Query.equal('email', email),
-      Query.limit(1),
-    ]);
-    coach = rows.documents[0] || null;
+    coachInviteEmail = email;
+    coach = await coachByPrivateEmail(databases, email);
+    const ensuredProfile = await ensureProfileAccount(databases, users, email, 'coach', error);
+    if (ensuredProfile.error) return { status: 409, body: { error: ensuredProfile.error } };
+    targetProfile = ensuredProfile.profile;
+    createdAccount = ensuredProfile.created;
+    const ensuredCoach = await ensureCoachForProfile(databases, users, targetProfile, { email, coach }, error);
+    if (ensuredCoach.error) return { status: 409, body: { error: ensuredCoach.error } };
+    coach = ensuredCoach.coach;
   }
   if (!coach) return { status: 404, body: { error: 'Coach not found.' } };
 
@@ -349,7 +501,7 @@ async function inviteCoach(databases, profile, payload, error) {
 
   const org = await databases.getDocument(DB_ID, 'organizations', orgId).catch(() => null);
   if (coach.user_id) {
-    const coachProfile = await profileForAccount(databases, coach.user_id).catch(() => null);
+    const coachProfile = targetProfile || await profileForAccount(databases, coach.user_id).catch(() => null);
     await notify(databases, coachProfile, 'org_invite',
       'Organization invitation',
       `${org?.name || 'An organization'} invited you to join as a coach.`);
@@ -358,14 +510,16 @@ async function inviteCoach(databases, profile, payload, error) {
   const coachPriv = await databases.listDocuments(DB_ID, 'coach_private', [
     Query.equal('coach_id', coach.$id), Query.limit(1),
   ]).then((r) => r.documents[0]).catch(() => null);
-  const coachInviteEmail = coachPriv?.email || coach.email;
+  coachInviteEmail = coachInviteEmail || coachPriv?.email || coach.email;
   if (coachInviteEmail) {
+    const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
     await sendEmail({
       to: coachInviteEmail,
       subject: `LevelCoach Training - ${org?.name || 'An organization'} invited you`,
       html: `
         <p>${org?.name || 'An organization'} invited you to join their coach roster on LevelCoach Training.</p>
-        <p>Sign in to your coach portal to accept the invitation.</p>
+        <p>${createdAccount ? `Visit <a href="${appBaseUrl}">${appBaseUrl}</a>, choose "Forgot password", and enter this email address to set your password.` : 'Sign in to your coach portal'} Then accept the invitation from your coach portal.</p>
+        <p>Your coach workspace is linked to this email. You still need to complete your profile, legal packet, and payouts before publishing.</p>
       `,
     }, error);
   }
@@ -504,7 +658,7 @@ async function setPayoutRule(databases, profile, payload) {
   return { status: 200, body: { ok: true, payout_rule_id: rule.$id } };
 }
 
-async function inviteMember(databases, profile, payload, error) {
+async function inviteMember(databases, users, profile, payload, error) {
   const orgId = String(payload.organization_id || '');
   const member = await requireRole(databases, orgId, profile, ORG_ADMIN_ROLES);
   if (!member) return { status: 403, body: { error: 'Organization owner or admin access required.' } };
@@ -517,12 +671,9 @@ async function inviteMember(databases, profile, payload, error) {
 
   const email = String(payload.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return { status: 400, body: { error: 'A valid email is required.' } };
-  const rows = await databases.listDocuments(DB_ID, 'profiles', [
-    Query.equal('email', email),
-    Query.limit(1),
-  ]);
-  const target = rows.documents[0];
-  if (!target) return { status: 404, body: { error: 'No account exists with that email yet.' } };
+  const ensuredProfile = await ensureProfileAccount(databases, users, email, 'user', error);
+  if (ensuredProfile.error) return { status: 409, body: { error: ensuredProfile.error } };
+  const target = ensuredProfile.profile;
 
   const existing = await databases.listDocuments(DB_ID, 'organization_members', [
     Query.equal('organization_id', orgId),
@@ -551,7 +702,7 @@ async function inviteMember(databases, profile, payload, error) {
     subject: `LevelCoach Training - ${org?.name || 'An organization'} invited you`,
     html: `
       <p>${org?.name || 'An organization'} invited you to join their team on LevelCoach Training.</p>
-      <p>Sign in to accept the invitation.</p>
+      <p>${ensuredProfile.created ? `Visit <a href="${(process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')}">${(process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')}</a>, choose "Forgot password", and enter this email address to set your password.` : 'Sign in'} Then accept the invitation from your organization workspace.</p>
     `,
   }, error);
 
@@ -896,7 +1047,7 @@ export default async ({ req, res, error }) => {
     const accountId = callerAccountId(req);
     if (!accountId) return res.json({ error: 'Authentication required.' }, 401);
 
-    const { databases } = services();
+    const { databases, users } = services();
     const profile = await profileForAccount(databases, accountId);
     if (!profile) return res.json({ error: 'No profile found for this account.' }, 404);
     if (await callerIsBanned(databases, profile)) {
@@ -913,7 +1064,7 @@ export default async ({ req, res, error }) => {
         result = await updateOrg(databases, profile, payload);
         break;
       case 'inviteCoach':
-        result = await inviteCoach(databases, profile, payload, error);
+        result = await inviteCoach(databases, users, profile, payload, error);
         break;
       case 'acceptInvite':
         result = await acceptInvite(databases, accountId, payload);
@@ -931,7 +1082,7 @@ export default async ({ req, res, error }) => {
         result = await setPayoutRule(databases, profile, payload);
         break;
       case 'inviteMember':
-        result = await inviteMember(databases, profile, payload, error);
+        result = await inviteMember(databases, users, profile, payload, error);
         break;
       case 'setMemberRole':
         result = await setMemberRole(databases, profile, payload);

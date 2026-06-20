@@ -257,6 +257,24 @@ test('organization payout split: split math is server validated', () => {
   assert(booking.includes('payout_plan_snapshot'), 'booking must snapshot payout plan at booking time');
 });
 
+test('admin and organization invites link backing account records', () => {
+  const applications = source('functions/applications/src/main.js');
+  const adminOps = source('functions/adminOps/src/main.js');
+  const orgAdmin = source('functions/orgAdmin/src/main.js');
+  const adminUsers = source('src/pages/admin/AdminUsers.jsx');
+  const orgMembers = source('src/features/org/OrgMembersTab.jsx');
+  const orgRoster = source('src/features/org/OrgRosterTab.jsx');
+  assert(!applications.includes('This applicant is already linked to a coach record.'), 'application approval must be idempotent for already-linked coach profiles');
+  assert(applications.includes('resolveExistingCoachForProfile') && applications.includes('syncCoachProfileLink'), 'application approval must sync existing coach/profile/account links');
+  assert(adminOps.includes('ensureCoachForProfile(ctx, profile, { email })'), 'admin coach invites must create/link a backing coach workspace');
+  assert(adminOps.includes('existing_profile') && !adminOps.includes('An account with this email already exists.'), 'admin invites must not fail only because the email already has a profile');
+  assert(orgAdmin.includes('coachByPrivateEmail') && !/listDocuments\(DB_ID,\s*'coaches'[\s\S]{0,160}Query\.equal\('email', email\)/.test(orgAdmin), 'org coach invites must resolve coach PII through coach_private, not coaches.email');
+  assert(orgAdmin.includes("ensureProfileAccount(databases, users, email, 'user'") && !orgAdmin.includes('No account exists with that email yet.'), 'org member invites must create/link accounts by email');
+  assert(orgAdmin.includes("ensureProfileAccount(databases, users, email, 'coach'") && orgAdmin.includes('ensureCoachForProfile(databases, users, targetProfile'), 'org coach invites must create/link coach workspaces by email');
+  assert(adminUsers.includes('Create/link coach workspace'), 'admin invite UI must describe the linked coach workspace behavior');
+  assert(orgMembers.includes('create or link the account') && orgRoster.includes('create or link the coach workspace'), 'org invite UI must describe account/link creation');
+});
+
 test('admin refund: refund requires reason, typed confirmation, and idempotency', () => {
   const refund = source('functions/refundStripePayment/src/main.js');
   const adminPayments = source('src/pages/admin/AdminPayments.jsx');

@@ -182,6 +182,24 @@ async function createCoachResilient(databases, data) {
   throw new Error('Could not create coach record.');
 }
 
+async function updateCoachResilient(databases, coachId, updates) {
+  const payload = { ...updates };
+  for (let i = 0; i < 15; i += 1) {
+    if (Object.keys(payload).length === 0) return databases.getDocument(DB_ID, 'coaches', coachId).catch(() => null);
+    try {
+      return await databases.updateDocument(DB_ID, 'coaches', coachId, payload);
+    } catch (err) {
+      const match = String(err?.message || '').match(/Unknown attribute:\s*"?([a-zA-Z0-9_]+)"?/);
+      if (match && Object.prototype.hasOwnProperty.call(payload, match[1])) {
+        delete payload[match[1]];
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
 // Upsert the server-only coach_private PII row (email / email_verified_at /
 // phone) keyed by coach_id == coach.$id. Update the existing row, or create one.
 async function upsertCoachPrivate(databases, coachId, fields) {
@@ -210,6 +228,82 @@ async function linkableProfile(databases, users, email) {
   // stays unlinked until adminOps.linkCoachAccount or a verified sign-in.
   if (account?.emailVerification !== true) return null;
   return profile;
+}
+
+function preservedRole(account, profile, fallback) {
+  const labels = account?.labels || [];
+  if (labels.includes('superadmin')) return 'super_admin';
+  if (labels.includes('admin')) return 'admin';
+  if (!account && ['admin', 'super_admin'].includes(profile?.role)) return profile.role;
+  return fallback;
+}
+
+async function accountOwnedCoach(databases, accountId) {
+  if (!accountId) return null;
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(2),
+  ]);
+  return rows.documents[0] || null;
+}
+
+async function accountOwnsOtherCoach(databases, accountId, exceptCoachId) {
+  if (!accountId) return null;
+  const rows = await databases.listDocuments(DB_ID, 'coaches', [
+    Query.equal('user_id', accountId),
+    Query.limit(2),
+  ]);
+  return rows.documents.find((doc) => doc.$id !== exceptCoachId) || null;
+}
+
+async function resolveExistingCoachForProfile(databases, profile) {
+  if (!profile?.account_id) return { coach: null };
+
+  const linked = profile.coach_id
+    ? await databases.getDocument(DB_ID, 'coaches', profile.coach_id).catch(() => null)
+    : null;
+  const owned = await accountOwnedCoach(databases, profile.account_id);
+
+  if (linked && owned && linked.$id !== owned.$id) {
+    return { error: 'This applicant is linked to a different coach record than the account owns.' };
+  }
+  return { coach: linked || owned || null };
+}
+
+async function syncCoachProfileLink(databases, users, profile, coach, application, error) {
+  if (!profile?.account_id || !coach) return { coach };
+  if (coach.user_id && coach.user_id !== profile.account_id) {
+    return { error: 'This coach record is already linked to another account.' };
+  }
+
+  const owned = await accountOwnsOtherCoach(databases, profile.account_id, coach.$id);
+  if (owned) {
+    return { error: 'This account already owns a different coach record.' };
+  }
+
+  const account = await users.get(profile.account_id).catch(() => null);
+  const updatedCoach = await updateCoachResilient(databases, coach.$id, {
+    user_id: profile.account_id,
+  }).catch((err) => {
+    error?.(`approve: failed to set coach.user_id: ${err?.message || err}`);
+    return null;
+  });
+
+  await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
+    role: preservedRole(account, profile, 'coach'),
+    coach_id: coach.$id,
+  });
+  if (account) {
+    await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
+  }
+  await upsertCoachPrivate(databases, coach.$id, {
+    email: application.email,
+    phone: application.phone || '',
+    email_verified_at: null,
+  }).catch((err) => {
+    error?.(`approve: failed to write coach_private: ${err?.message || err}`);
+  });
+  return { coach: updatedCoach || coach };
 }
 
 async function review(databases, users, actorProfile, actorEmail, payload, error) {
@@ -252,60 +346,47 @@ async function review(databases, users, actorProfile, actorEmail, payload, error
     return { status: 200, body: { ok: true, status: 'rejected' } };
   }
 
-  // Approve: create the coach record (unpublished, inactive until onboarding).
+  // Approve: create or sync the coach record (unpublished, inactive until onboarding).
   // Email/phone are PII and live in coach_private now — not on the coach doc.
   const profile = await linkableProfile(databases, users, application.email);
+  let coach = null;
   if (profile) {
-    // Same invariants as adminOps linkCoachAccount/createCoach: one coach
-    // record per profile, one per account (coachSelf/training resolve by
-    // user_id with limit 1 — a duplicate makes resolution nondeterministic).
-    if (profile.coach_id) {
-      return { status: 409, body: { error: 'This applicant is already linked to a coach record.' } };
-    }
-    const owned = await databases.listDocuments(DB_ID, 'coaches', [
-      Query.equal('user_id', profile.account_id),
-      Query.limit(1),
-    ]);
-    if (owned.documents[0]) {
-      return { status: 409, body: { error: 'This account already owns a coach record.' } };
+    const existing = await resolveExistingCoachForProfile(databases, profile);
+    if (existing.error) return { status: 409, body: { error: existing.error } };
+    if (existing.coach) {
+      const synced = await syncCoachProfileLink(databases, users, profile, existing.coach, application, error);
+      if (synced.error) return { status: 409, body: { error: synced.error } };
+      coach = synced.coach;
     }
   }
-  const coach = await createCoachResilient(databases, {
-    first_name: application.first_name,
-    last_name: application.last_name,
-    ...(application.service_county ? { service_counties: [String(application.service_county).slice(0, 100)] } : {}),
-    is_active: false,
-    published: false,
-    ...(profile ? { user_id: profile.account_id } : {}),
-  });
 
-  // Stash the coach's PII in the server-only coach_private collection. A fresh
-  // approval has no verified email yet (email_verified_at: null).
-  await upsertCoachPrivate(databases, coach.$id, {
-    email: application.email,
-    phone: application.phone || '',
-    email_verified_at: null,
-  }).catch((err) => {
-    error?.(`approve: failed to write coach_private: ${err?.message || err}`);
-  });
+  if (!coach) {
+    coach = await createCoachResilient(databases, {
+      first_name: application.first_name,
+      last_name: application.last_name,
+      ...(application.service_county ? { service_counties: [String(application.service_county).slice(0, 100)] } : {}),
+      is_active: false,
+      published: false,
+      ...(profile ? { user_id: profile.account_id } : {}),
+    });
+
+    if (profile) {
+      const synced = await syncCoachProfileLink(databases, users, profile, coach, application, error);
+      if (synced.error) return { status: 409, body: { error: synced.error } };
+      coach = synced.coach;
+    } else {
+      // Stash the coach's PII in the server-only coach_private collection.
+      await upsertCoachPrivate(databases, coach.$id, {
+        email: application.email,
+        phone: application.phone || '',
+        email_verified_at: null,
+      }).catch((err) => {
+        error?.(`approve: failed to write coach_private: ${err?.message || err}`);
+      });
+    }
+  }
 
   if (profile) {
-    // Roles stack: approving an admin's coach application must not demote
-    // their profile.role — the coach grant rides on the label + coach_id.
-    // Labels are the authority; profiles.role is the drift-prone fallback.
-    const account = await users.get(profile.account_id).catch(() => null);
-    const labels = account?.labels || [];
-    const approvedRole = labels.includes('superadmin') ? 'super_admin'
-      : labels.includes('admin') ? 'admin'
-      : (!account && ['admin', 'super_admin'].includes(profile.role)) ? profile.role
-      : 'coach';
-    await databases.updateDocument(DB_ID, 'profiles', profile.$id, {
-      role: approvedRole,
-      coach_id: coach.$id,
-    });
-    if (account) {
-      await users.updateLabels(profile.account_id, [...new Set([...(account.labels || []), 'coach'])]).catch(() => {});
-    }
     const grants = [
       Permission.read(Role.user(profile.account_id)),
       Permission.update(Role.user(profile.account_id)),

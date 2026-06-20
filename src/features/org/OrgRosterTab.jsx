@@ -230,7 +230,7 @@ export default function OrgRosterTab({ organizationId, isOrgAdmin }) {
         <form onSubmit={invite} className="rounded-lg border border-border bg-card p-5">
           <h2 className="font-display text-lg font-bold tracking-tight text-foreground">Invite a coach</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            The coach must already have a LevelCoach coach account. They accept the invitation from their coach portal.
+            Enter a coach email and LevelCoach will create or link the coach workspace to that email. They accept the invitation from their coach portal.
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <div className="flex-1">
