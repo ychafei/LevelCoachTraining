@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Shield, Briefcase, ChevronDown, LogOut, Settings } from 'lucide-react';
+import { Menu, X, Shield, Briefcase, ChevronDown, LogOut, Settings, WalletCards } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -14,6 +14,16 @@ import { useAuth } from '@/lib/AuthContext';
 import { fullName, initialsOf } from '@/lib/displayName';
 import NotificationsBell from '@/features/coach/NotificationsBell';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
+import { formatCreditMoney, useCreditBalance } from '@/hooks/useCreditBalance';
+
+function creditBalanceCopy(balance) {
+  if (balance.loading) return 'Balance: ...';
+  if (balance.remainingCents > 0) return `Balance: ${formatCreditMoney(balance.remainingCents)}`;
+  if (balance.remainingSessions > 0) {
+    return `Balance: ${balance.remainingSessions} credit${balance.remainingSessions === 1 ? '' : 's'}`;
+  }
+  return 'Balance: $0';
+}
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -24,6 +34,8 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const isGuestPlatform = !authenticated || !user;
+  const showCreditBalance = authenticated && !!user && !isAdmin && !isCoach && !isOrganizationAdmin;
+  const creditBalance = useCreditBalance(user, showCreditBalance);
 
   // Human-readable account type for the account menu. Display only — order
   // matters because admins also pass the isCoach check.
@@ -235,6 +247,20 @@ export default function Navbar() {
             <div className="ml-4">
               {authenticated ? (
                 <div className="flex items-center gap-2">
+                  {showCreditBalance && (
+                    <Link
+                      to="/dashboard"
+                      className="hidden h-10 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-xs font-extrabold text-blue-800 shadow-sm transition hover:border-blue-200 hover:bg-white lg:inline-flex"
+                      title={
+                        creditBalance.remainingSessions > 0
+                          ? `${creditBalance.remainingSessions} credit${creditBalance.remainingSessions === 1 ? '' : 's'} available`
+                          : 'No active training credit'
+                      }
+                    >
+                      <WalletCards className="h-4 w-4" aria-hidden="true" />
+                      {creditBalanceCopy(creditBalance)}
+                    </Link>
+                  )}
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       className="flex items-center gap-1.5 rounded-full p-1 pr-1.5 transition-colors hover:bg-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -427,6 +453,19 @@ export default function Navbar() {
             <div className={`pt-2 border-t space-y-2 ${isGuestPlatform ? 'border-slate-200' : 'border-border'}`}>
               {authenticated ? (
                 <>
+                  {showCreditBalance && (
+                    <Link
+                      to="/dashboard"
+                      onClick={closeMobile}
+                      className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm font-extrabold text-blue-800"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <WalletCards className="h-4 w-4" aria-hidden="true" />
+                        Training credit
+                      </span>
+                      <span>{creditBalance.loading ? '...' : formatCreditMoney(creditBalance.remainingCents)}</span>
+                    </Link>
+                  )}
                   <div className="flex items-center gap-3 px-4 py-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
                       {initialsOf(user)}

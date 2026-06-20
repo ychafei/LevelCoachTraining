@@ -2,24 +2,28 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
+  BadgeCheck,
   Building2,
   CalendarDays,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   GraduationCap,
   Heart,
   LayoutList,
+  LockKeyhole,
   Map as MapIcon,
   MapPin,
+  PackageCheck,
   RefreshCcw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Star,
   Tag,
   Trophy,
   Users,
+  WalletCards,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +43,7 @@ import { SPORTS_CATALOG } from '@/lib/sportsCatalog';
 import { usePageMeta } from '@/features/marketing/usePageMeta';
 import { useAuth } from '@/lib/AuthContext';
 import { savedCoachIdsFromPrefs } from '@/lib/savedCoachPrefs';
+import { formatCreditMoney, useCreditBalance } from '@/hooks/useCreditBalance';
 
 const PAGE_SIZE = 12;
 const MARKETPLACE_CONTAINER = 'mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8 2xl:px-10';
@@ -164,6 +169,37 @@ function locationMatches(coach, model, haystack, place, locationText, radius) {
   return true;
 }
 
+function reviewSummary(rows) {
+  const totals = rows.reduce((acc, { coach }) => {
+    const rating = Number(coach.rating_avg);
+    const count = Number(coach.review_count);
+    if (Number.isFinite(rating) && rating > 0 && Number.isFinite(count) && count > 0) {
+      acc.reviews += count;
+      acc.weighted += rating * count;
+    }
+    return acc;
+  }, { reviews: 0, weighted: 0 });
+
+  return {
+    reviews: totals.reviews,
+    rating: totals.reviews ? (totals.weighted / totals.reviews).toFixed(1) : '',
+  };
+}
+
+function filterSummary(filters) {
+  return [
+    filters.sport,
+    filters.location,
+    filters.availability !== 'Any time' ? filters.availability : '',
+    filters.level !== 'Any level' ? filters.level : '',
+    filters.age !== 'Any age group' ? filters.age : '',
+    filters.org !== 'any' ? filters.org : '',
+    filters.price !== 'any' ? filters.price : '',
+    filters.specialty,
+    filters.type !== 'any' ? filters.type : '',
+  ].filter(Boolean).length;
+}
+
 export default function CoachSearch() {
   usePageMeta({
     title: 'Find a Coach',
@@ -179,7 +215,9 @@ export default function CoachSearch() {
   const [loadError, setLoadError] = useState('');
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
   const [showSavedOnly, setShowSavedOnly] = useState(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isAdmin, isCoach, isOrganizationAdmin } = useAuth();
+  const showCreditBalance = isAuthenticated && !!user && !isAdmin && !isCoach && !isOrganizationAdmin;
+  const creditBalance = useCreditBalance(user, showCreditBalance);
   const savedCoachIds = useMemo(
     () => new Set(savedCoachIdsFromPrefs(user?.notification_prefs)),
     [user?.notification_prefs],
@@ -334,6 +372,8 @@ export default function CoachSearch() {
   const totalPages = Math.max(1, Math.ceil(filtered.rows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const reviewStats = useMemo(() => reviewSummary(models), [models]);
+  const activeFilterCount = useMemo(() => filterSummary(filters), [filters]);
 
   const writeParams = (nextFilters, nextPage = 1, place = selectedPlace) => {
     const next = new URLSearchParams();
@@ -387,48 +427,44 @@ export default function CoachSearch() {
     : {};
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f5f8fc_100%)] text-slate-950">
-      <section className="relative overflow-hidden border-b border-blue-100 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_55%,#edf5ff_100%)]">
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[radial-gradient(75%_100%_at_50%_100%,rgba(37,99,235,0.10),transparent_72%)]" aria-hidden="true" />
-        <div className={`${MARKETPLACE_CONTAINER} relative py-6 sm:py-8`}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_38%,#f4f8ff_100%)] text-slate-950">
+      <section className="relative overflow-hidden border-b border-blue-100 bg-[linear-gradient(135deg,#ffffff_0%,#f7fbff_48%,#eaf3ff_100%)]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[radial-gradient(70%_100%_at_50%_100%,rgba(37,99,235,0.12),transparent_70%)]" aria-hidden="true" />
+        <div className={`${MARKETPLACE_CONTAINER} relative py-7 sm:py-9`}>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-white/85 px-3 py-1.5 shadow-sm shadow-blue-900/5">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-100 bg-white/90 px-3.5 py-1.5 shadow-sm shadow-blue-900/5">
                 <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-blue-700">Coaching marketplace</span>
+                <span className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-700">Coaching marketplace</span>
               </div>
               <h1 className="mt-4 font-display text-4xl font-extrabold leading-tight tracking-normal text-slate-950 sm:text-5xl">
                 Find a coach
               </h1>
               <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
-                Discover vetted coaches with transparent pricing, real reviews, and live booking availability.
+                Connect with verified coaches. Transparent pricing, real reviews, and live booking.
               </p>
             </div>
-            <div className="grid max-w-xl grid-cols-1 gap-2 text-sm sm:grid-cols-3 lg:min-w-[520px]">
+
+            <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
               {[
-                ['Verified profiles', 'Email and legal checks'],
-                ['Secure booking', 'Stripe-protected checkout'],
-                ['Clear pricing', 'Package totals before pay'],
-              ].map(([title, body]) => (
-                <div key={title} className="rounded-2xl border border-blue-100 bg-white/80 p-3 shadow-sm shadow-blue-900/5">
-                  <div className="flex items-center gap-2 font-extrabold text-slate-950">
-                    <CheckCircle2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                    {title}
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{body}</p>
-                </div>
+                { title: 'Trusted coaches', body: 'Published, verified profiles', icon: ShieldCheck },
+                { title: 'Safe booking', body: 'Secure checkout records', icon: LockKeyhole },
+                { title: 'Clear pricing', body: 'Rates shown before you pay', icon: CircleDollarSign },
+                { title: 'Flexible packages', body: 'Credits stay visible', icon: PackageCheck },
+              ].map((item) => (
+                <TrustMiniCard key={item.title} {...item} />
               ))}
             </div>
           </div>
 
-          <form onSubmit={applyFilters} className="mt-6 rounded-3xl border border-blue-100 bg-white/95 p-3 shadow-2xl shadow-blue-900/10 backdrop-blur">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.05fr_1.35fr_0.72fr_1.05fr_152px]">
+          <form onSubmit={applyFilters} className="mt-6 rounded-[1.75rem] border border-blue-100 bg-white/95 p-3 shadow-2xl shadow-blue-900/10 backdrop-blur">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1.18fr_0.9fr_0.94fr_180px]">
               <FilterSelect
                 label="Sport"
                 icon={Trophy}
                 value={filters.sport}
                 onChange={(value) => setFilters((prev) => ({ ...prev, sport: value, specialty: '' }))}
-                options={[{ value: '', label: 'All sports' }, ...SPORTS_CATALOG.map((sport) => ({ value: sport.sport_key, label: sport.display_name }))]}
+                options={[{ value: '', label: 'Select a sport' }, ...SPORTS_CATALOG.map((sport) => ({ value: sport.sport_key, label: sport.display_name }))]}
               />
               <LocationInput
                 value={filters.location}
@@ -444,11 +480,11 @@ export default function CoachSearch() {
                 }}
               />
               <FilterSelect
-                label="Radius"
-                icon={MapPin}
-                value={filters.radius}
-                onChange={(value) => setFilters((prev) => ({ ...prev, radius: value }))}
-                options={RADII.map((value) => ({ value, label: `${value} mi` }))}
+                label="Price per session"
+                icon={CircleDollarSign}
+                value={filters.price}
+                onChange={(value) => setFilters((prev) => ({ ...prev, price: value }))}
+                options={PRICE_BANDS.map(({ value, label }) => ({ value, label }))}
               />
               <FilterSelect
                 label="Availability"
@@ -458,18 +494,18 @@ export default function CoachSearch() {
                 options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
               />
               <Button type="submit" className="h-16 rounded-2xl bg-blue-600 px-6 text-base font-extrabold text-white shadow-xl shadow-blue-600/25 hover:bg-blue-700">
-                <Search className="h-4 w-4" aria-hidden="true" />
-                Search
+                <Search className="h-5 w-5" aria-hidden="true" />
+                Search coaches
               </Button>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[0.72fr_0.72fr_0.82fr_0.82fr_0.92fr_0.92fr]">
               <FilterSelect
-                label="Level"
-                icon={GraduationCap}
-                value={filters.level}
-                onChange={(value) => setFilters((prev) => ({ ...prev, level: value }))}
-                options={LEVELS.map((value) => ({ value, label: value }))}
+                label="Radius"
+                icon={MapPin}
+                value={filters.radius}
+                onChange={(value) => setFilters((prev) => ({ ...prev, radius: value }))}
+                options={RADII.map((value) => ({ value, label: `${value} mi` }))}
                 compact
               />
               <FilterSelect
@@ -481,19 +517,27 @@ export default function CoachSearch() {
                 compact
               />
               <FilterSelect
+                label="Level"
+                icon={GraduationCap}
+                value={filters.level}
+                onChange={(value) => setFilters((prev) => ({ ...prev, level: value }))}
+                options={LEVELS.map((value) => ({ value, label: value }))}
+                compact
+              />
+              <FilterSelect
+                label="Session type"
+                icon={SlidersHorizontal}
+                value={filters.type}
+                onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
+                options={SESSION_TYPES.map(({ value, label }) => ({ value, label: value === 'any' ? 'Any session type' : label }))}
+                compact
+              />
+              <FilterSelect
                 label="Organization"
                 icon={Building2}
                 value={filters.org}
                 onChange={(value) => setFilters((prev) => ({ ...prev, org: value }))}
-                options={[{ value: 'any', label: 'Any org' }, ...organizationOptions]}
-                compact
-              />
-              <FilterSelect
-                label="Price band"
-                icon={CircleDollarSign}
-                value={filters.price}
-                onChange={(value) => setFilters((prev) => ({ ...prev, price: value }))}
-                options={PRICE_BANDS.map(({ value, label }) => ({ value, label }))}
+                options={[{ value: 'any', label: 'Any organization' }, ...organizationOptions]}
                 compact
               />
               <FilterSelect
@@ -504,41 +548,49 @@ export default function CoachSearch() {
                 options={[{ value: '', label: 'Any specialty' }, ...specialtyOptions.map((value) => ({ value, label: value }))]}
                 compact
               />
-              <FilterSelect
-                label="Session type"
-                icon={SlidersHorizontal}
-                value={filters.type}
-                onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
-                options={SESSION_TYPES.map(({ value, label }) => ({ value, label: value === 'any' ? 'Any session' : label }))}
-                compact
-              />
             </div>
+
+            {activeFilterCount > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-600">
+                  {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'} applied.
+                </p>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-sm font-extrabold text-blue-700 hover:underline"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </section>
 
       <section className={`${MARKETPLACE_CONTAINER} py-6`}>
-        <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="font-display text-xl font-bold tracking-normal text-slate-950">
+            <p className="font-display text-2xl font-extrabold tracking-normal text-slate-950">
               {loading ? 'Searching...' : `${filtered.rows.length} coach${filtered.rows.length === 1 ? '' : 'es'}`}
             </p>
             <p className="text-sm text-slate-600">
               {loading
                 ? 'Loading published coach profiles.'
                 : activePlace
-                  ? `Serving ${activePlace.label} within ${filtered.effectiveRadius} miles`
-              : 'Across all locations'}
+                  ? `Across ${activePlace.label} within ${filtered.effectiveRadius} miles`
+                  : 'Across all locations'}
             </p>
           </div>
+
           <div className="flex flex-wrap items-center gap-3">
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <Button
                 type="button"
                 variant={showSavedOnly ? 'default' : 'outline'}
                 disabled={savedCoachIds.size === 0}
                 onClick={() => setShowSavedOnly((value) => !value)}
-                className={`inline-flex h-11 rounded-lg px-4 text-sm font-extrabold ${
+                className={`inline-flex h-11 rounded-xl px-4 text-sm font-extrabold ${
                   showSavedOnly
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700'
                     : 'border-slate-200 bg-white text-slate-800 hover:bg-blue-50'
@@ -547,7 +599,16 @@ export default function CoachSearch() {
                 <Heart className={`h-4 w-4 ${showSavedOnly ? 'fill-white text-white' : 'text-blue-600'}`} aria-hidden="true" />
                 Saved coaches ({savedCoachIds.size})
               </Button>
+            ) : (
+              <Link
+                to="/sign-in"
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                <Heart className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                Saved coaches
+              </Link>
             )}
+
             <div className="inline-flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
@@ -568,6 +629,7 @@ export default function CoachSearch() {
                 Map
               </button>
             </div>
+
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
               <span>Sort</span>
               <SelectMenu
@@ -581,42 +643,16 @@ export default function CoachSearch() {
                 triggerClassName="h-11 w-auto min-w-[160px] rounded-xl border-slate-200 bg-white text-sm font-bold text-slate-950 shadow-sm"
               />
             </div>
-            <Link to="/for-coaches" className="hidden items-center gap-1 text-sm font-bold text-blue-700 hover:underline sm:inline-flex">
+
+            <Link to="/for-coaches" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
               Are you a coach?
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         </div>
 
-        {loading && (
-          <div className="space-y-3" aria-busy="true" aria-label="Loading coaches">
-            {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="h-48 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-            ))}
-          </div>
-        )}
-
-        {!loading && loadError && (
-          <div className="rounded-lg border border-red-200 bg-white p-8 text-center shadow-sm" role="alert">
-            <h2 className="font-display text-2xl font-bold text-slate-950">We couldn't load coaches</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              {loadError} This is a loading problem on our side — your filters are fine.
-            </p>
-            <Button onClick={load} className="mt-5 rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
-              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-              Try again
-            </Button>
-          </div>
-        )}
-
-        {!loading && !loadError && filters.price !== 'any' && PRICE_BANDS.some((band) => band.value === filters.price) && (
-          <p className="mb-4 text-sm text-slate-500">
-            Showing coaches with published rates — coaches without rates are hidden by this filter.
-          </p>
-        )}
-
         {!loading && !loadError && filtered.expanded && (
-          <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
+          <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm shadow-sm">
             <p className="font-bold text-blue-900">
               No coaches matched within {filtered.baseRadius} miles{activePlace ? ` of ${activePlace.label}` : ''}.
             </p>
@@ -626,109 +662,257 @@ export default function CoachSearch() {
           </div>
         )}
 
-        {!loading && !loadError && pageRows.length > 0 && (
-          <>
-            <div className="space-y-3">
-              {pageRows.map(({ coach }) => (
-                <PublicCoachCard
-                  key={coach.id}
-                  coach={coach}
-                  packages={packages}
-                  distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}
-                  bookingParams={bookingParams}
-                />
-              ))}
-            </div>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0">
+            {loading && (
+              <div className="space-y-4" aria-busy="true" aria-label="Loading coaches">
+                {[0, 1, 2, 3].map((item) => (
+                  <div key={item} className="h-56 animate-pulse rounded-3xl border border-slate-200 bg-white" />
+                ))}
+              </div>
+            )}
 
-            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-blue-700 ring-1 ring-blue-100">
-                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="font-extrabold">All public coaches are verified for your peace of mind.</p>
-                  <p className="mt-1 text-blue-800/80">
-                    Profiles only appear here after the coach is published, email-verified, and eligible for booking.
-                  </p>
+            {!loading && loadError && (
+              <div className="rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm" role="alert">
+                <h2 className="font-display text-2xl font-bold text-slate-950">We could not load coaches</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+                  {loadError} This is a loading problem on our side. Your filters are fine.
+                </p>
+                <Button onClick={load} className="mt-5 rounded-xl bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+                  <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                  Try again
+                </Button>
+              </div>
+            )}
+
+            {!loading && !loadError && filters.price !== 'any' && PRICE_BANDS.some((band) => band.value === filters.price) && (
+              <p className="mb-4 text-sm text-slate-500">
+                Showing coaches with published rates. Coaches without rates are hidden by this filter.
+              </p>
+            )}
+
+            {!loading && !loadError && pageRows.length > 0 && (
+              <>
+                <div className="space-y-4">
+                  {pageRows.map(({ coach }) => (
+                    <PublicCoachCard
+                      key={coach.id}
+                      coach={coach}
+                      packages={packages}
+                      distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}
+                      bookingParams={bookingParams}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-blue-700 ring-1 ring-blue-100">
+                      <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="font-extrabold">Public profiles are checked before they appear here.</p>
+                      <p className="mt-1 text-blue-800/80">
+                        Coaches must be published, email-verified, and eligible for booking before their cards show in search.
+                      </p>
+                    </div>
+                  </div>
+                  <Link to="/safety" className="inline-flex shrink-0 items-center gap-1 font-extrabold text-blue-700 hover:underline">
+                    Safety standards
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </div>
+
+                {totalPages > 1 && (
+                  <nav className="mt-6 flex items-center justify-center gap-2" aria-label="Search results pages">
+                    <Button
+                      variant="outline"
+                      disabled={safePage <= 1}
+                      onClick={() => goToPage(safePage - 1)}
+                      className="h-10 rounded-lg border-slate-200 px-3 font-bold"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <span className="px-3 text-sm font-bold text-slate-700">
+                      Page {safePage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      disabled={safePage >= totalPages}
+                      onClick={() => goToPage(safePage + 1)}
+                      className="h-10 rounded-lg border-slate-200 px-3 font-bold"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </nav>
+                )}
+              </>
+            )}
+
+            {!loading && !loadError && filtered.rows.length === 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                  <Search className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <h2 className="mt-4 font-display text-2xl font-bold text-slate-950">No coaches match those filters yet</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+                  Try broadening the sport, radius, or other filters. New coaches appear here the moment
+                  their profiles are published.
+                </p>
+                <div className="mt-5 flex flex-col items-center justify-center gap-3">
+                  <Button onClick={clearFilters} className="rounded-xl bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
+                    Clear filters and browse all coaches
+                  </Button>
+                  <Link
+                    to="/apply/private-training-coach"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 hover:underline"
+                  >
+                    Coach here? Be the first in your area
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
                 </div>
               </div>
-              <Link to="/safety" className="inline-flex shrink-0 items-center gap-1 font-extrabold text-blue-700 hover:underline">
-                Safety standards
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-
-            {totalPages > 1 && (
-              <nav className="mt-6 flex items-center justify-center gap-2" aria-label="Search results pages">
-                <Button
-                  variant="outline"
-                  disabled={safePage <= 1}
-                  onClick={() => goToPage(safePage - 1)}
-                  className="h-10 rounded-lg border-slate-200 px-3 font-bold"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <span className="px-3 text-sm font-bold text-slate-700">
-                  Page {safePage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  disabled={safePage >= totalPages}
-                  onClick={() => goToPage(safePage + 1)}
-                  className="h-10 rounded-lg border-slate-200 px-3 font-bold"
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </nav>
             )}
-          </>
-        )}
-
-        {!loading && !loadError && filtered.rows.length === 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-              <Search className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <h2 className="mt-4 font-display text-2xl font-bold text-slate-950">No coaches match those filters yet</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              Try broadening the sport, radius, or other filters. New coaches appear here the moment
-              their profiles are published.
-            </p>
-            <div className="mt-5 flex flex-col items-center justify-center gap-3">
-              <Button onClick={clearFilters} className="rounded-lg bg-blue-600 px-5 font-bold text-white hover:bg-blue-700">
-                Clear filters and browse all coaches
-              </Button>
-              <Link
-                to="/apply/private-training-coach"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-blue-700 hover:underline"
-              >
-                Coach here? Be the first in your area
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
           </div>
-        )}
+
+          <MarketplaceSidebar
+            creditBalance={creditBalance}
+            showCreditBalance={showCreditBalance}
+            isAuthenticated={isAuthenticated}
+            reviewStats={reviewStats}
+          />
+        </div>
       </section>
     </div>
   );
 }
 
-function FilterSelect({ label, icon: Icon, value, options, onChange }) {
+function TrustMiniCard({ title, body, icon: Icon }) {
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
-        <Icon className="h-5 w-5" aria-hidden="true" />
+    <div className="rounded-2xl border border-blue-100 bg-white/85 p-3 shadow-sm shadow-blue-900/5">
+      <div className="flex items-center gap-2 font-extrabold text-slate-950">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <span className="truncate">{title}</span>
+      </div>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{body}</p>
+    </div>
+  );
+}
+
+function SidebarTrustItem({ title, body, icon: Icon }) {
+  return (
+    <div className="flex gap-3">
+      <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <div>
+        <p className="font-extrabold text-slate-950">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function MarketplaceSidebar({ creditBalance, showCreditBalance, isAuthenticated, reviewStats }) {
+  const hasCredits = showCreditBalance && creditBalance.remainingCents > 0;
+  const reviewCopy = reviewStats.reviews > 0
+    ? `${reviewStats.rating}/5 from ${reviewStats.reviews.toLocaleString()} public review${reviewStats.reviews === 1 ? '' : 's'}`
+    : 'Public reviews appear after completed sessions';
+
+  return (
+    <aside className="space-y-4 self-start xl:sticky xl:top-28">
+      <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-lg shadow-blue-900/5">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <WalletCards className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-blue-700">Training credit</p>
+            <h2 className="font-display text-xl font-extrabold tracking-normal text-slate-950">
+              {hasCredits
+                ? `${formatCreditMoney(creditBalance.remainingCents)} ready`
+                : isAuthenticated
+                  ? 'No active credit yet'
+                  : 'Sign in to see credits'}
+            </h2>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-6 text-slate-600">
+          Credits are applied during booking by value. If a coach costs less, the leftover stays in your balance; if a coach costs more, checkout shows the difference.
+        </p>
+        {showCreditBalance && (
+          <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm text-blue-900">
+            <div className="flex items-center justify-between gap-3 font-extrabold">
+              <span>Available balance</span>
+              <span>{creditBalance.loading ? '...' : formatCreditMoney(creditBalance.remainingCents)}</span>
+            </div>
+            <p className="mt-1 text-xs font-semibold text-blue-800/80">
+              {creditBalance.remainingSessions} credit{creditBalance.remainingSessions === 1 ? '' : 's'} remaining from purchased packages
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/5">
+        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-blue-700">Why athletes choose LevelCoach</p>
+        <div className="mt-5 space-y-4">
+          <SidebarTrustItem
+            icon={BadgeCheck}
+            title="Verified public profiles"
+            body="Coaches appear in search only after their public profile and required account checks are complete."
+          />
+          <SidebarTrustItem
+            icon={CircleDollarSign}
+            title="Transparent pricing"
+            body="Single-session prices are shown up front, and final totals are confirmed before Stripe checkout."
+          />
+          <SidebarTrustItem
+            icon={CalendarDays}
+            title="Live booking paths"
+            body="Availability, package choices, documents, and session credit flow through one guided booking path."
+          />
+          <SidebarTrustItem
+            icon={Trophy}
+            title="Progress focused"
+            body="Sessions, goals, homework, wellness reports, and coach feedback stay connected to the athlete profile."
+          />
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/5">
+        <div className="flex items-center gap-2">
+          <Star className={`h-5 w-5 ${reviewStats.reviews > 0 ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} aria-hidden="true" />
+          <p className="font-display text-lg font-extrabold tracking-normal text-slate-950">
+            Marketplace reviews
+          </p>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{reviewCopy}</p>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+          Parents and athletes can compare completed-session reviews, pricing, specialties, and next availability before booking.
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function FilterSelect({ label, icon: Icon, value, options, onChange, compact = false }) {
+  return (
+    <div className={`group flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5 ${compact ? 'py-3' : 'py-4'}`}>
+      <span className={`${compact ? 'h-9 w-9' : 'h-10 w-10'} grid shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white`}>
+        <Icon className={compact ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-extrabold uppercase tracking-[0.2em] text-slate-500">{label}</span>
+        <span className="block truncate text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">{label}</span>
         <SelectMenu
           value={value}
           onChange={onChange}
           ariaLabel={label}
           options={options}
-          triggerClassName="mt-1 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 text-base font-extrabold text-slate-950 shadow-none hover:border-0 focus:border-0 focus:ring-0"
+          triggerClassName={`${compact ? 'text-sm' : 'text-base'} mt-1 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 font-extrabold text-slate-950 shadow-none hover:border-0 focus:border-0 focus:ring-0`}
         />
       </span>
     </div>
