@@ -19,7 +19,14 @@ import {
 } from '@/components/ui/dialog';
 import { coachRepo, sessionRepo } from '@/api/repo';
 import { CoachAvatar } from '@/components/public/PublicCoachCard';
-import { coachBookHref, publicCoachDisplay } from '@/lib/publicCoach';
+import { callFn } from '@/lib/rpc';
+import { coachDistanceMiles, resolvePlace } from '@/lib/metroDetroitPlaces';
+import {
+  coachBookHref,
+  matchesCoachSearch,
+  normalizePublicCoach,
+  publicCoachDisplay,
+} from '@/lib/publicCoach';
 import {
   creditRemainingCents,
   creditRemainingSessionCount,
@@ -27,6 +34,7 @@ import {
 } from '@/hooks/useCreditBalance';
 
 const MAX_RECENT_COACHES = 5;
+const AREA_RADIUS_MILES = 35;
 
 function intCents(value) {
   const cents = Number(value);
@@ -35,6 +43,24 @@ function intCents(value) {
 
 function creditCoachId(credit) {
   return credit?.coach_id || credit?.original_coach_id || credit?.originating_coach_id || '';
+}
+
+function firstText(obj, keys) {
+  for (const key of keys) {
+    const value = typeof obj?.[key] === 'string' ? obj[key].trim() : '';
+    if (value) return value;
+  }
+  return '';
+}
+
+function clientLocationText(user) {
+  return firstText(user, [
+    'location_label',
+    'training_location_label',
+    'service_area_label',
+    'city',
+    'location',
+  ]);
 }
 
 function creditUnitCents(credit) {
@@ -119,7 +145,10 @@ function bookWithCreditHref(coachId, credit) {
 }
 
 async function loadCreditModalRows(credits) {
-  const sessions = await sessionRepo.list('-created_date').catch(() => []);
+  const [sessions, publicCoachResult] = await Promise.all([
+    sessionRepo.list('-created_date').catch(() => []),
+    callFn('getPublicCoaches', {}).catch(() => ({ coaches: [] })),
+  ]);
   const creditCoachIds = credits.map(creditCoachId).filter(Boolean);
   const sessionCoachIds = sessions.map((session) => session.coach_id).filter(Boolean);
   const coachIds = [...new Set([...sessionCoachIds, ...creditCoachIds])].slice(0, 12);
@@ -129,10 +158,66 @@ async function loadCreditModalRows(credits) {
   const coachesById = Object.fromEntries(
     coachRows.filter(Boolean).map((coach) => [coach.id, coach]),
   );
-  return { sessions, coachesById };
+  const marketplaceCoaches = (publicCoachResult?.coaches || []).map(normalizePublicCoach).filter(Boolean);
+  return { sessions, coachesById, marketplaceCoaches };
 }
 
-function buildRows({ sessions, coachesById, credits, remainingCents, remainingSessions }) {
+function areaCoachScore(coach, place) {
+  const model = publicCoachDisplay(coach, { searchPlace: place });
+  const distance = place ? coachDistanceMiles(coach, place) : null;
+  let score = 0;
+  if (distance !== null) score += Math.max(0, 200 - distance * 4);
+  if (model.availableNow) score += 35;
+  if (model.recentlyActive) score += 20;
+  if (model.hasSessionStat) score += Math.min(30, model.sessionsTaught / 10);
+  if (model.hasActiveAthleteStat) score += Math.min(20, model.activeAthletes * 2);
+  const rating = Number(model.ratingLabel);
+  if (Number.isFinite(rating)) score += rating * 6;
+  return score;
+}
+
+function areaCoachRows({ marketplaceCoaches, credits, remainingCents, remainingSessions, user }) {
+  const locationText = clientLocationText(user);
+  const place = resolvePlace(locationText);
+  const inArea = locationText
+    ? marketplaceCoaches.filter((coach) => matchesCoachSearch(coach, {
+      location: locationText,
+      place,
+      radius: AREA_RADIUS_MILES,
+    }))
+    : marketplaceCoaches;
+  const pool = inArea.length ? inArea : marketplaceCoaches;
+
+  return pool
+    .map((coach) => {
+      const model = publicCoachDisplay(coach, { searchPlace: place });
+      const priceCents = intCents(coach?.price_hint_cents);
+      const distanceLabel = model.distanceMiles !== null && model.distanceMiles !== undefined
+        ? `${Math.round(model.distanceMiles)} mi away`
+        : (place?.label ? `Near ${place.label}` : 'Suggested coach');
+      return {
+        coach,
+        coachId: coach.id,
+        credit: credits[0] || null,
+        lastLabel: distanceLabel,
+        priceCents,
+        sourceMs: 0,
+        mode: 'area',
+        score: areaCoachScore(coach, place),
+        creditsApply: creditApplyLabel({
+          priceCents,
+          credit: credits[0] || null,
+          credits,
+          remainingCents,
+          remainingSessions,
+        }),
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_RECENT_COACHES);
+}
+
+function buildRows({ sessions, coachesById, marketplaceCoaches, credits, remainingCents, remainingSessions, user }) {
   const rows = new Map();
   const creditsByCoach = new Map();
   for (const credit of credits) {
@@ -177,11 +262,12 @@ function buildRows({ sessions, coachesById, credits, remainingCents, remainingSe
     });
   }
 
-  return [...rows.values()]
+  const recentRows = [...rows.values()]
     .sort((a, b) => b.sourceMs - a.sourceMs)
     .slice(0, MAX_RECENT_COACHES)
     .map((row) => ({
       ...row,
+      mode: 'recent',
       creditsApply: creditApplyLabel({
         priceCents: row.priceCents,
         credit: row.credit,
@@ -190,11 +276,23 @@ function buildRows({ sessions, coachesById, credits, remainingCents, remainingSe
         remainingSessions,
       }),
     }));
+  if (recentRows.length) return { mode: 'recent', rows: recentRows };
+
+  return {
+    mode: 'area',
+    rows: areaCoachRows({
+      marketplaceCoaches,
+      credits,
+      remainingCents,
+      remainingSessions,
+      user,
+    }),
+  };
 }
 
-function BrowseCoachesCallout({ compact = false }) {
+function BrowseCoachesCallout({ onBrowseCoaches }) {
   return (
-    <div className={`rounded-2xl border border-blue-100 bg-blue-50/70 ${compact ? 'p-3' : 'p-4'}`}>
+    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-blue-700 ring-1 ring-blue-100">
@@ -208,7 +306,7 @@ function BrowseCoachesCallout({ compact = false }) {
           </div>
         </div>
         <Button asChild variant="outline" className="shrink-0 rounded-xl border-blue-200 bg-white font-extrabold text-blue-700 hover:bg-blue-50">
-          <Link to="/coaches">Browse coaches</Link>
+          <Link to="/coaches" onClick={onBrowseCoaches}>Browse coaches</Link>
         </Button>
       </div>
     </div>
@@ -220,6 +318,7 @@ function RecentCoachRow({ row }) {
   const priceLabel = row.priceCents
     ? `${formatCreditMoney(row.priceCents)}/session`
     : (model.rateLabel ? `${model.rateLabel.replace(/^From\s+/i, '')}/session` : 'Price shown at booking');
+  const MetaIcon = row.mode === 'area' ? MapPin : CalendarDays;
 
   return (
     <div className="grid gap-3 border-b border-slate-100 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -234,7 +333,7 @@ function RecentCoachRow({ row }) {
           </p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
             <span className="inline-flex items-center gap-1">
-              <CalendarDays className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+              <MetaIcon className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
               {row.lastLabel}
             </span>
             <span className="inline-flex items-center gap-1">
@@ -270,16 +369,24 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
     staleTime: 30000,
   });
 
-  const rows = useMemo(
+  const result = useMemo(
     () => buildRows({
       sessions: query.data?.sessions || [],
       coachesById: query.data?.coachesById || {},
+      marketplaceCoaches: query.data?.marketplaceCoaches || [],
       credits,
       remainingCents,
       remainingSessions,
+      user,
     }),
-    [credits, query.data?.coachesById, query.data?.sessions, remainingCents, remainingSessions],
+    [credits, query.data?.coachesById, query.data?.marketplaceCoaches, query.data?.sessions, remainingCents, remainingSessions, user],
   );
+  const rows = result.rows;
+  const showingAreaFallback = result.mode === 'area' && rows.length > 0;
+  const subtitle = showingAreaFallback
+    ? `You have ${remainingSessions} ${creditWord} available. Here are published coaches near your area.`
+    : `You have ${remainingSessions} ${creditWord} available. Recent coaches are shown from most recent to least recent.`;
+  const onBrowseCoaches = () => onOpenChange(false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -298,7 +405,7 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
                   Use Your Credits
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-sm leading-6 text-slate-600">
-                  You have {remainingSessions} {creditWord} available. Recent coaches are shown from most recent to least recent.
+                  {subtitle}
                 </DialogDescription>
               </div>
             </div>
@@ -317,7 +424,7 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
             </div>
           </div>
 
-          <BrowseCoachesCallout />
+          <BrowseCoachesCallout onBrowseCoaches={onBrowseCoaches} />
 
           <div className="rounded-3xl border border-slate-200 bg-white px-4 shadow-sm">
             {query.isLoading || creditBalance?.loading ? (
@@ -329,15 +436,13 @@ export default function CreditsModal({ open, onOpenChange, user, creditBalance }
               rows.map((row) => <RecentCoachRow key={row.coachId} row={row} />)
             ) : (
               <div className="py-10 text-center">
-                <p className="font-display text-xl font-extrabold tracking-normal text-slate-950">No recent coaches yet</p>
+                <p className="font-display text-xl font-extrabold tracking-normal text-slate-950">No coaches available yet</p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                  Once you book or buy training credit from a coach, quick rebooking options will appear here.
+                  We could not load recent or nearby published coaches right now. Browse the marketplace to keep searching.
                 </p>
               </div>
             )}
           </div>
-
-          <BrowseCoachesCallout compact />
         </div>
       </DialogContent>
     </Dialog>
