@@ -23,6 +23,14 @@ function creditButtonCopy(balance) {
   return `Credits: ${count} session${count === 1 ? '' : 's'}`;
 }
 
+function settingsPathForRole({ user, isAdmin, isCoach, isOrganizationAdmin, isGuardian }) {
+  if (isAdmin) return '/admin/settings';
+  if (isCoach) return '/coach/settings';
+  if (isOrganizationAdmin || user?.primary_organization_id) return '/organization?tab=profile';
+  if (isGuardian) return '/parent/settings';
+  return '/athlete/settings';
+}
+
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
@@ -35,6 +43,7 @@ export default function Navbar() {
   const isGuestPlatform = !authenticated || !user;
   const showCreditBalance = authenticated && !!user && !isAdmin && !isCoach && !isOrganizationAdmin;
   const creditBalance = useCreditBalance(user, showCreditBalance);
+  const settingsHref = settingsPathForRole({ user, isAdmin, isCoach, isOrganizationAdmin, isGuardian });
 
   // Human-readable account type for the account menu. Display only — order
   // matters because admins also pass the isCoach check.
@@ -288,7 +297,7 @@ export default function Navbar() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
                         <Link
-                          to="/settings"
+                          to={settingsHref}
                           className="px-3 py-2 text-sm rounded-sm cursor-pointer w-full font-semibold text-foreground hover:text-accent focus:text-accent"
                         >
                           <Settings className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -484,7 +493,7 @@ export default function Navbar() {
                       <p className="text-xs text-muted-foreground">{roleLabel}</p>
                     </div>
                   </div>
-                  <Link to="/settings" onClick={closeMobile}>
+                  <Link to={settingsHref} onClick={closeMobile}>
                     <Button variant="ghost" className="w-full justify-start text-sm font-semibold">
                       Settings
                     </Button>

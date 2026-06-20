@@ -76,7 +76,6 @@ const OnboardingCompletion = React.lazy(() => import('@/pages/onboarding/Onboard
 
 // Authenticated pages
 const Messages = React.lazy(() => import('@/pages/Messages'));
-const Settings = React.lazy(() => import('@/pages/Settings'));
 const CoachSchedule = React.lazy(() => import('@/pages/CoachSchedule'));
 const AthletePortal = React.lazy(() => import('@/pages/athlete/AthletePortal'));
 const AthleteSettings = React.lazy(() => import('@/pages/athlete/AthleteSettings'));
@@ -141,6 +140,18 @@ const RoleHomeRoute = () => {
   return <Navigate to={homePathForRole(user)} replace />;
 };
 
+const SettingsRedirect = () => {
+  const { user, isAdmin, isCoach, isOrganizationAdmin, isGuardian } = useAuth();
+
+  if (isAdmin) return <Navigate to="/admin/settings" replace />;
+  if (isCoach) return <Navigate to="/coach/settings" replace />;
+  if (isOrganizationAdmin || user?.primary_organization_id) {
+    return <Navigate to="/organization?tab=profile" replace />;
+  }
+  if (isGuardian) return <Navigate to="/parent/settings" replace />;
+  return <Navigate to="/athlete/settings" replace />;
+};
+
 const AuthenticatedApp = () => {
   const { authError } = useAuth();
 
@@ -190,7 +201,7 @@ const AuthenticatedApp = () => {
           <Route element={<RequireOnboardingComplete />}>
             <Route path="/dashboard" element={<RoleHomeRoute />} />
             <Route path="/messages" element={<Messages />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/settings" element={<SettingsRedirect />} />
           </Route>
 
           {/* Athlete / parent / organization portals */}

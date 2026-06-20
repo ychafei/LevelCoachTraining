@@ -271,6 +271,47 @@ test('permission denial: sensitive functions are not publicly executable', () =>
   }
 });
 
+test('settings routing: signup details round-trip into role settings/profile pages', () => {
+  const app = source('src/App.jsx');
+  const navbar = source('src/components/layout/Navbar.jsx');
+  const createAccount = source('src/pages/CreateAccount.jsx');
+  const onboarding = source('src/pages/onboarding/OnboardingCompletion.jsx');
+  const athleteSettings = source('src/pages/athlete/AthleteSettings.jsx');
+  const parentSettings = source('src/pages/parent/ParentSettings.jsx');
+  const parentAthletes = source('src/features/onboarding/ParentAthletesStep.jsx');
+  const childForm = source('src/features/parent/ChildForm.jsx');
+  const familyFn = source('functions/family/src/main.js');
+  const createOrg = source('src/pages/CreateOrganization.jsx');
+  const orgProfile = source('src/features/org/OrgProfileTab.jsx');
+  const coachApply = source('src/pages/apply/ApplyPrivateTrainingCoach.jsx');
+
+  assert(!app.includes("import('@/pages/Settings')"), 'generic Settings page must not be route-loaded');
+  assert(app.includes('const SettingsRedirect') && app.includes('path="/settings" element={<SettingsRedirect />}'), 'legacy /settings must redirect instead of rendering a duplicate page');
+  assert(app.includes('<Navigate to="/athlete/settings" replace />'), 'athlete fallback settings route must be /athlete/settings');
+  assert(app.includes('<Navigate to="/parent/settings" replace />'), 'parent settings redirect must use /parent/settings');
+  assert(app.includes('<Navigate to="/coach/settings" replace />'), 'coach settings redirect must use /coach/settings');
+  assert(app.includes('<Navigate to="/organization?tab=profile" replace />'), 'organization settings redirect must land on the org profile tab');
+  assert(navbar.includes('settingsPathForRole') && !navbar.includes('to="/settings"'), 'navbar Settings links must use role-specific destinations, never /settings');
+  assert(navbar.includes("return '/athlete/settings'") && navbar.includes("return '/parent/settings'") && navbar.includes("return '/coach/settings'"), 'navbar must route athlete/parent/coach settings separately');
+
+  assert(createAccount.includes("onboarding_role: 'athlete'") && createAccount.includes('first_name: form.firstName.trim()') && createAccount.includes('location_label: buildLocationLabel'), 'athlete signup must save identity and location to the profile');
+  assert(createAccount.includes("onboarding_role: 'parent'") && createAccount.includes('phone: normalizePhoneForStorage(form.phone)'), 'parent signup must save parent account details to the profile');
+  assert(onboarding.includes('parseLocationLabel(user?.location_label)') && onboarding.includes('parseAthleteBio(user?.bio)'), 'athlete onboarding must prefill from signup-saved profile fields');
+  assert(onboarding.includes('profile_setup_complete: true') && onboarding.includes('location_label: buildLocationLabel'), 'athlete onboarding completion must persist the confirmed fields once');
+  assert(athleteSettings.includes('user?.first_name') && athleteSettings.includes('user?.phone') && athleteSettings.includes('parseLocationLabel(user?.location_label)'), 'athlete settings must prefill account and sport profile fields from the saved profile');
+  assert(athleteSettings.includes('sports: form.sports') && athleteSettings.includes('skill_level: form.skill_level') && athleteSettings.includes('location_label: locationLabel'), 'athlete settings must save editable sport/location fields back to the same profile');
+
+  assert(parentSettings.includes('user?.first_name') && parentSettings.includes('await auth.updateCurrentUser({') && parentSettings.includes('parent_relationship: form.parent_relationship.trim()'), 'parent settings must edit the parent profile created during signup');
+  assert(parentAthletes.includes('create_child_account') && parentAthletes.includes('child_email') && parentAthletes.includes('child_password'), 'parent onboarding must support optional player login creation for eligible children');
+  assert(parentAthletes.includes('preferred_name: form.preferredName.trim()') && parentAthletes.includes('training_goals: form.trainingGoal.trim()'), 'parent onboarding must persist rich child athlete info');
+  assert(childForm.includes('function formFromChild') && childForm.includes('skill_level: child?.skill_level') && childForm.includes('health_notes: child?.health_notes'), 'parent child editor must prefill existing child athlete details');
+  assert(familyFn.includes('createChildLogin') && familyFn.includes('Parent and player accounts cannot share one email') && familyFn.includes('profile_setup_complete: true'), 'family function must create unique child player accounts and prevent shared parent/child emails');
+
+  assert(createOrg.includes("onboarding_role: currentUser.onboarding_status === 'complete' ? undefined : 'organization'") && createOrg.includes("action: 'create'"), 'organization signup must persist owner profile fields and create the org server-side');
+  assert(orgProfile.includes('setForm({') && orgProfile.includes('name: organization.name') && orgProfile.includes('contact_email: organization.contact_email'), 'organization profile tab must prefill from the created organization');
+  assert(coachApply.includes('current.firstName || user.first_name') && coachApply.includes('profile_setup_complete: true'), 'coach application must reuse signed-in profile details and mark coach applicants complete when appropriate');
+});
+
 test('storage privacy: parent and athlete avatars use server-mediated private upload', () => {
   const accountProfile = source('functions/accountProfile/src/main.js');
   const athleteSettings = source('src/pages/athlete/AthleteSettings.jsx');
