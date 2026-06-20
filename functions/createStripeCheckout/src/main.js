@@ -315,6 +315,63 @@ async function creditAccessibleToProfile(db, credit, profile) {
   return !!link && link.can_book !== false;
 }
 
+function creditRemainingCents(credit) {
+  const remaining = Number(credit?.remaining_amount_cents);
+  if (Number.isInteger(remaining) && remaining >= 0) return remaining;
+  const available = Number(credit?.available_amount_cents);
+  if (Number.isInteger(available) && available >= 0) return available;
+  const total = Number(credit?.total_credits || 0);
+  const used = Number(credit?.used_credits || 0);
+  const perSession = Number(credit?.per_session_base_price_cents);
+  if (total > used && Number.isInteger(perSession) && perSession > 0) {
+    return Math.max(0, total - used) * perSession;
+  }
+  return 0;
+}
+
+function creditCompatibleWithAthlete(credit, profile, athleteId) {
+  const targetAthleteId = String(athleteId || '').trim();
+  const creditAthleteId = String(credit?.athlete_id || '').trim();
+  if (!targetAthleteId) return !creditAthleteId || isSelfProfileAthleteId(profile, creditAthleteId);
+  if (!creditAthleteId) return signerRoleForProfile(profile) !== 'guardian';
+  return creditAthleteId === targetAthleteId
+    || (isSelfProfileAthleteId(profile, targetAthleteId) && isSelfProfileAthleteId(profile, creditAthleteId));
+}
+
+async function aggregateAccessibleCreditBalance(db, profile, anchorCredit, athleteId) {
+  const byId = new Map();
+  if (anchorCredit?.$id) byId.set(anchorCredit.$id, anchorCredit);
+
+  async function addRows(queries) {
+    const rows = await db.listDocuments(DB_ID, 'session_credits', [
+      ...queries,
+      Query.limit(100),
+    ]).catch(() => ({ documents: [] }));
+    for (const credit of rows.documents) byId.set(credit.$id, credit);
+  }
+
+  if (profile.$id) {
+    await addRows([Query.equal('owner_profile_id', profile.$id), Query.equal('status', 'active')]);
+    await addRows([Query.equal('client_profile_id', profile.$id), Query.equal('status', 'active')]);
+  }
+  if (profile.email) {
+    await addRows([Query.equal('client_email', profile.email), Query.equal('status', 'active')]);
+  }
+  const targetAthleteId = String(athleteId || anchorCredit?.athlete_id || '').trim();
+  if (targetAthleteId) {
+    await addRows([Query.equal('athlete_id', targetAthleteId), Query.equal('status', 'active')]);
+  }
+
+  let total = 0;
+  for (const credit of byId.values()) {
+    if (String(credit.status || 'active') !== 'active') continue;
+    if (!creditCompatibleWithAthlete(credit, profile, targetAthleteId)) continue;
+    if (!(await creditAccessibleToProfile(db, credit, profile))) continue;
+    total += creditRemainingCents(credit);
+  }
+  return total;
+}
+
 function paymentRecordOwnedByProfile(paymentRecord, profile, accountId) {
   const metadata = parseJson(paymentRecord?.metadata);
   const emailsMatch = String(metadata.client_email || '').toLowerCase()
@@ -621,9 +678,7 @@ export default async ({ req, res, error }) => {
         return res.json({ error: 'This credit is not available for top-up.' }, 409);
       }
       topUpSessionPrice = sessionPriceCents(pkg, durationMinutes) || 0;
-      topUpRemaining = Number.isInteger(Number(topUpCredit.remaining_amount_cents))
-        ? Math.max(0, Number(topUpCredit.remaining_amount_cents))
-        : Math.max(0, Number(topUpCredit.available_amount_cents) || 0);
+      topUpRemaining = await aggregateAccessibleCreditBalance(db, profile, topUpCredit, athleteId);
       amount = Math.max(0, topUpSessionPrice - topUpRemaining);
       if (amount <= 0) {
         return res.json({ error: 'No top-up is needed for this credit and session.' }, 400);

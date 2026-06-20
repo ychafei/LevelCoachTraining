@@ -18,6 +18,7 @@ for (const file of [
   'src/pages/onboarding/OnboardingCompletion.jsx',
   'src/pages/CreateOrganization.jsx',
   'src/pages/apply/ApplyPrivateTrainingCoach.jsx',
+  'scripts/create-fresh-role-accounts.mjs',
 ]) check(existsSync(join(root, file)), `Missing required Phase 5 file: ${file}`);
 
 // Coach applications: anonymous-capable, abuse-resistant, consent-gated.
@@ -27,8 +28,8 @@ includes('functions/applications/src/main.js', [
 ]);
 
 // Parent onboarding creates structured children via the family function.
-includes('functions/family/src/main.js', ['addChild', 'guardian_athletes', 'authority_attested_at']);
-includes('src/features/onboarding/ParentAthletesStep.jsx', ["'family'", 'addChild']);
+includes('functions/family/src/main.js', ['addChild', 'guardian_athletes', 'authority_attested_at', 'create_child_account', 'Player login accounts are available for athletes 13 or older']);
+includes('src/features/onboarding/ParentAthletesStep.jsx', ["'family'", 'addChild', 'Create a player login', 'Training goal']);
 includes('src/pages/CreateAccount.jsx', ['guardian']);
 
 // Role selection + completion flow via the server profile function.

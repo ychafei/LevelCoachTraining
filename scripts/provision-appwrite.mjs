@@ -316,13 +316,20 @@ async function provisionProfiles() {
   await attrDatetime('profiles', 'parent_consent_verified_at');
   await attrEmail('profiles', 'parent_consent_email');
   await attrBool('profiles', 'terms_accepted', false, false);
+  await attrDatetime('profiles', 'terms_accepted_at');
+  await attrString('profiles', 'terms_version', 120);
+  await attrString('profiles', 'terms_source', 120);
   await attrBool('profiles', 'media_release_accepted', false, false);
+  await attrDatetime('profiles', 'media_release_accepted_at');
+  await attrString('profiles', 'media_release_source', 120);
   await attrString('profiles', 'onboarding_role', 60);
   await attrEnum('profiles', 'onboarding_status', ['incomplete', 'complete', 'blocked'], false, 'incomplete');
   await attrString('profiles', 'primary_organization_id', 64);
   await attrBool('profiles', 'master_admin_locked', false, false);
   await attrDatetime('profiles', 'master_admin_bootstrapped_at');
   await attrString('profiles', 'notification_prefs', 2000);            // JSON-serialized
+  await attrDatetime('profiles', 'marketing_sms_consent_at');
+  await attrString('profiles', 'marketing_sms_consent_source', 120);
   await attrBool('profiles', 'suspended', false, false);
   await attrString('profiles', 'location_label', 500);
   await attrFloat('profiles', 'location_lat');
@@ -831,10 +838,13 @@ const PRODUCTION_COLLECTIONS = [
       { type: 'string', key: 'parent_profile_id', size: 64 },
       { type: 'string', key: 'first_name', size: 100, required: true },
       { type: 'string', key: 'last_name', size: 100, required: true },
+      { type: 'string', key: 'preferred_name', size: 100 },
       { type: 'datetime', key: 'dob' },
       { type: 'string', key: 'gender_optional', size: 80 },
       { type: 'string', key: 'sports', size: 120, array: true },
       { type: 'string', key: 'skill_level', size: 100 },
+      { type: 'string', key: 'sport_position', size: 100 },
+      { type: 'string', key: 'training_goals', size: 20000 },
       { type: 'string', key: 'emergency_contact', size: 20000 },
       { type: 'string', key: 'health_notes', size: 20000 },
       { type: 'float', key: 'location_lat' },

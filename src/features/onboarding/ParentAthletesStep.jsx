@@ -8,8 +8,10 @@ import {
   RELATIONSHIP_OPTIONS,
   levelsForSport,
   normalizePhoneForStorage,
+  positionsForSport,
   sportLabelForKey,
   validateDob,
+  validateEmail,
   validatePersonName,
   validatePhone,
 } from '@/lib/athleteOnboardingFields';
@@ -24,13 +26,20 @@ const PERMISSIONS = [
 const EMPTY_CHILD = {
   firstName: '',
   lastName: '',
+  preferredName: '',
   dob: '',
   sportKey: '',
   level: '',
+  position: '',
+  trainingGoal: '',
+  locationLabel: '',
   relationship: 'Parent',
   emergencyName: '',
   emergencyPhone: '',
   healthNotes: '',
+  createLogin: false,
+  childEmail: '',
+  childPassword: '',
 };
 
 function childAge(dob) {
@@ -92,12 +101,25 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
     if (firstError) next.firstName = firstError;
     if (lastError) next.lastName = lastError;
     if (dobError) next.dob = dobError;
+    if (!form.relationship) next.relationship = 'Select your relationship.';
     if (!form.sportKey) next.sportKey = 'Select a sport.';
-    if (form.emergencyName.trim()) {
-      const phoneError = validatePhone(form.emergencyPhone, 'Emergency contact phone');
-      if (phoneError) next.emergencyPhone = phoneError;
-    } else if (form.emergencyPhone.trim()) {
-      next.emergencyName = 'Add the contact name too.';
+    if (!form.level) next.level = 'Select the athlete level.';
+    if (!form.trainingGoal.trim()) next.trainingGoal = 'Add one training goal or focus area.';
+    if (!form.emergencyName.trim()) {
+      next.emergencyName = 'Emergency contact name is required.';
+    }
+    const phoneError = validatePhone(form.emergencyPhone, 'Emergency contact phone');
+    if (phoneError) next.emergencyPhone = phoneError;
+    if (form.createLogin) {
+      const age = childAge(form.dob);
+      if (age !== null && age < 13) {
+        next.createLogin = 'Player logins are available for athletes 13 or older.';
+      }
+      const emailError = validateEmail(form.childEmail, 'Player email');
+      if (emailError) next.childEmail = emailError;
+      if (form.childPassword.length < 8) {
+        next.childPassword = 'Use at least 8 characters.';
+      }
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -118,11 +140,18 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
         action: 'addChild',
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
+        preferred_name: form.preferredName.trim(),
         dob: form.dob,
         sports: form.sportKey ? [sportLabelForKey(form.sportKey)] : [],
         skill_level: form.level,
+        sport_position: form.position.trim(),
+        training_goals: form.trainingGoal.trim(),
+        location_label: form.locationLabel.trim(),
         relationship: form.relationship || 'Parent',
         health_notes: form.healthNotes.trim(),
+        create_child_account: form.createLogin === true,
+        child_email: form.createLogin ? form.childEmail.trim() : '',
+        child_password: form.createLogin ? form.childPassword : '',
         ...(emergencyContact ? { emergency_contact: emergencyContact } : {}),
       });
       toast.success(`${form.firstName.trim()} added to your family`);
@@ -182,6 +211,7 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
       {children.map((child) => {
         const link = links.find((row) => row.athlete_id === child.$id);
         const age = childAge(child.dob);
+        const displayName = [child.preferred_name || child.first_name, child.last_name].filter(Boolean).join(' ');
         return (
           <div key={child.$id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -191,22 +221,35 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
                 </span>
                 <div>
                   <p className="text-sm font-extrabold text-slate-950">
-                    {[child.first_name, child.last_name].filter(Boolean).join(' ')}
+                    {displayName}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-600">
                     {[
                       age !== null ? `Age ${age}` : '',
                       Array.isArray(child.sports) ? child.sports.join(', ') : '',
                       child.skill_level || '',
+                      child.sport_position || '',
                     ].filter(Boolean).join(' · ') || 'Profile saved'}
                   </p>
+                  {child.training_goals && (
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Goal: {child.training_goals}
+                    </p>
+                  )}
                 </div>
               </div>
-              {link && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Linked to you
-                </span>
-              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                {child.profile_id && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+                    Player login enabled
+                  </span>
+                )}
+                {link && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Linked to you
+                  </span>
+                )}
+              </div>
             </div>
 
             {link && (
@@ -254,6 +297,15 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
               placeholder="Last name"
             />
             <TextInput
+              id="child-preferred-name"
+              label="Preferred name"
+              error={errors.preferredName}
+              value={form.preferredName}
+              onChange={(value) => updateForm('preferredName', value)}
+              disabled={saving}
+              placeholder="What coaches should call them"
+            />
+            <TextInput
               id="child-dob"
               label="Date of birth"
               required
@@ -282,7 +334,10 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
               required
               error={errors.sportKey}
               value={form.sportKey}
-              onChange={(value) => setForm((current) => ({ ...current, sportKey: value, level: '' }))}
+              onChange={(value) => {
+                setForm((current) => ({ ...current, sportKey: value, level: '', position: '' }));
+                setErrors((current) => ({ ...current, sportKey: undefined, level: undefined, position: undefined }));
+              }}
               disabled={saving}
             >
               <option value="">Select a sport</option>
@@ -304,9 +359,33 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
                 <option key={level} value={level}>{level}</option>
               ))}
             </SelectInput>
+            <SelectInput
+              id="child-position"
+              label="Position or focus"
+              error={errors.position}
+              value={form.position}
+              onChange={(value) => updateForm('position', value)}
+              disabled={saving || !form.sportKey}
+              hint={!form.sportKey ? 'Pick a sport first.' : undefined}
+            >
+              <option value="">Select if known</option>
+              {positionsForSport(form.sportKey).map((position) => (
+                <option key={position} value={position}>{position}</option>
+              ))}
+            </SelectInput>
+            <TextInput
+              id="child-location"
+              label="Training area"
+              error={errors.locationLabel}
+              value={form.locationLabel}
+              onChange={(value) => updateForm('locationLabel', value)}
+              disabled={saving}
+              placeholder="City, school, or flexible"
+            />
             <TextInput
               id="child-emergency-name"
               label="Emergency contact name"
+              required
               error={errors.emergencyName}
               value={form.emergencyName}
               onChange={(value) => updateForm('emergencyName', value)}
@@ -316,6 +395,7 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
             <TextInput
               id="child-emergency-phone"
               label="Emergency contact phone"
+              required
               type="tel"
               error={errors.emergencyPhone}
               value={form.emergencyPhone}
@@ -323,6 +403,26 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
               disabled={saving}
               placeholder="(248) 555-0123"
             />
+          </div>
+          <div className="mt-3">
+            <label htmlFor="child-training-goal" className="mb-1.5 block text-sm font-bold text-slate-950">
+              Training goal <span aria-hidden="true" className="text-red-600">*</span>
+            </label>
+            <textarea
+              id="child-training-goal"
+              rows={2}
+              value={form.trainingGoal}
+              onChange={(event) => updateForm('trainingGoal', event.target.value)}
+              disabled={saving}
+              placeholder="Example: improve ball control, confidence, speed, conditioning, or game IQ."
+              aria-invalid={errors.trainingGoal ? 'true' : undefined}
+              className={`w-full resize-none rounded-md border bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-slate-400 focus:outline-none focus:ring-2 disabled:bg-slate-50 ${
+                errors.trainingGoal
+                  ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
+                  : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
+              }`}
+            />
+            {errors.trainingGoal && <p className="mt-1.5 text-xs font-semibold text-red-600" role="alert">{errors.trainingGoal}</p>}
           </div>
           <div className="mt-3">
             <label htmlFor="child-health-notes" className="mb-1.5 block text-sm font-bold text-slate-950">
@@ -337,6 +437,50 @@ export default function ParentAthletesStep({ onFamilyChange = null, autoOpenForm
               placeholder="Allergies, injuries, or anything a coach should know."
               className="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
             />
+          </div>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={form.createLogin === true}
+                disabled={saving}
+                onChange={(event) => updateForm('createLogin', event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block text-sm font-extrabold text-slate-950">Create a player login</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-600">
+                  Optional for athletes 13 or older. They can view their training schedule and progress, while you keep booking, payment, and legal control.
+                </span>
+              </span>
+            </label>
+            {errors.createLogin && <p className="mt-2 text-xs font-semibold text-red-600" role="alert">{errors.createLogin}</p>}
+            {form.createLogin && (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <TextInput
+                  id="child-login-email"
+                  label="Player email"
+                  required
+                  type="email"
+                  error={errors.childEmail}
+                  value={form.childEmail}
+                  onChange={(value) => updateForm('childEmail', value)}
+                  disabled={saving}
+                  placeholder="player@example.com"
+                />
+                <TextInput
+                  id="child-login-password"
+                  label="Player password"
+                  required
+                  type="password"
+                  error={errors.childPassword}
+                  value={form.childPassword}
+                  onChange={(value) => updateForm('childPassword', value)}
+                  disabled={saving}
+                  placeholder="At least 8 characters"
+                />
+              </div>
+            )}
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
             <Button

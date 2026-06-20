@@ -23,6 +23,7 @@
     "sports:seed": "node scripts/seed-sports.mjs",
     "legal:void-unbound-guardian": "node scripts/void-unbound-guardian-agreements.mjs --dry-run",
     "legal:void-unbound-guardian:apply": "node scripts/void-unbound-guardian-agreements.mjs --apply",
+    "accounts:fresh": "node scripts/create-fresh-role-accounts.mjs",
     "reviews:backfill-requests": "node scripts/backfill-session-review-requests.mjs",
     "test:e2e": "node tests/e2e/launch-smoke.mjs",
     "test:launch": "npm run test:e2e",

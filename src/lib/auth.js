@@ -3,6 +3,7 @@ import { callFn } from '@/lib/rpc';
 import { OAuthProvider } from 'appwrite';
 
 const PROFILE_HYDRATE_CACHE_MS = 2500;
+const PROFILE_ENSURE_RETRY_DELAYS_MS = [400, 900, 1600];
 
 let recentHydration = {
   accountId: null,
@@ -31,6 +32,52 @@ function rememberHydratedUser(user) {
   return user;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeAuthError(err) {
+  const message = err?.message || '';
+  const status = Number(err?.status || err?.code || 0);
+  if (
+    status === 409
+    || err?.type === 'user_already_exists'
+    || /already associated|already exists|already registered/i.test(message)
+  ) {
+    err.type = 'account_email_conflict';
+  } else if (status === 403 && /verify your email/i.test(message)) {
+    err.type = 'profile_claim_requires_verification';
+  }
+  return err;
+}
+
+function isProfileEnsureRetryable(err) {
+  const message = err?.message || '';
+  const status = Number(err?.status || err?.code || 0);
+  if (err?.type === 'account_email_conflict' || status === 409 || status === 401 || status === 403) return false;
+  return status === 429
+    || status === 500
+    || status === 502
+    || status === 503
+    || /rate limit|too many requests|profile setup is busy|could not process profile request/i.test(message);
+}
+
+async function ensureProfileWithRetry() {
+  let lastError = null;
+  for (let attempt = 0; attempt <= PROFILE_ENSURE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await callFn('accountProfile', { action: 'ensure' });
+    } catch (err) {
+      lastError = normalizeAuthError(err);
+      if (!isProfileEnsureRetryable(lastError) || attempt === PROFILE_ENSURE_RETRY_DELAYS_MS.length) {
+        throw lastError;
+      }
+      await sleep(PROFILE_ENSURE_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw lastError;
+}
+
 // Hydrate the caller's `profiles` document through the server-side
 // `accountProfile` function (clients can no longer create or repair profile
 // rows directly — the collection is server-only writable), then merge account
@@ -43,7 +90,7 @@ async function hydrateProfileFresh(acc) {
   // ensure → { profile, banned, labels }. The function creates the profile on
   // first sign-in (replacing the old client-side auto-create), claims legacy
   // rows, and reports the ban state + account labels.
-  const ensured = await callFn('accountProfile', { action: 'ensure' });
+  const ensured = await ensureProfileWithRetry();
   const profile = ensured?.profile || null;
   const labels = Array.isArray(ensured?.labels) ? ensured.labels : [];
 
@@ -154,7 +201,11 @@ export const auth = {
     // createEmailPasswordSession with "a session is active" otherwise, which
     // surfaces as a confusing generic error during signup.
     try { await account.deleteSession('current'); } catch { /* no session */ }
-    await account.create(ID.unique(), email.trim().toLowerCase(), password);
+    try {
+      await account.create(ID.unique(), email.trim().toLowerCase(), password);
+    } catch (err) {
+      throw normalizeAuthError(err);
+    }
     await account.createEmailPasswordSession(email.trim().toLowerCase(), password);
     // Send a verification email (best-effort — never block signup on it).
     try {

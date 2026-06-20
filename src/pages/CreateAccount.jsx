@@ -316,8 +316,8 @@ export function AthleteSignup() {
       const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'athlete');
       navigate(`${onboardingNext}${onboardingNext.includes('?') ? '&' : '?'}from=create-account`, { replace: true });
     } catch (err) {
-      if (err?.code === 409 || err?.type === 'user_already_exists') {
-        setFormError('An account with that email already exists. Sign in instead.');
+      if (err?.code === 409 || err?.type === 'user_already_exists' || err?.type === 'account_email_conflict') {
+        setFormError('An account with that email already exists. Sign in with that email or reset the password.');
       } else {
         setFormError(err?.message || 'Could not create your account. Please try again.');
       }
@@ -785,8 +785,8 @@ export function ParentSignup() {
       const onboardingNext = onboardingPath(getSafeNextPath(explicitNext) || '', 'parent');
       navigate(`${onboardingNext}${onboardingNext.includes('?') ? '&' : '?'}from=create-account`, { replace: true });
     } catch (err) {
-      if (err?.code === 409 || err?.type === 'user_already_exists') {
-        setFormError('An account with that email already exists. Sign in instead.');
+      if (err?.code === 409 || err?.type === 'user_already_exists' || err?.type === 'account_email_conflict') {
+        setFormError('An account with that email already exists. Sign in with that email or reset the password.');
       } else {
         setFormError(err?.message || 'Could not create your parent account. Please try again.');
       }

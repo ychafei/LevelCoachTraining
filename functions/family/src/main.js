@@ -1,14 +1,15 @@
-import { Client, Databases, ID, Permission, Query, Role } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
 
 const DB_ID = process.env.APPWRITE_DATABASE_ID || 'lctraining';
 const GUARDIAN_ROLES = ['parent', 'guardian'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function services() {
   const client = new Client()
     .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.VITE_APPWRITE_ENDPOINT || 'https://nyc.cloud.appwrite.io/v1')
     .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID)
     .setKey(process.env.APPWRITE_API_KEY);
-  return { db: new Databases(client) };
+  return { db: new Databases(client), users: new Users(client) };
 }
 
 function body(req) {
@@ -48,6 +49,27 @@ async function activeBan(db, email) {
 
 function cleanText(value, max) {
   return String(value ?? '').replace(/<[^>]*>/g, '').trim().slice(0, max);
+}
+
+function cleanEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function ageFromDob(dob) {
+  const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return null;
+  const now = new Date();
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - birth.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < birth.getUTCDate())) age -= 1;
+  return age;
+}
+
+function parsePassword(value) {
+  const password = String(value || '');
+  if (password.length < 8) return { error: 'Player login password must be at least 8 characters.' };
+  if (password.length > 256) return { error: 'Player login password is too long.' };
+  return { password };
 }
 
 async function callerGuardianLinks(db, profileId) {
@@ -117,6 +139,10 @@ function buildChildFields(payload, { requireCore = false } = {}) {
   }
 
   if (payload.skill_level !== undefined) fields.skill_level = cleanText(payload.skill_level, 100);
+  if (payload.preferred_name !== undefined) fields.preferred_name = cleanText(payload.preferred_name, 100);
+  if (payload.sport_position !== undefined) fields.sport_position = cleanText(payload.sport_position, 100);
+  if (payload.training_goals !== undefined) fields.training_goals = cleanText(payload.training_goals, 20000);
+  if (payload.location_label !== undefined) fields.location_label = cleanText(payload.location_label, 500);
   if (payload.health_notes !== undefined) fields.health_notes = cleanText(payload.health_notes, 20000);
 
   if (payload.emergency_contact !== undefined) {
@@ -137,7 +163,76 @@ function buildChildFields(payload, { requireCore = false } = {}) {
 
 // --- Actions ------------------------------------------------------------------
 
-async function addChild(db, accountId, profile, payload, res) {
+async function profileForEmail(db, email) {
+  if (!email) return null;
+  const rows = await db.listDocuments(DB_ID, 'profiles', [
+    Query.equal('email', email),
+    Query.limit(1),
+  ]).catch(() => ({ documents: [] }));
+  return rows.documents[0] || null;
+}
+
+async function createChildLogin(db, users, accountId, guardianProfile, payload, childFields) {
+  if (payload.create_child_account !== true) return { childProfile: null, childAccountId: '' };
+
+  const age = ageFromDob(childFields.dob);
+  if (age === null) return { error: 'Date of birth is required before creating a player login.' };
+  if (age < 13) {
+    return {
+      error: 'Player login accounts are available for athletes 13 or older. You can still manage younger athletes from your parent account.',
+    };
+  }
+
+  const email = cleanEmail(payload.child_email);
+  if (!EMAIL_RE.test(email) || email.length > 254) return { error: 'Enter a valid player email address.' };
+  if (email === cleanEmail(guardianProfile.email)) {
+    return { error: 'Use a different email for the player login. Parent and player accounts cannot share one email.' };
+  }
+  if (await profileForEmail(db, email)) return { error: 'A LevelCoach account already exists for this player email.' };
+
+  const passwordResult = parsePassword(payload.child_password);
+  if (passwordResult.error) return passwordResult;
+
+  let account;
+  try {
+    account = await users.create(ID.unique(), email, undefined, passwordResult.password);
+  } catch (err) {
+    if (err?.code === 409 || /already exists/i.test(err?.message || '')) {
+      return { error: 'A LevelCoach account already exists for this player email.' };
+    }
+    throw err;
+  }
+
+  const permissions = [
+    Permission.read(Role.user(accountId)),
+    Permission.read(Role.user(account.$id)),
+  ];
+  const childProfile = await db.createDocument(DB_ID, 'profiles', ID.unique(), {
+    account_id: account.$id,
+    role: 'user',
+    email,
+    first_name: childFields.first_name,
+    last_name: childFields.last_name,
+    dob: childFields.dob,
+    is_minor: age < 18,
+    parent_first_name: guardianProfile.first_name || '',
+    parent_last_name: guardianProfile.last_name || '',
+    parent_email: guardianProfile.email || '',
+    parent_phone: guardianProfile.phone || '',
+    parent_relationship: cleanText(payload.relationship, 100) || 'parent',
+    sports: childFields.sports || [],
+    ...(childFields.skill_level ? { skill_level: childFields.skill_level } : {}),
+    sport_position: childFields.sport_position || '',
+    location_label: childFields.location_label || '',
+    profile_setup_complete: true,
+    onboarding_role: 'athlete',
+    onboarding_status: 'complete',
+  }, permissions);
+
+  return { childProfile, childAccountId: account.$id };
+}
+
+async function addChild(db, users, accountId, profile, payload, res) {
   if (!(await isGuardianCaller(db, profile))) {
     return res.json({ error: 'Parent or guardian role required.' }, 403);
   }
@@ -145,11 +240,23 @@ async function addChild(db, accountId, profile, payload, res) {
   const result = buildChildFields(payload, { requireCore: true });
   if (result.error) return res.json({ error: result.error }, 400);
 
+  const childLogin = await createChildLogin(db, users, accountId, profile, payload, result.fields);
+  if (childLogin.error) return res.json({ error: childLogin.error }, 400);
+
+  const athletePermissions = [
+    Permission.read(Role.user(accountId)),
+    ...(childLogin.childAccountId ? [Permission.read(Role.user(childLogin.childAccountId))] : []),
+  ];
   const athlete = await db.createDocument(DB_ID, 'athlete_profiles', ID.unique(), {
     parent_profile_id: profile.$id,
+    ...(childLogin.childProfile ? { profile_id: childLogin.childProfile.$id } : {}),
     ...result.fields,
-  }, [Permission.read(Role.user(accountId))]);
+  }, athletePermissions);
 
+  const linkPermissions = [
+    Permission.read(Role.user(accountId)),
+    ...(childLogin.childAccountId ? [Permission.read(Role.user(childLogin.childAccountId))] : []),
+  ];
   const link = await db.createDocument(DB_ID, 'guardian_athletes', ID.unique(), {
     guardian_profile_id: profile.$id,
     athlete_id: athlete.$id,
@@ -158,14 +265,16 @@ async function addChild(db, accountId, profile, payload, res) {
     can_book: true,
     can_pay: true,
     can_message: true,
-  }, [Permission.read(Role.user(accountId))]);
+  }, linkPermissions);
 
   await audit(db, profile, 'family.add_child', 'AthleteProfile', athlete.$id, {
     guardian_profile_id: profile.$id,
     link_id: link.$id,
+    child_profile_id: childLogin.childProfile?.$id || '',
+    child_login_created: Boolean(childLogin.childProfile),
   });
 
-  return res.json({ athlete, link });
+  return res.json({ athlete, link, child_profile: childLogin.childProfile || null });
 }
 
 async function updateChild(db, profile, payload, res) {
@@ -291,7 +400,7 @@ export default async ({ req, res, error }) => {
 
     const payload = body(req);
     const action = String(payload.action || '');
-    const { db } = services();
+    const { db, users } = services();
 
     const profile = await profileForAccount(db, accountId);
     if (!profile) return res.json({ error: 'No profile found. Complete your account setup first.' }, 404);
@@ -301,7 +410,7 @@ export default async ({ req, res, error }) => {
 
     switch (action) {
       case 'addChild':
-        return await addChild(db, accountId, profile, payload, res);
+        return await addChild(db, users, accountId, profile, payload, res);
       case 'updateChild':
         return await updateChild(db, profile, payload, res);
       case 'linkAthlete':

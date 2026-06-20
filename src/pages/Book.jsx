@@ -137,6 +137,10 @@ function remainingCreditBalanceCents(credit) {
   return null;
 }
 
+function creditBalanceSumCents(credits) {
+  return credits.reduce((sum, credit) => sum + (remainingCreditBalanceCents(credit) ?? 0), 0);
+}
+
 // Whole dollars stay clean ($75); fractional amounts always show two
 // decimals ($75.50, never $75.5).
 function formatMoney(amount) {
@@ -213,6 +217,7 @@ export default function Book() {
   const [publicDataLoaded, setPublicDataLoaded] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(saved?.selectedPackage || null);
   const [existingCredit, setExistingCredit]   = useState(null);
+  const [availableCredits, setAvailableCredits] = useState([]);
   const [useExistingCredit, setUseExistingCredit] = useState(false);
   const [duration, setDuration]               = useState(saved?.duration || null);
   const [goals, setGoals]                     = useState(saved?.goals || '');
@@ -388,11 +393,15 @@ export default function Book() {
     (async () => {
       const credits = await sessionCreditRepo.list().catch(() => []);
       if (cancelled) return;
+      const activeCredits = credits.filter(c => (c.status || 'active') === 'active' && remainingCredits(c) > 0);
+      setAvailableCredits(activeCredits);
       let active = null;
       if (preCreditId) {
-        active = credits.find(c => c.id === preCreditId && remainingCredits(c) > 0);
+        active = activeCredits.find(c => c.id === preCreditId);
       } else {
         active = credits.find(c => remainingCredits(c) > 0);
+        if (active && (active.status || 'active') !== 'active') active = null;
+        active ||= activeCredits[0] || null;
       }
       setExistingCredit(active || null);
       setUseExistingCredit(!!active);
@@ -613,7 +622,14 @@ export default function Book() {
     ? selectedPackageTotalCents / 100
     : (sessionPrice != null ? sessionPrice * (selectedPackage?.sessions || 1) : null);
   const sessionPriceCents = sessionPrice != null ? Math.round(sessionPrice * 100) : null;
-  const existingCreditRemainingCents = existingCredit ? remainingCreditBalanceCents(existingCredit) : null;
+  const eligibleExistingCredits = availableCredits.filter((credit) => {
+    if (!selectedAthleteId) return true;
+    return String(credit.athlete_id || '') === String(selectedAthleteId);
+  });
+  const existingCreditRemainingCents = existingCredit
+    ? creditBalanceSumCents(eligibleExistingCredits.length ? eligibleExistingCredits : [existingCredit])
+    : null;
+  const existingCreditLotCount = existingCredit ? Math.max(1, eligibleExistingCredits.length || 1) : 0;
   const existingCreditAmountDueCents = useExistingCredit && sessionPriceCents != null && existingCreditRemainingCents != null
     ? Math.max(0, sessionPriceCents - existingCreditRemainingCents)
     : 0;
@@ -784,13 +800,19 @@ export default function Book() {
         ...(preferredLocation.trim() ? { preferred_location: preferredLocation.trim() } : {}),
       });
 
-      const fresh = await sessionCreditRepo.get(activeCredit.id).catch(() => null);
+      const refreshedCredits = await sessionCreditRepo.list().catch(() => null);
+      const activeRefreshedCredits = Array.isArray(refreshedCredits)
+        ? refreshedCredits.filter(c => (c.status || 'active') === 'active' && remainingCredits(c) > 0)
+        : null;
+      if (activeRefreshedCredits) setAvailableCredits(activeRefreshedCredits);
+      let fresh = activeRefreshedCredits?.find(c => c.id === activeCredit.id) || null;
+      if (!fresh) fresh = await sessionCreditRepo.get(activeCredit.id).catch(() => null);
       const updatedCredit = fresh || {
         ...activeCredit,
         used_credits: (Number(activeCredit.used_credits) || 0) + 1,
       };
       setCreditRecord(updatedCredit);
-      setExistingCredit(remainingCredits(updatedCredit) > 0 ? updatedCredit : null);
+      setExistingCredit(activeRefreshedCredits?.[0] || (remainingCredits(updatedCredit) > 0 ? updatedCredit : null));
 
       await loadAvailability(coach.id);
       setLastBookedSession(res.data?.session || null);
@@ -1288,11 +1310,11 @@ export default function Book() {
                 <p className="text-sm font-bold text-primary mb-1">You have existing credit</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   <strong>
-                    {remainingCreditBalance(existingCredit) !== null
-                      ? `$${formatMoney(remainingCreditBalance(existingCredit))}`
+                    {existingCreditRemainingCents !== null
+                      ? `$${formatMoney(existingCreditRemainingCents / 100)}`
                       : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'}`}
                   </strong>
-                  {' '}remaining on <strong>{existingCredit.package_name || 'your prepaid balance'}</strong>.
+                  {' '}available across your active training credit{existingCreditLotCount === 1 ? '' : 's'}.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -1432,7 +1454,7 @@ export default function Book() {
                   </p>
                   <p>
                     Existing balance: <span className="font-semibold text-foreground">{existingCreditRemainingCents != null ? `$${formatMoney(existingCreditRemainingCents / 100)}` : `${remainingCredits(existingCredit)} session${remainingCredits(existingCredit) === 1 ? '' : 's'}`}</span>
-                    {existingCredit?.package_name ? ` on ${existingCredit.package_name}` : ''}
+                    {existingCreditLotCount > 1 ? ` across ${existingCreditLotCount} active credits` : (existingCredit?.package_name ? ` on ${existingCredit.package_name}` : '')}
                   </p>
                   {existingCreditAmountDueCents > 0 ? (
                     <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-600">

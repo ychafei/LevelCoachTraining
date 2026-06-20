@@ -114,6 +114,7 @@ scenario(4, 'More expensive Coach B returns top-up amount_due_cents', () => {
   mustInclude(booking, 'amount_due_cents: amountCents - available', 'insufficient value must return amount due.');
   mustInclude(booking, 'requires_top_up: reservationResult.status === 402', 'booking response must be structured as top-up-required.');
   mustInclude(booking, 'top_up_amount_cents', 'booking response must include top-up cents.');
+  mustInclude(checkout, 'aggregateAccessibleCreditBalance', 'top-up checkout must charge only after counting eligible aggregate credit balance.');
 });
 
 scenario(5, 'Cheaper Coach B preserves leftover balance', () => {
@@ -128,6 +129,9 @@ scenario(6, 'Booking reserves value atomically and cannot double-spend', () => {
   mustInclude(booking, "Query.equal('idempotency_key', reservationKey)", 'duplicate reservation attempts must hit the same reservation key.');
   mustInclude(booking, "createOnceByIdempotency(db, 'credit_reservations'", 'reservation document creation must be idempotent.');
   mustInclude(booking, 'if (reservationResult.duplicate && reservation.session_id)', 'duplicate booking retries must return existing session.');
+  mustInclude(booking, 'listCandidateCredits', 'booking must be able to combine multiple eligible credit lots by value.');
+  mustInclude(booking, 'reservation_group_key: reservationKey', 'combined credit reservations must share a group key in metadata.');
+  mustInclude(booking, 'for (const item of reservationResult.reservations || [reservation])', 'every reservation part must be linked to the booked session.');
 });
 
 scenario(7, 'Early cancellation restores reserved value', () => {
@@ -185,7 +189,7 @@ scenario(13, 'Dispute freezes affected credit', () => {
   mustInclude(webhook, 'freezeUnusedCredit', 'dispute handler must freeze unused credit.');
   mustInclude(webhook, "type: 'dispute_freeze'", 'credit ledger must record the freeze.');
   mustInclude(webhook, "status: 'frozen'", 'affected credit must be frozen.');
-  mustInclude(booking, "String(credit?.status || 'active') === 'frozen'", 'payout release must block frozen credits.');
+  mustInclude(booking, "reservationCredits.some((item) => String(item.credit?.status || 'active') === 'frozen')", 'payout release must block frozen credits.');
   mustInclude(booking, "String(credit.status || 'active') !== 'active'", 'booking must block frozen credits.');
 });
 

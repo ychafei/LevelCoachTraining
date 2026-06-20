@@ -15,6 +15,7 @@ const MATCHING_AGE_GROUPS = ['5-8', '9-12', '13+'];
 const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
 const MAX_SPORTS = 12;
 const SPORT_MAX_LEN = 120;
+const ACCOUNT_TERMS_VERSION = 'universal-account-v1.0';
 
 function services() {
   const client = new Client()
@@ -147,6 +148,18 @@ function computeIsMinor(dob) {
   const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
   if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dob.getUTCDate())) age -= 1;
   return age < 18;
+}
+
+function parseJsonObject(value) {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function splitName(fullName) {
@@ -287,6 +300,17 @@ function buildUpdates(payload, profile) {
     updates[field] = payload[field];
   }
 
+  const nowIso = new Date().toISOString();
+  if (updates.terms_accepted === true && !profile.terms_accepted_at) {
+    updates.terms_accepted_at = nowIso;
+    updates.terms_version = ACCOUNT_TERMS_VERSION;
+    updates.terms_source = String(payload.terms_source || 'account_signup_or_onboarding').slice(0, 120);
+  }
+  if (updates.media_release_accepted === true && !profile.media_release_accepted_at) {
+    updates.media_release_accepted_at = nowIso;
+    updates.media_release_source = String(payload.media_release_source || 'account_signup_or_onboarding').slice(0, 120);
+  }
+
   if (payload.matching_age_group !== undefined) {
     if (!MATCHING_AGE_GROUPS.includes(payload.matching_age_group)) return fail('matching_age_group is invalid.');
     updates.matching_age_group = payload.matching_age_group;
@@ -301,6 +325,12 @@ function buildUpdates(payload, profile) {
     const serialized = JSON.stringify(prefs);
     if (serialized.length > 20000) return fail('notification_prefs is too large.');
     updates.notification_prefs = serialized;
+
+    const previousPrefs = parseJsonObject(profile.notification_prefs);
+    if (prefs.marketing_sms === true && previousPrefs.marketing_sms !== true && !profile.marketing_sms_consent_at) {
+      updates.marketing_sms_consent_at = nowIso;
+      updates.marketing_sms_consent_source = String(payload.marketing_sms_consent_source || 'account_signup_or_onboarding').slice(0, 120);
+    }
   }
 
   if (payload.onboarding_role !== undefined) {

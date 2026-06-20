@@ -991,6 +991,18 @@ function creditAvailableCents(credit) {
   return total > 0 ? Math.floor((amount * remainingUnits) / total) : 0;
 }
 
+function creditLegacyUnitsForAmount(credit, amountCents) {
+  const total = Number(credit?.total_credits) || 0;
+  if (total <= 0 || !(amountCents > 0)) return 0;
+  const used = Math.max(0, Number(credit?.used_credits) || 0);
+  const remainingUnits = Math.max(0, total - used);
+  if (remainingUnits <= 0) return 0;
+  const perSession = Number(credit?.per_session_base_price_cents)
+    || (total > 0 ? Math.floor((Number(credit?.original_amount_cents || credit?.amount_cents) || 0) / total) : 0);
+  if (!Number.isInteger(perSession) || perSession <= 0) return Math.min(1, remainingUnits);
+  return Math.min(remainingUnits, Math.max(1, Math.ceil(amountCents / perSession)));
+}
+
 async function ensureValueCreditFields(db, credit) {
   const hasAvailable = Number.isInteger(Number(credit.available_amount_cents));
   const hasRemaining = Number.isInteger(Number(credit.remaining_amount_cents));
@@ -1026,9 +1038,141 @@ async function ensureValueCreditFields(db, credit) {
   }).catch(() => credit);
 }
 
-async function reserveCreditValue(db, credit, amountCents, reservationKey, ledgerBase, permissions, error) {
-  const current = await ensureValueCreditFields(db, credit);
-  const available = creditAvailableCents(current);
+function uniqueCreditInputs(credits) {
+  const seen = new Set();
+  return credits.filter((credit) => {
+    const id = credit?.$id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+async function reserveCreditLotValue(db, current, amountCents, reservationKey, ledgerBase, permissions, error) {
+  let remainingDebited = false;
+  let reservedIncremented = false;
+  let availableDebited = false;
+  let legacyUnitsReserved = 0;
+  try {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents, 0);
+    remainingDebited = true;
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents);
+    reservedIncremented = true;
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents, 0)
+      .then(() => { availableDebited = true; })
+      .catch(() => {});
+
+    // Legacy UI compatibility: keep the original purchased-session counter
+    // roughly aligned with the value spent, while cents remain authoritative.
+    const units = creditLegacyUnitsForAmount(current, amountCents);
+    if (units > 0) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'used_credits', units, Number(current.total_credits) || 0)
+        .then(() => { legacyUnitsReserved = units; })
+        .catch(() => {});
+    }
+  } catch (err) {
+    if (reservedIncremented) {
+      await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
+    }
+    if (remainingDebited) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
+    }
+    if (availableDebited) {
+      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
+    }
+    if (legacyUnitsReserved > 0) {
+      await restoreLegacyCreditUnit(db, current.$id, error, legacyUnitsReserved);
+    }
+    error?.(`Credit reservation failed: ${err?.message || err}`);
+    return { error: 'No remaining credit value on this package.', status: 409, session_price_cents: amountCents };
+  }
+
+  try {
+    const reservation = await createOnceByIdempotency(db, 'credit_reservations', {
+      credit_lot_id: current.$id,
+      owner_profile_id: ledgerBase.owner_profile_id || '',
+      athlete_id: ledgerBase.athlete_id || '',
+      coach_id: ledgerBase.coach_id || '',
+      organization_id: ledgerBase.organization_id || '',
+      offering_id: ledgerBase.offering_id || '',
+      reserved_amount_cents: amountCents,
+      captured_amount_cents: 0,
+      released_amount_cents: 0,
+      currency: ledgerBase.currency || 'usd',
+      status: 'reserved',
+      idempotency_key: reservationKey,
+      metadata: JSON.stringify({
+        ...(ledgerBase.metadata || {}),
+        legacy_units_reserved: legacyUnitsReserved,
+      }),
+    }, permissions);
+
+    await writeCreditLedger(db, {
+      credit_lot_id: current.$id,
+      owner_profile_id: ledgerBase.owner_profile_id || '',
+      athlete_id: ledgerBase.athlete_id || '',
+      payment_record_id: current.source_payment_record_id || '',
+      reservation_id: reservation.$id,
+      type: 'reservation_hold',
+      available_delta_cents: -amountCents,
+      reserved_delta_cents: amountCents,
+      currency: ledgerBase.currency || 'usd',
+      idempotency_key: `credit_hold_${reservation.$id}`,
+      metadata: JSON.stringify(ledgerBase.metadata || {}),
+    }, permissions);
+    return { reservation };
+  } catch (err) {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
+    if (legacyUnitsReserved > 0) await restoreLegacyCreditUnit(db, current.$id, error, legacyUnitsReserved);
+    throw err;
+  }
+}
+
+async function restoreReservation(db, reservation, error, sessionId = '') {
+  if (!reservation || reservation.status !== 'reserved') return;
+  const amount = Number(reservation.reserved_amount_cents || 0);
+  if (!(amount > 0)) return;
+  const metadata = parseJson(reservation.metadata);
+
+  try {
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'reserved_amount_cents', amount, 0);
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'available_amount_cents', amount);
+    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'remaining_amount_cents', amount).catch(() => {});
+    await restoreLegacyCreditUnit(db, reservation.credit_lot_id, error, Number(metadata.legacy_units_reserved) || 1);
+    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
+      status: 'released',
+      released_amount_cents: amount,
+    });
+    await writeCreditLedger(db, {
+      credit_lot_id: reservation.credit_lot_id,
+      owner_profile_id: reservation.owner_profile_id || '',
+      athlete_id: reservation.athlete_id || '',
+      session_id: sessionId || reservation.session_id || '',
+      reservation_id: reservation.$id,
+      type: 'reservation_release',
+      available_delta_cents: amount,
+      reserved_delta_cents: -amount,
+      currency: reservation.currency || 'usd',
+      idempotency_key: `credit_release_${reservation.$id}`,
+      metadata: JSON.stringify({ session_id: sessionId || reservation.session_id || '' }),
+    });
+  } catch (err) {
+    error?.(`Credit reservation restore failed: ${err?.message || err}`);
+  }
+}
+
+async function reserveCreditValue(db, credit, amountCents, reservationKey, ledgerBase, permissions, error, candidateCredits = []) {
+  const normalized = [];
+  for (const candidate of uniqueCreditInputs([credit, ...candidateCredits])) {
+    if (String(candidate.status || 'active') !== 'active') continue;
+    const current = await ensureValueCreditFields(db, candidate);
+    const candidateAvailable = creditAvailableCents(current);
+    if (candidateAvailable > 0) normalized.push({ credit: current, available: candidateAvailable });
+  }
+
+  const available = normalized.reduce((sum, item) => sum + item.available, 0);
   if (available < amountCents) {
     return {
       error: 'Additional credit is required before booking this coach.',
@@ -1046,82 +1190,37 @@ async function reserveCreditValue(db, credit, amountCents, reservationKey, ledge
   ]).catch(() => null);
   if (existing) return { reservation: existing, duplicate: true };
 
-  let remainingDebited = false;
-  let reservedIncremented = false;
-  let availableDebited = false;
-  let legacyUnitReserved = false;
+  let remainingToReserve = amountCents;
+  const reservations = [];
   try {
-    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents, 0);
-    remainingDebited = true;
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents);
-    reservedIncremented = true;
-    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents, 0)
-      .then(() => { availableDebited = true; })
-      .catch(() => {});
-    // Legacy UI compatibility: keep "sessions remaining" moving, but the
-    // cent balance above is authoritative.
-    const total = Number(current.total_credits) || 0;
-    if (total > 0) {
-      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'used_credits', 1, total)
-        .then(() => { legacyUnitReserved = true; })
-        .catch(() => {});
+    for (let index = 0; index < normalized.length && remainingToReserve > 0; index += 1) {
+      const item = normalized[index];
+      const partAmount = Math.min(item.available, remainingToReserve);
+      const partKey = index === 0
+        ? reservationKey
+        : `${reservationKey}_part_${item.credit.$id}`.slice(0, 200);
+      const result = await reserveCreditLotValue(db, item.credit, partAmount, partKey, {
+        ...ledgerBase,
+        metadata: {
+          ...(ledgerBase.metadata || {}),
+          reservation_group_key: reservationKey,
+          primary_credit_lot_id: credit.$id,
+          combined_credit_booking: normalized.length > 1,
+        },
+      }, permissions, error);
+      if (result.error) throw new Error(result.error);
+      reservations.push(result.reservation);
+      remainingToReserve -= partAmount;
     }
   } catch (err) {
-    if (reservedIncremented) {
-      await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
-    }
-    if (remainingDebited) {
-      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
-    }
-    if (availableDebited) {
-      await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
-    }
-    if (legacyUnitReserved) {
-      await restoreLegacyCreditUnit(db, current.$id, error);
+    for (const reservation of reservations) {
+      await restoreReservation(db, reservation, error);
     }
     error?.(`Credit reservation failed: ${err?.message || err}`);
     return { error: 'No remaining credit value on this package.', status: 409, session_price_cents: amountCents };
   }
 
-  let reservation;
-  try {
-    reservation = await createOnceByIdempotency(db, 'credit_reservations', {
-      credit_lot_id: current.$id,
-      owner_profile_id: ledgerBase.owner_profile_id || '',
-      athlete_id: ledgerBase.athlete_id || '',
-      coach_id: ledgerBase.coach_id || '',
-      organization_id: ledgerBase.organization_id || '',
-      offering_id: ledgerBase.offering_id || '',
-      reserved_amount_cents: amountCents,
-      captured_amount_cents: 0,
-      released_amount_cents: 0,
-      currency: ledgerBase.currency || 'usd',
-      status: 'reserved',
-      idempotency_key: reservationKey,
-      metadata: JSON.stringify(ledgerBase.metadata || {}),
-    }, permissions);
-  } catch (err) {
-    await db.decrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'reserved_amount_cents', amountCents, 0).catch(() => {});
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'available_amount_cents', amountCents).catch(() => {});
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', current.$id, 'remaining_amount_cents', amountCents).catch(() => {});
-    await restoreLegacyCreditUnit(db, current.$id, error);
-    throw err;
-  }
-
-  await writeCreditLedger(db, {
-    credit_lot_id: current.$id,
-    owner_profile_id: ledgerBase.owner_profile_id || '',
-    athlete_id: ledgerBase.athlete_id || '',
-    payment_record_id: current.source_payment_record_id || '',
-    reservation_id: reservation.$id,
-    type: 'reservation_hold',
-    available_delta_cents: -amountCents,
-    reserved_delta_cents: amountCents,
-    currency: ledgerBase.currency || 'usd',
-    idempotency_key: `credit_hold_${reservation.$id}`,
-    metadata: JSON.stringify(ledgerBase.metadata || {}),
-  }, permissions);
-  return { reservation };
+  return { reservation: reservations[0], reservations };
 }
 
 // --- Shared session helpers ----------------------------------------------------
@@ -1156,51 +1255,108 @@ async function sessionAuthority(db, users, accountId, profile, session) {
   return { coach, isClient, isCoach, isGuardian, isAdmin, any: isClient || isCoach || isGuardian || isAdmin };
 }
 
-async function restoreLegacyCreditUnit(db, creditId, error) {
+async function restoreLegacyCreditUnit(db, creditId, error, units = 1) {
   if (!creditId) return;
+  const amount = Math.max(1, Number(units) || 1);
   try {
     // Atomic bounded decrement: floor at 0 so concurrent restores can never
     // free more credits than were consumed.
-    await db.decrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', 1, 0);
+    await db.decrementDocumentAttribute(DB_ID, 'session_credits', creditId, 'used_credits', amount, 0);
   } catch (err) {
     error?.(`Credit restore failed: ${err?.message || err}`);
   }
 }
 
+async function reservationsForSession(db, session) {
+  const byId = new Map();
+  for (const reservation of session?.reservations || []) {
+    if (reservation?.$id) byId.set(reservation.$id, reservation);
+  }
+  if (session?.$id) {
+    const rows = await db.listDocuments(DB_ID, 'credit_reservations', [
+      Query.equal('session_id', session.$id),
+      Query.limit(100),
+    ]).catch(() => ({ documents: [] }));
+    for (const reservation of rows.documents) byId.set(reservation.$id, reservation);
+  }
+  if (session?.credit_reservation_id && !byId.has(session.credit_reservation_id)) {
+    const primary = await db.getDocument(DB_ID, 'credit_reservations', session.credit_reservation_id).catch(() => null);
+    if (primary) byId.set(primary.$id, primary);
+  }
+  const primaryId = session?.credit_reservation_id || '';
+  return [...byId.values()].sort((a, b) => {
+    if (a.$id === primaryId) return -1;
+    if (b.$id === primaryId) return 1;
+    return String(a.$createdAt || '').localeCompare(String(b.$createdAt || ''));
+  });
+}
+
+function creditOwnerMatchesProfile(credit, profile) {
+  return Boolean(
+    (credit.client_profile_id && credit.client_profile_id === profile.$id)
+    || (credit.owner_profile_id && credit.owner_profile_id === profile.$id)
+    || (credit.owner_account_id && credit.owner_account_id === profile.account_id)
+    || (String(credit.client_email || '').toLowerCase()
+      && String(credit.client_email || '').toLowerCase() === String(profile.email || '').toLowerCase())
+  );
+}
+
+function creditCanFundBooking(credit, { profile, compatibleAthleteIds, guardianBooking, athleteGuardianLink }) {
+  if (!credit || String(credit.status || 'active') !== 'active') return false;
+  const creditAthleteId = String(credit.athlete_id || '').trim();
+  const athleteMatches = !creditAthleteId || compatibleAthleteIds.has(creditAthleteId);
+  if (!athleteMatches) return false;
+  if (guardianBooking) {
+    return Boolean(creditAthleteId && athleteGuardianLink && athleteGuardianLink.can_book !== false);
+  }
+  return creditOwnerMatchesProfile(credit, profile) || Boolean(creditAthleteId && compatibleAthleteIds.has(creditAthleteId));
+}
+
+async function listCandidateCredits(db, profile, primaryCredit, context) {
+  const byId = new Map();
+  if (primaryCredit?.$id) byId.set(primaryCredit.$id, primaryCredit);
+
+  async function addRows(queries) {
+    const rows = await db.listDocuments(DB_ID, 'session_credits', [
+      ...queries,
+      Query.limit(100),
+    ]).catch(() => ({ documents: [] }));
+    for (const credit of rows.documents) {
+      if (creditCanFundBooking(credit, context) && creditAvailableCents(credit) > 0) {
+        byId.set(credit.$id, credit);
+      }
+    }
+  }
+
+  if (profile.$id) {
+    await addRows([Query.equal('owner_profile_id', profile.$id), Query.equal('status', 'active')]);
+    await addRows([Query.equal('client_profile_id', profile.$id), Query.equal('status', 'active')]);
+  }
+  if (profile.email) {
+    await addRows([Query.equal('client_email', profile.email), Query.equal('status', 'active')]);
+  }
+  for (const athleteId of context.compatibleAthleteIds) {
+    if (athleteId) await addRows([Query.equal('athlete_id', athleteId), Query.equal('status', 'active')]);
+  }
+
+  const primaryId = primaryCredit?.$id || '';
+  return [...byId.values()]
+    .filter((credit) => creditCanFundBooking(credit, context) && creditAvailableCents(credit) > 0)
+    .sort((a, b) => {
+      if (a.$id === primaryId) return -1;
+      if (b.$id === primaryId) return 1;
+      return String(a.$createdAt || '').localeCompare(String(b.$createdAt || ''));
+    });
+}
+
 async function restoreCreditReservation(db, session, error) {
-  if (!session?.credit_reservation_id) {
+  const reservations = await reservationsForSession(db, session);
+  if (!reservations.length) {
     await restoreLegacyCreditUnit(db, session?.credit_id, error);
     return;
   }
-  const reservation = await db.getDocument(DB_ID, 'credit_reservations', session.credit_reservation_id).catch(() => null);
-  if (!reservation || reservation.status !== 'reserved') return;
-  const amount = Number(reservation.reserved_amount_cents || 0);
-  if (!(amount > 0)) return;
-
-  try {
-    await db.decrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'reserved_amount_cents', amount, 0);
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'available_amount_cents', amount);
-    await db.incrementDocumentAttribute(DB_ID, 'session_credits', reservation.credit_lot_id, 'remaining_amount_cents', amount).catch(() => {});
-    await restoreLegacyCreditUnit(db, reservation.credit_lot_id, error);
-    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
-      status: 'released',
-      released_amount_cents: amount,
-    });
-    await writeCreditLedger(db, {
-      credit_lot_id: reservation.credit_lot_id,
-      owner_profile_id: reservation.owner_profile_id || '',
-      athlete_id: reservation.athlete_id || '',
-      session_id: session.$id,
-      reservation_id: reservation.$id,
-      type: 'reservation_release',
-      available_delta_cents: amount,
-      reserved_delta_cents: -amount,
-      currency: reservation.currency || 'usd',
-      idempotency_key: `credit_release_${reservation.$id}`,
-      metadata: JSON.stringify({ session_id: session.$id }),
-    });
-  } catch (err) {
-    error?.(`Credit reservation restore failed: ${err?.message || err}`);
+  for (const reservation of reservations) {
+    await restoreReservation(db, reservation, error, session?.$id || '');
   }
 }
 
@@ -1429,11 +1585,16 @@ async function releaseSessionPayout(db, sessionId, reason, error) {
   if (!session.credit_reservation_id) return { payout_state: session.payout_state || 'not_payable' };
   if (payoutAlreadyReleased(session)) return { payout_state: session.payout_state || 'released' };
 
-  const reservation = await db.getDocument(DB_ID, 'credit_reservations', session.credit_reservation_id).catch(() => null);
+  const reservations = await reservationsForSession(db, session);
+  const reservation = reservations[0] || null;
   const payoutReleaseId = payoutReleaseIdForSession(session.$id);
   if (!reservation) return { payout_state: 'release_pending_retry' };
-  const credit = await db.getDocument(DB_ID, 'session_credits', reservation.credit_lot_id).catch(() => null);
-  if (String(credit?.status || 'active') === 'frozen') {
+  const reservationCredits = [];
+  for (const item of reservations) {
+    const itemCredit = await db.getDocument(DB_ID, 'session_credits', item.credit_lot_id).catch(() => null);
+    reservationCredits.push({ reservation: item, credit: itemCredit });
+  }
+  if (reservationCredits.some((item) => String(item.credit?.status || 'active') === 'frozen')) {
     const detail = 'Credit is frozen, likely due to a payment dispute. Payout release is blocked until the dispute is resolved.';
     await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, detail);
     await updateDocumentResilient(db, 'sessions', session.$id, {
@@ -1444,23 +1605,34 @@ async function releaseSessionPayout(db, sessionId, reason, error) {
   }
   const amountCents = centsInt(session.reserved_amount_cents, 0)
     || centsInt(session.price_snapshot_cents, 0)
-    || centsInt(reservation.reserved_amount_cents, 0);
+    || reservations.reduce((sum, item) => sum + centsInt(item.reserved_amount_cents, 0), 0);
   if (!(amountCents > 0)) return { payout_state: session.payout_state || 'not_payable' };
   const currency = session.currency || reservation.currency || 'usd';
-  const paymentRecordId = credit?.source_payment_record_id || session.credit_id || reservation.credit_lot_id;
+  const primaryCredit = reservationCredits[0]?.credit || null;
+  const paymentRecordId = primaryCredit?.source_payment_record_id || session.credit_id || reservation.credit_lot_id;
   const snapshot = payoutSnapshotForSession(session);
   if (snapshot.error) {
     await notifyAdminPayoutReleaseFailed(db, session, payoutReleaseId, reason, snapshot.error);
     await updateDocumentResilient(db, 'sessions', session.$id, { payout_state: 'release_pending_retry' }).catch(() => {});
     return { payout_state: 'release_pending_retry', error: snapshot.error };
   }
-  const creditPermissions = await creditReadPermissions(db, credit, reservation);
+  const creditPermissionSet = new Set();
+  for (const item of reservationCredits) {
+    const itemPermissions = await creditReadPermissions(db, item.credit, item.reservation);
+    itemPermissions.forEach((permission) => creditPermissionSet.add(permission));
+  }
+  const creditPermissions = [...creditPermissionSet];
 
-  await captureReservation(db, session, reservation, credit, amountCents, {
-    payoutReleaseId,
-    reason,
-    permissions: creditPermissions,
-  });
+  for (const item of reservationCredits) {
+    const partAmount = centsInt(item.reservation.reserved_amount_cents, 0);
+    if (partAmount > 0) {
+      await captureReservation(db, session, item.reservation, item.credit, partAmount, {
+        payoutReleaseId,
+        reason,
+        permissions: creditPermissions,
+      });
+    }
+  }
 
   const coachPayoutCents = Math.floor((amountCents * snapshot.coach_bps) / 10000);
   const orgPayoutCents = Math.floor((amountCents * snapshot.org_bps) / 10000);
@@ -1494,6 +1666,7 @@ async function releaseSessionPayout(db, sessionId, reason, error) {
       reason,
       platform_bps: snapshot.platform_bps,
       reserved_amount_cents: amountCents,
+      credit_reservation_ids: reservations.map((item) => item.$id),
     }),
   });
 
@@ -1632,6 +1805,12 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   if (!ownsCredit && !isCreditAthleteSelf && !isCreditGuardian) {
     return res.json({ error: 'This credit does not belong to you or an athlete linked to you.' }, 403);
   }
+  const compatibleAthleteIds = new Set([sessionAthleteId].filter(Boolean));
+  if (!guardianBooking) {
+    [profile.$id, profile.id, profile.account_id, athlete?.$id, athlete?.profile_id]
+      .filter(Boolean)
+      .forEach((id) => compatibleAthleteIds.add(id));
+  }
 
   const signerRole = guardianBooking ? 'guardian' : 'athlete';
   if (!(await legalPacketCompleteFor(db, profile, signerRole, athlete?.$id))) {
@@ -1662,6 +1841,12 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
   const coachAccount = payoutPlan.coach_bps > 0 ? await payoutDestinationAccount(db, 'coach', coach.$id) : null;
   const orgAccount = payoutPlan.org_bps > 0 ? await payoutDestinationAccount(db, 'org', payoutPlan.organization_id) : null;
   const originalCoachId = originalCreditCoachId(credit);
+  const candidateCredits = await listCandidateCredits(db, profile, credit, {
+    profile,
+    compatibleAthleteIds,
+    guardianBooking,
+    athleteGuardianLink,
+  });
   const payoutSnapshot = payoutPlanSnapshot({
     payoutPlan,
     coach,
@@ -1701,7 +1886,7 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       original_credit_coach_id: originalCoachId,
       payout_plan_snapshot: payoutSnapshot,
     },
-  }, [], error);
+  }, [], error, candidateCredits);
   if (reservationResult.error) {
     return res.json({
       error: reservationResult.error,
@@ -1770,11 +1955,18 @@ async function bookAction(db, users, accountId, profile, payload, res, error) {
       payment_state: 'reserved',
       payout_state: 'not_payable',
     }, permissions);
-    await updateDocumentResilient(db, 'credit_reservations', reservation.$id, {
-      session_id: session.$id,
-    });
+    for (const item of reservationResult.reservations || [reservation]) {
+      await updateDocumentResilient(db, 'credit_reservations', item.$id, {
+        session_id: session.$id,
+      });
+    }
   } catch (err) {
-    await restoreCreditReservation(db, { ...reservation, credit_reservation_id: reservation.$id, credit_id: creditId, $id: '' }, error);
+    await restoreCreditReservation(db, {
+      reservations: reservationResult.reservations || [reservation],
+      credit_reservation_id: reservation.$id,
+      credit_id: creditId,
+      $id: '',
+    }, error);
     throw err;
   }
 

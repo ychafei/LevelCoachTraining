@@ -23,6 +23,12 @@ function loginErrorMessage(err, fallback) {
   if (err?.type === 'account_banned') {
     return `This account has been suspended and can no longer sign in. If you believe this is a mistake, contact ${SUPPORT_EMAIL}.`;
   }
+  if (err?.type === 'account_email_conflict' || err?.status === 409 || /already associated|already exists|already registered/i.test(err?.message || '')) {
+    return 'This email is already tied to a LevelCoach account. Sign in with the original method for that email, or reset your password.';
+  }
+  if (err?.type === 'profile_claim_requires_verification') {
+    return 'This email already has a LevelCoach profile. Verify the email address first, then sign in again.';
+  }
   if (err?.type === 'user_invalid_token' || err?.type === 'user_session_already_exists') {
     return 'Sign-in could not be completed — the link or sign-in attempt is invalid or expired. Please try again.';
   }
