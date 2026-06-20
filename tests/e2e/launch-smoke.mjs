@@ -111,7 +111,8 @@ test('adult athlete booking: checkout requires published coach and exact checkou
   assert(booking.includes('athlete_id: sessionAthleteId'), 'booking must store a stable athlete id on the session');
   assert(bookingPackage.dependencies?.stripe, 'booking function must declare stripe because payout release code imports it at module load');
   assert(checkout.includes('isSelfProfileAthleteId(profile, athleteId)'), 'checkout/top-up access must accept self-managed adult profile ids on credits');
-  assert(athleteOverview.includes('Credit with ${coachName}') && athleteOverview.includes('Schedule with ${creditCoachName'), 'athlete portal must plainly show which coach a credit belongs to');
+  assert(athleteOverview.includes('Transferable credit from ${coachName}') && athleteOverview.includes('use with any published coach'), 'athlete portal must show source coach while making credit transferability clear');
+  assert(stripeWebhook.includes('apply the remaining balance toward another published coach') && stripeWebhook.includes('transferable by remaining dollar value'), 'payment emails must not imply credits are locked to the origin coach');
   assert(athleteOverview.includes('PaymentHistoryCard') && athleteOverview.includes('stripePaymentRecordRepo.list'), 'athlete portal must show readable payment records');
   assert(checkout.includes('stripe_payment_records') && checkout.includes('ownerReadGrant(accountId)'), 'checkout-created payment records must be readable by the payer');
   assert(stripeWebhook.includes('sendPurchaseNotifications') && stripeWebhook.includes("type: 'payment_receipt'") && stripeWebhook.includes("type: 'credit_purchased'"), 'stripe webhook must notify buyer and coach when prepaid credit is purchased');

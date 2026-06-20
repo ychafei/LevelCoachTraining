@@ -447,7 +447,7 @@ export default function CoachOverview() {
             <div className="py-8 text-center">
               <CreditCard className="mx-auto mb-2 h-8 w-8 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">No available prepaid credits yet.</p>
-              <p className="mt-1 text-xs text-muted-foreground">When a client buys credit with you, it appears here until that credit is used.</p>
+              <p className="mt-1 text-xs text-muted-foreground">When a client buys credit from your profile, it appears here until they schedule or use the balance elsewhere.</p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -459,7 +459,7 @@ export default function CoachOverview() {
                         {credit.client_name || credit.client_email || 'Client'} purchased {credit.package_name || 'training credit'}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Available to schedule · {formatInstantInTz(credit.created_date, tz, { hour: undefined, minute: undefined, timeZoneName: undefined })}
+                        Not booked yet · transferable until reserved · {formatInstantInTz(credit.created_date, tz, { hour: undefined, minute: undefined, timeZoneName: undefined })}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">

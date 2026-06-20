@@ -143,10 +143,10 @@ function CreditsCard({ credits, remaining, loading, coachesById }) {
                 <li key={credit.id} className="flex items-start justify-between gap-3 text-sm">
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-foreground">
-                      {coachName !== 'Coach' ? `Credit with ${coachName}` : 'Training credit'}
+                      {coachName !== 'Coach' ? `Transferable credit from ${coachName}` : 'Transferable training credit'}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {credit.package_name || 'Training package'} · {usd(reserved)} reserved · {usd(spent)} spent
+                      {credit.package_name || 'Training package'} · use with any published coach · {usd(reserved)} reserved · {usd(spent)} spent
                     </span>
                   </span>
                   <span className="shrink-0 font-semibold text-foreground">{usd(left)}</span>
@@ -165,7 +165,7 @@ function CreditsCard({ credits, remaining, loading, coachesById }) {
               </Button>
             )}
             <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-              <Link to="/coaches">Buy more sessions</Link>
+              <Link to="/coaches">Compare coaches</Link>
             </Button>
           </div>
         </div>
@@ -397,8 +397,8 @@ function buildActions({ legalStatus, remaining, credits, creditCoachesById, cred
     actions.push({
       key: 'book',
       icon: CalendarDays,
-      title: coachName !== 'Coach' ? `Book with ${coachName}` : 'Book your next session',
-      body: `You have ${usd(remaining)} in credit ready to use. Get the next session on the calendar.`,
+      title: 'Use your training credit',
+      body: `You have ${usd(remaining)} in transferable credit ready to use with ${coachName !== 'Coach' ? `${coachName} or ` : ''}another published coach.`,
       href: credit ? creditBookHref(credit) : '/coaches',
       label: coachName !== 'Coach' ? `Schedule with ${coachName}` : 'Book now',
     });

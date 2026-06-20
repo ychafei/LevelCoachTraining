@@ -286,7 +286,7 @@ async function sendPurchaseNotifications(db, session, paymentRecord, metadata, {
     accountId: metadata.client_account_id || '',
     type: 'payment_receipt',
     title: 'Payment received',
-    body: `${amountLabel} ${actionLabel} for ${packageName} is ready to schedule with ${coachName}.`,
+    body: `${amountLabel} ${actionLabel} for ${packageName} is ready. You can schedule with ${coachName} or apply the balance to another published coach.`,
     link,
     data: {
       payment_record_id: paymentRecord.$id,
@@ -302,7 +302,7 @@ async function sendPurchaseNotifications(db, session, paymentRecord, metadata, {
     html: `
       <p>Hi ${escapeHtml(clientName || 'there')},</p>
       <p>We received your ${escapeHtml(amountLabel)} payment for <strong>${escapeHtml(packageName)}</strong>.</p>
-      <p>Your prepaid credit is ready to use with <strong>${escapeHtml(coachName)}</strong>.</p>
+      <p>Your prepaid LevelCoach credit is ready. You can schedule with <strong>${escapeHtml(coachName)}</strong> or apply the remaining balance toward another published coach.</p>
       <p><a href="${escapeHtml(fullLink)}">Schedule your session</a></p>
       <p>Card details are handled by Stripe; LevelCoach never stores your card number.</p>
     `,
@@ -316,7 +316,7 @@ async function sendPurchaseNotifications(db, session, paymentRecord, metadata, {
     accountId: coachAccountId,
     type: 'credit_purchased',
     title: 'New prepaid training credit',
-    body: `${clientName || 'An athlete'} purchased ${packageName}. They can now schedule with you.`,
+    body: `${clientName || 'An athlete'} purchased ${packageName} from your profile. No session is booked yet, and unused LevelCoach credit can be applied to another published coach before scheduling.`,
     link: '/coach/sessions',
     data: {
       payment_record_id: paymentRecord.$id,
@@ -334,7 +334,8 @@ async function sendPurchaseNotifications(db, session, paymentRecord, metadata, {
     html: `
       <p>Hi ${escapeHtml(coach.first_name || 'Coach')},</p>
       <p><strong>${escapeHtml(clientName || 'An athlete')}</strong> purchased <strong>${escapeHtml(packageName)}</strong>.</p>
-      <p>No session is on your calendar yet. You will receive a separate confirmation when they schedule a date and time.</p>
+      <p>No session is on your calendar yet. You will receive a separate confirmation if they schedule a date and time with you.</p>
+      <p>LevelCoach credits are transferable by remaining dollar value until they are reserved for a specific session.</p>
     `,
   }, error);
 }
