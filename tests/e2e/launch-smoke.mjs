@@ -336,6 +336,20 @@ test('settings routing: signup details round-trip into role settings/profile pag
   assert(coachApply.includes('current.firstName || user.first_name') && coachApply.includes('profile_setup_complete: true'), 'coach application must reuse signed-in profile details and mark coach applicants complete when appropriate');
 });
 
+test('account readiness: verified email is required before setup completion', () => {
+  const roles = source('src/lib/roles.js');
+  const onboarding = source('src/pages/onboarding/OnboardingCompletion.jsx');
+  const accountProfile = source('functions/accountProfile/src/main.js');
+
+  assert(roles.includes('isEmailVerified') && roles.includes('!isEmailVerified(user)'), 'route guards must treat unverified accounts as onboarding-incomplete');
+  assert(onboarding.includes('Verify your email to complete setup') && onboarding.includes('disabled={saving || !emailVerified}'), 'onboarding UI must block completion until email verification');
+  assert(
+    /payload\.profile_setup_complete\s*===\s*true\s*\|\|\s*payload\.onboarding_status\s*===\s*'complete'/.test(accountProfile)
+      && accountProfile.includes('account.emailVerification !== true'),
+    'accountProfile must reject setup completion until Appwrite email verification is true',
+  );
+});
+
 test('storage privacy: parent and athlete avatars use server-mediated private upload', () => {
   const accountProfile = source('functions/accountProfile/src/main.js');
   const athleteSettings = source('src/pages/athlete/AthleteSettings.jsx');

@@ -5,8 +5,8 @@ import { isEmailVerified } from '@/lib/accountReadiness';
 
 /**
  * Persistent "verify your email" banner. Shown wherever a signed-in user with
- * an unverified email lands during onboarding. Never blocks the flow — it only
- * prompts and offers a resend.
+ * an unverified email lands during onboarding. Protected submit actions can
+ * block separately; this component only prompts and offers a resend.
  */
 export default function EmailVerificationBanner({ user, className = '' }) {
   const [sending, setSending] = useState(false);

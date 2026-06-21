@@ -26,6 +26,7 @@ import EmailVerificationBanner from '@/features/onboarding/EmailVerificationBann
 import ParentAthletesStep from '@/features/onboarding/ParentAthletesStep';
 import GuardianLegalStep from '@/features/onboarding/GuardianLegalStep';
 import { homePathForRole } from '@/lib/roleHome';
+import { isEmailVerified } from '@/lib/accountReadiness';
 import USLocationFields from '@/components/forms/USLocationFields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +89,7 @@ export default function OnboardingCompletion() {
   const SelectedRoleIcon = selectedRoleCard?.icon || UserRound;
   const roleLocked = Boolean(selectedRole && (requestedRole || normalizeRequestedRole(user?.onboarding_role)));
   const fromCreateAccount = params.get('from') === 'create-account';
+  const emailVerified = isEmailVerified(user);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -102,7 +104,7 @@ export default function OnboardingCompletion() {
     return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
   }
 
-  if (onboardingComplete) {
+  if (onboardingComplete && emailVerified) {
     return <Navigate to={safeNext(params.get('next')) || homePathForRole(user)} replace />;
   }
 
@@ -140,6 +142,14 @@ export default function OnboardingCompletion() {
     <div className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <EmailVerificationBanner user={user} className="mb-5" />
+        {!emailVerified && (
+          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900" role="status">
+            <p className="font-extrabold">Verify your email to complete setup</p>
+            <p className="mt-1 text-amber-800">
+              Your details are saved here. You can keep reviewing them, but your dashboard and protected account actions unlock only after email verification.
+            </p>
+          </div>
+        )}
 
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">
@@ -207,11 +217,11 @@ export default function OnboardingCompletion() {
         )}
 
         {selectedRole === 'athlete' && (
-          <AthleteOnboardingForm user={user} fromCreateAccount={fromCreateAccount} onFinished={finishNavigate} />
+          <AthleteOnboardingForm user={user} fromCreateAccount={fromCreateAccount} emailVerified={emailVerified} onFinished={finishNavigate} />
         )}
 
         {selectedRole === 'parent' && (
-          <ParentOnboardingSteps user={user} onFinished={finishNavigate} />
+          <ParentOnboardingSteps user={user} emailVerified={emailVerified} onFinished={finishNavigate} />
         )}
       </div>
     </div>
@@ -223,7 +233,7 @@ export default function OnboardingCompletion() {
 // accountProfile function (whitelist-only; is_minor recomputed server-side).
 // ---------------------------------------------------------------------------
 
-function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
+function AthleteOnboardingForm({ user, fromCreateAccount, emailVerified, onFinished }) {
   const name = useMemo(() => splitName(user), [user]);
   const parsedBio = useMemo(() => parseAthleteBio(user?.bio), [user?.bio]);
   const savedLocation = useMemo(() => parseLocationLabel(user?.location_label), [user?.location_label]);
@@ -309,6 +319,10 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
   const finish = async (event) => {
     event.preventDefault();
     setFormError('');
+    if (!emailVerified) {
+      setFormError('Verify your email address before completing setup. Your saved details will stay here.');
+      return;
+    }
     if (!validate()) {
       setFormError('Fix the highlighted fields before completing setup.');
       return;
@@ -495,8 +509,8 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
             ? 'Because you are under 18, your parent or guardian signs your legal packet and manages bookings and payments from their parent account.'
             : 'After setup, the required legal packet appears before protected booking and portal actions.'}
         </p>
-        <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
-          {saving ? 'Saving...' : fromCreateAccount ? 'Confirm setup' : 'Complete setup'}
+        <Button type="submit" disabled={saving || !emailVerified} className="bg-blue-600 text-white hover:bg-blue-700">
+          {!emailVerified ? 'Verify email to complete' : saving ? 'Saving...' : fromCreateAccount ? 'Confirm setup' : 'Complete setup'}
         </Button>
       </div>
       {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}
@@ -515,7 +529,7 @@ const PARENT_STEPS = [
   { id: 'legal', label: 'Legal packet', icon: FileText },
 ];
 
-function ParentOnboardingSteps({ user, onFinished }) {
+function ParentOnboardingSteps({ user, emailVerified, onFinished }) {
   const name = useMemo(() => splitName(user), [user]);
   const notificationPrefs = useMemo(() => parseNotificationPrefs(user?.notification_prefs), [user?.notification_prefs]);
   const detailsAlreadySaved = user?.onboarding_role === 'parent' && !!user?.first_name && !!user?.phone && user?.terms_accepted === true;
@@ -575,8 +589,12 @@ function ParentOnboardingSteps({ user, onFinished }) {
   };
 
   const completeOnboarding = async () => {
-    setSaving(true);
     setFormError('');
+    if (!emailVerified) {
+      setFormError('Verify your email address before completing setup. Your saved details will stay here.');
+      return;
+    }
+    setSaving(true);
     try {
       await auth.updateCurrentUser({
         onboarding_status: user?.onboarding_status === 'complete' ? undefined : 'complete',
@@ -688,10 +706,10 @@ function ParentOnboardingSteps({ user, onFinished }) {
                   <button
                     type="button"
                     onClick={completeOnboarding}
-                    disabled={saving}
+                    disabled={saving || !emailVerified}
                     className="text-xs font-semibold text-slate-500 underline-offset-4 hover:underline disabled:opacity-60"
                   >
-                    Skip for now and finish
+                    {emailVerified ? 'Skip for now and finish' : 'Verify email to finish'}
                   </button>
                 )}
                 <Button
@@ -723,8 +741,8 @@ function ParentOnboardingSteps({ user, onFinished }) {
               <Button type="button" variant="outline" onClick={() => setStage('athletes')} disabled={saving}>
                 Back
               </Button>
-              <Button type="button" onClick={completeOnboarding} disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
-                {saving ? 'Finishing...' : legalComplete ? 'Finish setup' : 'Finish setup (sign later)'}
+              <Button type="button" onClick={completeOnboarding} disabled={saving || !emailVerified} className="bg-blue-600 text-white hover:bg-blue-700">
+                {!emailVerified ? 'Verify email to finish' : saving ? 'Finishing...' : legalComplete ? 'Finish setup' : 'Finish setup (sign later)'}
               </Button>
             </div>
             {formError && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert">{formError}</p>}

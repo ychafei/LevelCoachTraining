@@ -1,3 +1,5 @@
+import { isEmailVerified } from './accountReadiness';
+
 export const ROLE_HOME = {
   athlete: '/athlete',
   parent: '/parent',
@@ -18,7 +20,9 @@ export function profileRole(user) {
 
 export function isOnboardingComplete(user) {
   if (!user) return false;
-  if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'coach') return true;
+  if (user.role === 'admin' || user.role === 'super_admin') return true;
+  if (!isEmailVerified(user)) return false;
+  if (user.role === 'coach') return true;
   return user.profile_setup_complete === true
     && user.onboarding_status !== 'incomplete'
     && !!profileRole(user);

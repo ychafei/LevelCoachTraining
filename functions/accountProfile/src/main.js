@@ -350,12 +350,20 @@ function buildUpdates(payload, profile) {
   return { updates };
 }
 
-async function updateProfile(db, accountId, payload, res, error) {
+async function updateProfile(db, users, accountId, payload, res, error) {
   const profile = await profileForAccount(db, accountId);
   if (!profile) return res.json({ error: 'No profile found. Call ensure first.' }, 404);
 
   const ban = await activeBan(db, profile.email);
   if (ban) return res.json({ error: 'This account is suspended.' }, 403);
+
+  const completingSetup = payload.profile_setup_complete === true || payload.onboarding_status === 'complete';
+  if (completingSetup) {
+    const account = await users.get(accountId);
+    if (account.emailVerification !== true) {
+      return res.json({ error: 'Verify your email address before completing setup.' }, 403);
+    }
+  }
 
   const result = buildUpdates(payload, profile);
   if (result.error) return res.json({ error: result.error }, 400);
@@ -427,7 +435,7 @@ export default async ({ req, res, error }) => {
     const { db, users, storage } = services();
 
     if (action === 'ensure') return await ensureProfile(db, users, accountId, res, error);
-    if (action === 'update') return await updateProfile(db, accountId, payload, res, error);
+    if (action === 'update') return await updateProfile(db, users, accountId, payload, res, error);
     if (action === 'uploadProfilePhoto') return await uploadProfilePhoto(db, storage, accountId, payload, res, error);
 
     return res.json({ error: 'Unknown action.' }, 400);
