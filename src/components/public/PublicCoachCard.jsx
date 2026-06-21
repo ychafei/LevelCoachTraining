@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   BadgeCheck,
   Building2,
@@ -224,14 +225,89 @@ function CoachVerificationButton({ model, onViewProfile }) {
   );
 }
 
-function CoachIntroMobileButton({ model, onViewProfile }) {
+function isDirectVideoUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return false;
+  try {
+    const pathname = new URL(raw).pathname.toLowerCase();
+    return /\.(mp4|webm|ogg|mov|m4v)$/.test(pathname);
+  } catch {
+    return /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(raw);
+  }
+}
+
+function CoachIntroVideoFrame({ model, mode = 'preview' }) {
+  const embedUrl = coachIntroEmbedUrl(model.introVideoUrl);
+  const directVideo = isDirectVideoUrl(model.introVideoUrl);
+  const isModal = mode === 'modal';
+
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+      {embedUrl ? (
+        <iframe
+          title={`${model.displayName} coach intro video`}
+          src={embedUrl}
+          className="h-full w-full"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      ) : directVideo ? (
+        <video
+          className="h-full w-full object-cover"
+          src={model.introVideoUrl}
+          controls={isModal}
+          muted={!isModal}
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <div className="grid h-full w-full place-items-center bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_100%)] text-white">
+          <Video className="h-9 w-9" aria-hidden="true" />
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-950/10">
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-white/95 text-blue-700 shadow-lg ring-1 ring-blue-100">
+          <PlayCircle className="h-7 w-7" aria-hidden="true" />
+        </span>
+      </div>
+      <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-blue-700 shadow-sm">
+        Coach Intro Video
+      </span>
+    </div>
+  );
+}
+
+function CoachIntroVideoDialog({ model, open, onOpenChange }) {
+  if (!model.introVideoUrl) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-3xl rounded-3xl border-slate-200 bg-white p-4 text-slate-950 shadow-2xl shadow-slate-950/20 sm:p-5"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <DialogHeader className="px-1">
+          <DialogTitle className="font-display text-2xl font-extrabold tracking-normal">
+            {model.firstName}'s coach intro
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-600">
+            Preview the coach's communication style before opening the full profile.
+          </DialogDescription>
+        </DialogHeader>
+        <CoachIntroVideoFrame model={model} mode="modal" />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CoachIntroMobileButton({ model, onWatchIntro }) {
   if (!model.introVideoUrl) return null;
   return (
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
-        onViewProfile();
+        onWatchIntro();
       }}
       className="mt-2 inline-flex h-11 w-full max-w-[144px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 xl:hidden"
     >
@@ -241,54 +317,119 @@ function CoachIntroMobileButton({ model, onViewProfile }) {
   );
 }
 
-function CoachIntroPreviewPanel({ model, onViewProfile }) {
-  const embedUrl = coachIntroEmbedUrl(model.introVideoUrl);
+function CoachIntroPreviewPanel({ model, open, transition, onWatchIntro }) {
+  return (
+    <AnimatePresence initial={false}>
+      {open && (
+        <motion.aside
+          key={`${model.id || model.displayName}-intro-preview`}
+          initial={{ width: 0, opacity: 0, x: 18 }}
+          animate={{ width: 286, opacity: 1, x: 0 }}
+          exit={{ width: 0, opacity: 0, x: 18 }}
+          transition={transition}
+          className="hidden min-w-0 overflow-hidden xl:block"
+          aria-label={`${model.displayName} coach intro video preview`}
+        >
+          <div
+            className="h-full w-[286px] rounded-3xl border border-blue-100 bg-white p-3 shadow-xl shadow-blue-950/10"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <CoachIntroVideoFrame model={model} mode="preview" />
+            <div className="mt-3 space-y-2">
+              <p className="line-clamp-2 text-sm font-bold leading-5 text-slate-900">
+                Get a quick feel for {model.firstName}'s coaching style before you book.
+              </p>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onWatchIntro();
+                }}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-600 px-4 text-sm font-extrabold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+              >
+                <PlayCircle className="h-4 w-4" aria-hidden="true" />
+                Watch intro
+              </button>
+            </div>
+          </div>
+        </motion.aside>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function CoachCardMotionShell({ hasIntroVideo, previewOpen, transition, children, ...props }) {
+  if (!hasIntroVideo) {
+    return (
+      <div className="relative" data-has-intro-video="false" {...props}>
+        {children}
+      </div>
+    );
+  }
 
   return (
-    <aside className="hidden min-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/coach-video:translate-x-0 group-hover/coach-video:opacity-100 xl:block xl:translate-x-4 xl:pointer-events-none xl:group-hover/coach-video:pointer-events-auto">
-      <div
-        className="h-full w-[278px] rounded-3xl border border-blue-100 bg-white p-3 shadow-xl shadow-blue-950/10"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-          {embedUrl ? (
-            <iframe
-              title={`${model.displayName} coach intro video`}
-              src={embedUrl}
-              className="h-full w-full"
-              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          ) : (
-            <div className="grid h-full w-full place-items-center bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_100%)] text-white">
-              <Video className="h-9 w-9" aria-hidden="true" />
-            </div>
-          )}
-          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-950/10">
-            <span className="grid h-12 w-12 place-items-center rounded-full bg-white/95 text-blue-700 shadow-lg ring-1 ring-blue-100">
-              <PlayCircle className="h-7 w-7" aria-hidden="true" />
-            </span>
-          </div>
-          <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-blue-700 shadow-sm">
-            Coach Intro Video
-          </span>
-        </div>
-        <div className="mt-3 space-y-2">
-          <p className="line-clamp-2 text-sm font-bold leading-5 text-slate-900">
-            Get a quick feel for {model.firstName}'s coaching style before you book.
-          </p>
-          <button
-            type="button"
-            onClick={onViewProfile}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-600 px-4 text-sm font-extrabold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
-          >
-            <PlayCircle className="h-4 w-4" aria-hidden="true" />
-            Watch intro
-          </button>
-        </div>
-      </div>
-    </aside>
+    <motion.div
+      className="relative xl:grid xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch"
+      animate={{ columnGap: previewOpen ? 16 : 0 }}
+      transition={transition}
+      data-has-intro-video="true"
+      {...props}
+    >
+      {children}
+    </motion.div>
   );
+}
+
+function CoachCardMotionArticle({ hasIntroVideo, previewOpen, reduceMotion, transition, className, ...props }) {
+  if (!hasIntroVideo) {
+    return <article className={className} {...props} />;
+  }
+
+  return (
+    <motion.article
+      animate={{ x: previewOpen && !reduceMotion ? -32 : 0 }}
+      transition={transition}
+      className={className}
+      {...props}
+    />
+  );
+}
+
+function shouldClosePreview(nextTarget, currentTarget) {
+  return !nextTarget || !currentTarget.contains(nextTarget);
+}
+
+function useCoachIntroHover(hasIntroVideo) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const openPreview = () => {
+    if (hasIntroVideo) setPreviewOpen(true);
+  };
+  const closePreview = () => {
+    if (hasIntroVideo) setPreviewOpen(false);
+  };
+  const closePreviewOnBlur = (event) => {
+    if (hasIntroVideo && shouldClosePreview(event.relatedTarget, event.currentTarget)) {
+      setPreviewOpen(false);
+    }
+  };
+
+  if (!hasIntroVideo) {
+    return {
+      previewOpen: false,
+      hoverProps: {},
+    };
+  }
+
+  return {
+    previewOpen,
+    hoverProps: {
+      onMouseEnter: openPreview,
+      onMouseLeave: closePreview,
+      onFocus: openPreview,
+      onBlur: closePreviewOnBlur,
+    },
+  };
 }
 
 export default function PublicCoachCard({
@@ -315,8 +456,15 @@ export default function PublicCoachCard({
   const tierLabel = coachTierLabel(model);
   const benefits = coachBenefits(model);
   const hasIntroVideo = !!model.introVideoUrl;
+  const reduceMotion = useReducedMotion();
+  const [introDialogOpen, setIntroDialogOpen] = useState(false);
+  const { previewOpen, hoverProps } = useCoachIntroHover(hasIntroVideo);
+  const motionTransition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.22, ease: [0.22, 1, 0.36, 1] };
 
   const openProfile = () => navigate(profileHref);
+  const openIntroDialog = () => setIntroDialogOpen(true);
   const openProfileButton = (event) => {
     event.stopPropagation();
     navigate(profileHref);
@@ -329,22 +477,23 @@ export default function PublicCoachCard({
   };
 
   return (
-    <div
-      className={`relative ${
-        hasIntroVideo
-          ? 'group/coach-video xl:grid xl:grid-cols-[minmax(0,1fr)_0px] xl:items-stretch xl:gap-0 xl:transition-all xl:duration-200 xl:ease-out xl:hover:grid-cols-[minmax(0,1fr)_278px] xl:hover:gap-4'
-          : ''
-      }`}
+    <CoachCardMotionShell
+      hasIntroVideo={hasIntroVideo}
+      previewOpen={previewOpen}
+      transition={motionTransition}
+      {...hoverProps}
     >
-      <article
+      <CoachCardMotionArticle
+        hasIntroVideo={hasIntroVideo}
+        previewOpen={previewOpen}
+        reduceMotion={reduceMotion}
+        transition={motionTransition}
         data-testid="public-coach-card"
         role="link"
         tabIndex={0}
         onClick={openProfile}
         onKeyDown={onKeyDown}
-        className={`group relative cursor-pointer rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-5 ${
-          hasIntroVideo ? 'xl:group-hover/coach-video:-translate-x-6' : ''
-        } ${className}`}
+        className={`group relative cursor-pointer rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-5 ${className}`}
         aria-label={`View ${model.displayName}'s full profile`}
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-[164px_minmax(0,1fr)] xl:grid-cols-[170px_minmax(0,1fr)_286px]">
@@ -357,7 +506,7 @@ export default function PublicCoachCard({
               iconClassName="h-4 w-4"
             />
             <CoachVerificationButton model={model} onViewProfile={openProfile} />
-            <CoachIntroMobileButton model={model} onViewProfile={openProfile} />
+            <CoachIntroMobileButton model={model} onWatchIntro={openIntroDialog} />
           </div>
 
           <div className="min-w-0 pr-0 xl:pr-4">
@@ -548,8 +697,22 @@ export default function PublicCoachCard({
             </div>
           </div>
         </div>
-      </article>
-      {hasIntroVideo && <CoachIntroPreviewPanel model={model} onViewProfile={openProfile} />}
-    </div>
+      </CoachCardMotionArticle>
+      {hasIntroVideo && (
+        <>
+          <CoachIntroPreviewPanel
+            model={model}
+            open={previewOpen}
+            transition={motionTransition}
+            onWatchIntro={openIntroDialog}
+          />
+          <CoachIntroVideoDialog
+            model={model}
+            open={introDialogOpen}
+            onOpenChange={setIntroDialogOpen}
+          />
+        </>
+      )}
+    </CoachCardMotionShell>
   );
 }
