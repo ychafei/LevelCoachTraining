@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/AuthContext';
 import { callFn } from '@/lib/rpc';
 import { generateLegalAgreementPdf, legalPdfUrl, signLegalAgreement } from '@/lib/legal';
+import { accountActionLock } from '@/lib/accountReadiness';
 import { useLegalPacketStatus } from '@/hooks/useLegalPacketStatus';
 import { AlertTriangle, CheckCircle2, Download, FileText, PenLine, RotateCw, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -89,6 +90,7 @@ export default function LegalSignaturePanel({
   onStatusChange = null,
 }) {
   const { user } = useAuth();
+  const signingLock = user ? accountActionLock(user, { requireSetup: false }) : null;
 
   // Guardian signings are always bound to a specific athlete. When the caller
   // doesn't pass one, offer a child selector fed by family.listFamily.
@@ -190,6 +192,7 @@ export default function LegalSignaturePanel({
   const selectedOptionalRows = useMemo(() => optionalConsentRows(selectedTemplate), [selectedTemplate]);
 
   const canSign = selectedTemplate
+    && !signingLock
     && hasFirstAndLastName(typedName)
     && !(signerRole === 'guardian' && !effectiveAthleteId)
     && affirmations.electronic_records_consent
@@ -236,6 +239,10 @@ export default function LegalSignaturePanel({
 
   const signSelected = async () => {
     if (!canSign) return;
+    if (signingLock) {
+      toast.error(signingLock.body || 'Verify your email before signing legal documents.');
+      return;
+    }
     setSaving(true);
     try {
       const drawnSignatureData = drawnTouched && canvasRef.current
@@ -365,6 +372,12 @@ export default function LegalSignaturePanel({
         </p>
       )}
 
+      {signingLock && (
+        <p className="mt-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-600" role="status">
+          {signingLock.body}
+        </p>
+      )}
+
       {needsChildPicker && (
         <div className="mt-4 rounded-md border border-border bg-background/40 p-4">
           <Label htmlFor="legal-athlete-picker" className="text-sm font-semibold text-foreground">
@@ -451,7 +464,12 @@ export default function LegalSignaturePanel({
                       </Button>
                     )}
                     {!signed && (
-                      <Button size="sm" onClick={() => setSelectedTemplate(template)} className="h-8 bg-accent text-accent-foreground text-xs hover:bg-accent/90">
+                      <Button
+                        size="sm"
+                        onClick={() => setSelectedTemplate(template)}
+                        disabled={!!signingLock}
+                        className="h-8 bg-accent text-accent-foreground text-xs hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         <PenLine className="mr-1 h-3.5 w-3.5" /> Review & sign
                       </Button>
                     )}

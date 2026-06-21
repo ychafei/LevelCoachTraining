@@ -263,7 +263,10 @@ export function AthleteSignup() {
     if (!form.location.state) next.state = 'Select your state.';
     if (!form.terms) next.terms = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
 
-    Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
+    Object.assign(next, validateAthleteDetails(
+      { ...sportDetails, ...healthDetails },
+      { emergencyRequired: needsGuardian },
+    ));
 
     if (needsGuardian) {
       Object.assign(next, validateGuardianContact(guardian));
@@ -529,7 +532,7 @@ export function AthleteSignup() {
                     Continue
                   </button>
                   <p className="text-center text-xs leading-5 text-slate-500">
-                    Next: your sport, training location, and emergency contact. Nothing is submitted yet.
+                    Next: your sport, training location, and training preferences. Nothing is submitted yet.
                   </p>
                 </div>
               ) : (
@@ -615,6 +618,7 @@ export function AthleteSignup() {
                     errors={errors}
                     disabled={submitting}
                     idPrefix="athlete-signup"
+                    emergencyRequired={needsGuardian}
                   />
 
                   {needsGuardian && (
@@ -676,7 +680,7 @@ export function AthleteSignup() {
                     {submitting ? 'Creating account...' : 'Create account & review setup'}
                   </button>
                   <p className="text-center text-xs leading-5 text-slate-500">
-                    We'll email you a verification link after signup. You can finish setup before verifying.
+                    We'll email you a verification link after signup. You can browse coaches before verifying, but booking and account actions unlock after verification.
                   </p>
                   </div>
                   )}

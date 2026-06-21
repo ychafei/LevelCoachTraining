@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, MailWarning } from 'lucide-react';
 import { auth } from '@/lib/auth';
+import { isEmailVerified } from '@/lib/accountReadiness';
 
 /**
  * Persistent "verify your email" banner. Shown wherever a signed-in user with
@@ -12,7 +13,7 @@ export default function EmailVerificationBanner({ user, className = '' }) {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
-  if (!user || user.email_verified === true) return null;
+  if (!user || isEmailVerified(user)) return null;
 
   const resend = async () => {
     setError('');
@@ -46,7 +47,7 @@ export default function EmailVerificationBanner({ user, className = '' }) {
             <p className="mt-0.5 text-xs leading-5 text-slate-600">
               {sent
                 ? `Check ${user.email} for the verification link (look in spam too).`
-                : `We sent a verification link to ${user.email}. You can keep setting up your account, but some actions stay locked until it's verified.`}
+                : `We sent a verification link to ${user.email}. You can browse coach profiles while you finish setup, but credits, saving, messaging, booking, payments, and legal signing stay locked until your email is verified.`}
             </p>
             {error && <p className="mt-1 text-xs font-semibold text-red-600">{error}</p>}
           </div>

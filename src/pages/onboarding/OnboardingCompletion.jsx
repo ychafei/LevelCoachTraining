@@ -154,13 +154,6 @@ export default function OnboardingCompletion() {
               ? 'A few more steps and your account is ready. Review what we saved, complete the remaining steps, and confirm.'
               : 'Pick how you’ll use LevelCoach to unlock your dashboard. Your account is saved — you can come back to this anytime.'}
           </p>
-          <p className="mt-3 text-sm text-slate-500">
-            Want to look around first?{' '}
-            <Link to="/coaches" className="font-semibold text-blue-700 hover:underline">
-              Browse coaches
-            </Link>
-            {' '}— this page will be here when you’re ready.
-          </p>
         </div>
 
         {roleLocked ? (
@@ -304,7 +297,10 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
     if (validateLocation(form.location.city)) next.city = 'Training city is required.';
     if (!form.location.state) next.state = 'Select your state.';
     if (!form.termsAccepted) next.termsAccepted = 'You must agree to the Universal Account Terms, Privacy Notice, and Electronic Signature Consent.';
-    Object.assign(next, validateAthleteDetails({ ...sportDetails, ...healthDetails }));
+    Object.assign(next, validateAthleteDetails(
+      { ...sportDetails, ...healthDetails },
+      { emergencyRequired: guardianRequired },
+    ));
     if (guardianRequired) Object.assign(next, validateGuardianContact(guardian));
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -463,6 +459,7 @@ function AthleteOnboardingForm({ user, fromCreateAccount, onFinished }) {
           errors={errors}
           disabled={saving}
           idPrefix="onboarding-athlete"
+          emergencyRequired={guardianRequired}
         />
       </div>
 

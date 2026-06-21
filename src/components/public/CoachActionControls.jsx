@@ -15,6 +15,7 @@ import { conversationRepo } from '@/api/repo';
 import { GoogleIcon } from '@/components/auth/authPrimitives';
 import { useAuth } from '@/lib/AuthContext';
 import { auth } from '@/lib/auth';
+import { accountActionLock } from '@/lib/accountReadiness';
 import { publicCoachDisplay } from '@/lib/publicCoach';
 import { parseNotificationPrefs, savedCoachIdsFromPrefs } from '@/lib/savedCoachPrefs';
 
@@ -30,10 +31,15 @@ function savedCoachIds(user) {
   return savedCoachIdsFromPrefs(user?.notification_prefs);
 }
 
-function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPath }) {
+function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPath, lock = null }) {
+  const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const model = publicCoachDisplay(coach);
-  const actionCopy = {
+  const locked = lock && lock.type !== 'auth';
+  const actionCopy = locked ? {
+    title: lock.title || 'Finish account setup',
+    body: lock.body || 'Finish your LevelCoach account before using this feature.',
+  } : ({
     save: {
       title: `Save ${model.firstName} to your coach list`,
       body: 'Sign in with Google to keep a private list of coaches you want to compare later.',
@@ -50,7 +56,7 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
       title: 'Continue with LevelCoach',
       body: 'Sign in with Google to keep going.',
     },
-  }[intent] || {};
+  }[intent] || {});
 
   const startGoogle = async () => {
     setSubmitting(true);
@@ -61,6 +67,16 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
       setSubmitting(false);
       toast.error(err?.message || 'Could not start Google sign-in.');
     }
+  };
+
+  const continueLocked = () => {
+    onOpenChange(false);
+    const next = nextPath || window.location.pathname;
+    if (lock?.type === 'setup') {
+      navigate(`/onboarding?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    navigate(lock?.path || '/verify-email');
   };
 
   return (
@@ -85,17 +101,29 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
         </div>
 
         <div className="px-6 py-5">
-          <button
-            type="button"
-            onClick={startGoogle}
-            disabled={submitting}
-            className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <GoogleIcon className="h-5 w-5" />
-            {submitting ? 'Opening Google...' : 'Continue with Google'}
-          </button>
+          {locked ? (
+            <Button
+              type="button"
+              onClick={continueLocked}
+              className="h-12 w-full rounded-lg bg-blue-600 text-sm font-extrabold text-white hover:bg-blue-700"
+            >
+              {lock?.cta || 'Continue'}
+            </Button>
+          ) : (
+            <button
+              type="button"
+              onClick={startGoogle}
+              disabled={submitting}
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <GoogleIcon className="h-5 w-5" />
+              {submitting ? 'Opening Google...' : 'Continue with Google'}
+            </button>
+          )}
           <p className="mt-4 text-center text-xs leading-5 text-slate-500">
-            You can browse every public coach profile without signing in. Saving, messaging, and booking require an account.
+            {locked
+              ? 'Public coach profiles stay open while you finish account setup.'
+              : 'You can browse every public coach profile without signing in. Saving, messaging, and booking require an account.'}
           </p>
         </div>
       </DialogContent>
@@ -205,7 +233,8 @@ export function SaveCoachButton({
 
   const toggle = async (event) => {
     stop(event);
-    if (!isAuthenticated) {
+    const lock = isAuthenticated ? accountActionLock(user) : null;
+    if (!isAuthenticated || lock) {
       setGateOpen(true);
       return;
     }
@@ -257,6 +286,7 @@ export function SaveCoachButton({
         coach={coach}
         intent="save"
         nextPath={currentPath(location)}
+        lock={isAuthenticated ? accountActionLock(user) : null}
       />
     </>
   );
@@ -269,14 +299,15 @@ export function MessageCoachButton({
   iconClassName = '',
 }) {
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const model = publicCoachDisplay(coach);
   const [gateOpen, setGateOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
 
   const open = (event) => {
     stop(event);
-    if (!isAuthenticated) setGateOpen(true);
+    const lock = isAuthenticated ? accountActionLock(user) : null;
+    if (!isAuthenticated || lock) setGateOpen(true);
     else setMessageOpen(true);
   };
 
@@ -299,6 +330,7 @@ export function MessageCoachButton({
         coach={coach}
         intent="message"
         nextPath={currentPath(location)}
+        lock={isAuthenticated ? accountActionLock(user) : null}
       />
       <MessageCoachDialog open={messageOpen} onOpenChange={setMessageOpen} coach={coach} />
     </>
@@ -313,13 +345,14 @@ export function BookCoachButton({
   iconClassName = '',
 }) {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const model = publicCoachDisplay(coach);
   const [gateOpen, setGateOpen] = useState(false);
 
   const book = (event) => {
     stop(event);
-    if (!isAuthenticated) setGateOpen(true);
+    const lock = isAuthenticated ? accountActionLock(user) : null;
+    if (!isAuthenticated || lock) setGateOpen(true);
     else navigate(bookHref);
   };
 
@@ -342,6 +375,7 @@ export function BookCoachButton({
         coach={coach}
         intent="book"
         nextPath={bookHref}
+        lock={isAuthenticated ? accountActionLock(user) : null}
       />
     </>
   );

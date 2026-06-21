@@ -3,6 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Shield, Briefcase, ChevronDown, LogOut, Settings, WalletCards } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -16,6 +23,7 @@ import NotificationsBell from '@/features/coach/NotificationsBell';
 import LevelCoachLogo from '@/components/public/LevelCoachLogo';
 import CreditsModal from '@/components/layout/CreditsModal';
 import { useCreditBalance } from '@/hooks/useCreditBalance';
+import { accountActionLock } from '@/lib/accountReadiness';
 
 function creditButtonCopy(balance) {
   if (balance.loading) return 'Credits: ...';
@@ -31,10 +39,59 @@ function settingsPathForRole({ user, isAdmin, isCoach, isOrganizationAdmin, isGu
   return '/athlete/settings';
 }
 
+function CreditsGuardDialog({ open, onOpenChange, lock, nextPath }) {
+  const navigate = useNavigate();
+
+  const continueAction = () => {
+    onOpenChange(false);
+    if (lock?.type === 'setup') {
+      navigate(`/onboarding?next=${encodeURIComponent(nextPath || '/coaches')}`);
+      return;
+    }
+    navigate(lock?.path || '/verify-email');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[440px] rounded-xl border-slate-200 bg-white text-slate-950 shadow-2xl shadow-slate-950/20">
+        <DialogHeader>
+          <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+            <WalletCards className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <DialogTitle className="font-display text-2xl font-extrabold tracking-normal">
+            {lock?.title || 'Finish account setup'}
+          </DialogTitle>
+          <DialogDescription className="text-sm leading-6 text-slate-600">
+            {lock?.body || 'Finish your LevelCoach account before using training credits.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border-slate-200 font-bold"
+          >
+            Keep browsing
+          </Button>
+          <Button
+            type="button"
+            onClick={continueAction}
+            className="rounded-lg bg-blue-600 font-bold text-white hover:bg-blue-700"
+          >
+            {lock?.cta || 'Continue'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState({}); // { team: true, apply: false }
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const [creditsGuardOpen, setCreditsGuardOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user, isAuthenticated, isAdmin, isSuperAdmin, isCoach, isOrganizationAdmin, isGuardian, logout } = useAuth();
   const authenticated = isAuthenticated;
@@ -44,6 +101,7 @@ export default function Navbar() {
   const showCreditBalance = authenticated && !!user && !isAdmin && !isCoach && !isOrganizationAdmin;
   const creditBalance = useCreditBalance(user, showCreditBalance);
   const settingsHref = settingsPathForRole({ user, isAdmin, isCoach, isOrganizationAdmin, isGuardian });
+  const creditsLock = showCreditBalance ? accountActionLock(user) : null;
 
   // Human-readable account type for the account menu. Display only — order
   // matters because admins also pass the isCoach check.
@@ -161,6 +219,14 @@ export default function Navbar() {
     setMobileExpanded({});
   };
 
+  const openCredits = () => {
+    if (creditsLock) {
+      setCreditsGuardOpen(true);
+      return;
+    }
+    setCreditsOpen(true);
+  };
+
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md transition-all duration-300 ${
@@ -258,7 +324,7 @@ export default function Navbar() {
                   {showCreditBalance && (
                     <button
                       type="button"
-                      onClick={() => setCreditsOpen(true)}
+                      onClick={openCredits}
                       className="hidden h-10 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-xs font-extrabold text-blue-800 shadow-sm transition hover:border-blue-200 hover:bg-white lg:inline-flex"
                       aria-haspopup="dialog"
                       aria-label="Open training credits"
@@ -469,7 +535,7 @@ export default function Navbar() {
                       type="button"
                       onClick={() => {
                         closeMobile();
-                        setCreditsOpen(true);
+                        openCredits();
                       }}
                       className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm font-extrabold text-blue-800"
                       aria-haspopup="dialog"
@@ -540,12 +606,20 @@ export default function Navbar() {
         </div>
       )}
       {showCreditBalance && (
-        <CreditsModal
-          open={creditsOpen}
-          onOpenChange={setCreditsOpen}
-          user={user}
-          creditBalance={creditBalance}
-        />
+        <>
+          <CreditsModal
+            open={creditsOpen && !creditsLock}
+            onOpenChange={setCreditsOpen}
+            user={user}
+            creditBalance={creditBalance}
+          />
+          <CreditsGuardDialog
+            open={creditsGuardOpen}
+            onOpenChange={setCreditsGuardOpen}
+            lock={creditsLock}
+            nextPath={`${location.pathname}${location.search || ''}`}
+          />
+        </>
       )}
     </nav>
   );

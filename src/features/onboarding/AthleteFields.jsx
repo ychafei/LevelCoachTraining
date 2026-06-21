@@ -200,7 +200,14 @@ export function AthleteSportFields({ value, onChange, errors = {}, disabled = fa
 // emergencyRelationship.
 // ---------------------------------------------------------------------------
 
-export function HealthAndEmergencyFields({ value, onChange, errors = {}, disabled = false, idPrefix = 'athlete' }) {
+export function HealthAndEmergencyFields({
+  value,
+  onChange,
+  errors = {},
+  disabled = false,
+  idPrefix = 'athlete',
+  emergencyRequired = true,
+}) {
   return (
     <div className="space-y-4">
       <div>
@@ -228,16 +235,24 @@ export function HealthAndEmergencyFields({ value, onChange, errors = {}, disable
 
       <div>
         <p className="mb-1 text-sm font-bold text-slate-950">
-          Emergency contact<span aria-hidden="true" className="text-red-600"> *</span>
+          Emergency contact
+          {emergencyRequired ? (
+            <span aria-hidden="true" className="text-red-600"> *</span>
+          ) : (
+            <span className="text-xs font-semibold text-slate-500"> (optional)</span>
+          )}
         </p>
         <p className="mb-2 text-xs leading-5 text-slate-500">
-          Kept private to your account — used by LevelCoach support if someone ever needs to be reached for you. Never shared publicly or with coaches.
+          {emergencyRequired
+            ? 'Required for minor athletes and kept private to your account. LevelCoach support uses it only if someone needs to be reached for you.'
+            : 'Optional for adult athletes and kept private to your account. LevelCoach support uses it only if someone needs to be reached for you.'}
+          {' '}Never shared publicly or with coaches.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <TextInput
             id={`${idPrefix}-emergency-name`}
             label="Name"
-            required
+            required={emergencyRequired}
             error={errors.emergencyName}
             value={value.emergencyName}
             onChange={(emergencyName) => onChange({ ...value, emergencyName })}
@@ -248,7 +263,7 @@ export function HealthAndEmergencyFields({ value, onChange, errors = {}, disable
           <TextInput
             id={`${idPrefix}-emergency-phone`}
             label="Phone"
-            required
+            required={emergencyRequired}
             type="tel"
             error={errors.emergencyPhone}
             value={value.emergencyPhone}
@@ -370,7 +385,7 @@ export function GuardianContactFields({ value, onChange, errors = {}, disabled =
 // Validation helpers shared by the signup form and onboarding completion.
 // ---------------------------------------------------------------------------
 
-export function validateAthleteDetails(value) {
+export function validateAthleteDetails(value, { emergencyRequired = true } = {}) {
   const errors = {};
   const sportError = validateSportKey(value.sportKey);
   if (sportError) errors.sportKey = sportError;
@@ -381,10 +396,17 @@ export function validateAthleteDetails(value) {
   if (!Array.isArray(value.availability) || value.availability.length === 0) {
     errors.availability = 'Pick at least one availability window.';
   }
-  const emergencyNameError = validatePersonName(value.emergencyName, 'Emergency contact name');
-  if (emergencyNameError) errors.emergencyName = emergencyNameError;
-  const emergencyPhoneError = validatePhone(value.emergencyPhone, 'Emergency contact phone');
-  if (emergencyPhoneError) errors.emergencyPhone = emergencyPhoneError;
+  const hasEmergencyDraft = Boolean(
+    String(value.emergencyName || '').trim()
+    || String(value.emergencyPhone || '').trim()
+    || String(value.emergencyRelationship || '').trim(),
+  );
+  if (emergencyRequired || hasEmergencyDraft) {
+    const emergencyNameError = validatePersonName(value.emergencyName, 'Emergency contact name');
+    if (emergencyNameError) errors.emergencyName = emergencyNameError;
+    const emergencyPhoneError = validatePhone(value.emergencyPhone, 'Emergency contact phone');
+    if (emergencyPhoneError) errors.emergencyPhone = emergencyPhoneError;
+  }
   return errors;
 }
 
