@@ -410,16 +410,16 @@ export function CoachActionPanel({ coach, bookHref, mode = 'card' }) {
   }
 
   return (
-    <div data-testid="coach-action-panel" className="grid grid-cols-[44px_1fr] gap-2">
+    <div data-testid="coach-action-panel" className="grid grid-cols-[40px_1fr] gap-2">
       <MessageCoachButton
         coach={coach}
-        className="inline-flex h-11 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
-        iconClassName="h-5 w-5"
+        className="inline-flex h-10 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+        iconClassName="h-4 w-4"
       />
       <BookCoachButton
         coach={coach}
         bookHref={bookHref}
-        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
         iconClassName="h-4 w-4"
       />
     </div>
