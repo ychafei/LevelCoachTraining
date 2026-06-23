@@ -173,13 +173,20 @@ async function sportCatalogForProfiles(databases, profilesByCoach) {
 }
 
 function publicSportProfilesForCoach(doc, profilesByCoach) {
-  const selectedSports = new Set(asArray(doc.sports).map((sport) => sport.toLowerCase()));
+  const selectedSports = new Set(
+    asArray(doc.sports)
+      .map((sport) => String(sport || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
   const rows = (profilesByCoach.get(doc.$id) || [])
     .filter(completeSportProfile)
     .filter((row) => {
       const sportKey = String(row.sport_key || '').trim().toLowerCase();
       return !selectedSports.size || selectedSports.has(sportKey);
     });
+  if (selectedSports.size > 1) {
+    return rows.sort((a, b) => String(a.sport_key || '').localeCompare(String(b.sport_key || '')));
+  }
   if (!rows.length) return [null];
   return rows.sort((a, b) => String(a.sport_key || '').localeCompare(String(b.sport_key || '')));
 }
