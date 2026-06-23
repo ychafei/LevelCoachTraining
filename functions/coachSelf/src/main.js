@@ -164,6 +164,28 @@ function asArray(value) {
   return [];
 }
 
+function parseJsonObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function profileSections(row) {
+  const source = parseJsonObject(row?.profile_sections);
+  return {
+    headline: String(source.headline || row?.headline || '').trim(),
+    bio: String(source.bio || row?.bio || '').trim(),
+    intro_video_url: String(source.intro_video_url || row?.intro_video_url || '').trim(),
+  };
+}
+
 // Update the coach document, tolerating a live `coaches` collection that is
 // missing newer attributes (the collection hit Appwrite's size limit before
 // the marketplace fields could be added). On an "Unknown attribute" error we
@@ -391,7 +413,11 @@ async function setSportProfiles(databases, coach, payload) {
     const positions = strArray(item.positions ?? [], 120, 20);
     const sessionTypes = strArray(item.session_types ?? [], 120, 20);
     const credentials = str(item.credentials ?? '', 0, 20000);
-    if ([specialties, levels, positions, sessionTypes, credentials].some((v) => v === undefined)) {
+    const sections = profileSections(item);
+    const headline = str(sections.headline, 0, 300);
+    const bio = str(sections.bio, 0, 20000);
+    const introVideoUrl = str(sections.intro_video_url, 0, 1000);
+    if ([specialties, levels, positions, sessionTypes, credentials, headline, bio, introVideoUrl].some((v) => v === undefined)) {
       return { status: 400, body: { error: `Invalid sport profile for ${sportKey}.` } };
     }
     cleaned.push({
@@ -401,6 +427,11 @@ async function setSportProfiles(databases, coach, payload) {
       positions,
       session_types: sessionTypes,
       credentials,
+      profile_sections: JSON.stringify({
+        headline,
+        bio,
+        intro_video_url: introVideoUrl,
+      }),
     });
   }
 
@@ -568,6 +599,14 @@ async function savePackage(databases, coach, payload) {
   const isActive = payload.is_active !== false;
   const sportKeys = cleanList(payload.sport_keys || payload.sports);
   const isSingleSession = sessions === 1 && name.trim().toLowerCase() === 'single session';
+  const coachSportKeys = asArray(coach.sports).map((sport) => sport.toLowerCase());
+  const unknownSportKeys = sportKeys.filter((sport) => coachSportKeys.length > 0 && !coachSportKeys.includes(sport));
+  if (unknownSportKeys.length) {
+    return { status: 400, body: { error: `Package sport must match your selected sports: ${unknownSportKeys.join(', ')}.` } };
+  }
+  if (coachSportKeys.length > 1 && sportKeys.length === 0) {
+    return { status: 400, body: { error: 'Choose which sport this package belongs to.' } };
+  }
 
   const data = {
     coach_id: coach.$id,
@@ -838,9 +877,12 @@ function hasSelectedSport(coach) {
 }
 
 function completeSportProfile(row) {
+  const sections = profileSections(row);
   return asArray(row?.specialties).length > 0
     && asArray(row?.levels).length > 0
-    && asArray(row?.session_types).length > 0;
+    && asArray(row?.session_types).length > 0
+    && hasText(row?.credentials)
+    && (hasText(sections.bio) || hasText(sections.headline));
 }
 
 async function hasCompleteSportProfile(databases, coach) {
@@ -848,6 +890,16 @@ async function hasCompleteSportProfile(databases, coach) {
     Query.equal('coach_id', coach.$id),
     Query.limit(100),
   ]).catch(() => ({ documents: [] }));
+  const selectedSports = asArray(coach.sports).map((sport) => sport.toLowerCase());
+  if (selectedSports.length > 1) {
+    const completeSports = new Set(
+      rows.documents
+        .filter(completeSportProfile)
+        .map((row) => String(row.sport_key || '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    return selectedSports.every((sportKey) => completeSports.has(sportKey));
+  }
   return rows.documents.some(completeSportProfile);
 }
 
@@ -901,11 +953,9 @@ function policyRequiredFields(policy) {
   add(policy.requiredFields);
   add(policy.safety?.required_fields);
   add(policy.safety?.requiredFields);
-  add(policy.background?.required_fields);
-  add(policy.background?.requiredFields);
   add(policy.insurance?.required_fields);
   add(policy.insurance?.requiredFields);
-  return [...fields];
+  return [...fields].filter((field) => !String(field || '').toLowerCase().includes('background'));
 }
 
 function anyFieldComplete(source, fields, acceptedValues = {}) {
@@ -938,18 +988,6 @@ async function safetyPolicyStatus(databases, coach, profile, priv) {
 
   for (const field of policyRequiredFields(policy)) {
     if (!anyFieldComplete(source, [field], acceptedValues)) missing.push(field);
-  }
-
-  const requireBackground = policy.require_background_check === true
-    || policy.requireBackgroundCheck === true
-    || policy.background?.required === true;
-  if (requireBackground && !anyFieldComplete(source, [
-    'background_check_status',
-    'background_status',
-    'background_verified_at',
-    'background_check_completed_at',
-  ], acceptedValues)) {
-    missing.push('background_check');
   }
 
   const requireInsurance = policy.require_insurance === true
@@ -1020,7 +1058,7 @@ async function buildPublishChecklist(databases, users, profile, coach) {
     checklistItem('name', 'First and last name present', hasText(coach.first_name) && hasText(coach.last_name), 'Both first_name and last_name are required.'),
     checklistItem('bio_or_quote', 'Bio or headline present', hasText(coach.bio) || hasText(coach.quote), 'Add either a public bio or a short headline/quote.'),
     checklistItem('sport', 'At least one sport selected', hasSelectedSport(coach), 'Choose at least one sport from the coach profile.'),
-    checklistItem('sport_profile', 'Sport profile details complete', sportProfile, 'At least one sport profile row must include specialties, levels, and session types.'),
+    checklistItem('sport_profile', 'Sport profiles complete', sportProfile, 'Every selected sport needs a headline or bio, credentials, specialties, levels, and session types.'),
     checklistItem('service_location', 'Service location complete', serviceLocationComplete(coach), 'Set service type, city, state, ZIP, and required venue/radius details.'),
     checklistItem('timezone', 'Timezone set', !!validTimezone(coach.timezone), 'Choose the timezone used for availability and bookings.'),
     checklistItem('availability', 'Availability exists', availability, 'Add weekly availability or active availability blocks.'),
@@ -1028,7 +1066,7 @@ async function buildPublishChecklist(databases, users, profile, coach) {
     checklistItem('pricing', 'Active pricing package exists', pricingStatus.done, pricingStatus.created
       ? 'A Single Session package was created automatically from the starting price.'
       : 'Create at least one active pricing package, or set a starting price so one can be created automatically.'),
-    checklistItem('safety_policy', 'Safety, background, and insurance policy complete', safety.done, 'Configured site policy requirements must be complete.', safety.details),
+    checklistItem('safety_policy', 'Safety policy complete', safety.done, 'Configured site policy requirements must be complete.', safety.details),
   ];
   const missing = items.filter((item) => !item.done).map((item) => item.key);
   return {

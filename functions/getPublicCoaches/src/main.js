@@ -28,6 +28,28 @@ function asArray(value) {
   return [];
 }
 
+function parseJsonObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function profileSections(row) {
+  const sections = parseJsonObject(row?.profile_sections);
+  return {
+    headline: String(sections.headline || '').trim(),
+    bio: String(sections.bio || '').trim(),
+    intro_video_url: String(sections.intro_video_url || '').trim(),
+  };
+}
+
 function hasAnyAvailability(doc) {
   const availability = parseAvailability(doc.availability);
   if (Array.isArray(availability)) return availability.length > 0;
@@ -50,9 +72,12 @@ function publicMinimumComplete(doc, hasAvailabilityBlock = false) {
 }
 
 function completeSportProfile(row) {
+  const sections = profileSections(row);
   return asArray(row?.specialties).length > 0
     && asArray(row?.levels).length > 0
-    && asArray(row?.session_types).length > 0;
+    && asArray(row?.session_types).length > 0
+    && hasText(row?.credentials)
+    && (hasText(sections.bio) || hasText(sections.headline));
 }
 
 function sportLabelFromKey(value) {
@@ -70,10 +95,14 @@ function sportProfileForCard(sportProfile, sportCatalog) {
   const sportKey = String(sportProfile.sport_key || '').trim();
   if (!sportKey) return null;
   const sport = sportCatalog.get(sportKey);
+  const sections = profileSections(sportProfile);
   return {
     id: sportProfile.$id || '',
     sport_key: sportKey,
     display_name: sport?.display_name || sportLabelFromKey(sportKey),
+    headline: sections.headline,
+    bio: sections.bio,
+    intro_video_url: sections.intro_video_url,
     specialties: asArray(sportProfile.specialties),
     levels: asArray(sportProfile.levels),
     positions: asArray(sportProfile.positions),
@@ -95,10 +124,10 @@ function publicCard(doc, organization, stats = null, sportProfile = null, sportC
     sport_profile_id: sportCard?.id || '',
     first_name: doc.first_name || '',
     last_name: doc.last_name || '',
-    bio: doc.bio || '',
-    quote: doc.quote || '',
+    bio: sportCard?.bio || doc.bio || '',
+    quote: sportCard?.headline || doc.quote || '',
     photo_url: doc.photo_url || '',
-    intro_video_url: doc.intro_video_url || '',
+    intro_video_url: sportCard?.intro_video_url || doc.intro_video_url || '',
     specializations: sportCard?.specialties?.length ? sportCard.specialties : (doc.specializations || []),
     sports: sportKey ? [sportKey] : (doc.sports || []),
     primary_sport: sportDisplayName || '',
@@ -391,6 +420,26 @@ function addPriceCandidate(candidates, coachId, pkg) {
   candidates.set(coachId, current);
 }
 
+function packageSportKeys(pkg) {
+  return asArray(pkg?.sport_keys).map((sport) => sport.toLowerCase());
+}
+
+function selectedCoachSports(coach) {
+  return asArray(coach?.sports).map((sport) => sport.toLowerCase());
+}
+
+function addProfilePriceCandidates(candidates, coach, pkg) {
+  const coachId = coach?.$id || coach?.id || pkg?.coach_id || '';
+  if (!coachId) return;
+  addPriceCandidate(candidates, coachId, pkg);
+
+  const packageSports = packageSportKeys(pkg);
+  const sports = packageSports.length ? packageSports : selectedCoachSports(coach);
+  for (const sportKey of sports) {
+    addPriceCandidate(candidates, `${coachId}:${sportKey}`, pkg);
+  }
+}
+
 function addDefaultPriceCandidate(candidate, pkg) {
   const candidates = new Map([['default', candidate]]);
   addPriceCandidate(candidates, 'default', pkg);
@@ -406,7 +455,9 @@ function candidatePriceHint(candidate) {
 // Public cards use the single-session package as the anchor price. Discounted
 // bundles can be cheaper per session, but they should not make the marketplace
 // imply a standalone session is cheaper than it is.
-async function packagePriceHints(databases, coachIds, orgsByCoach) {
+async function packagePriceHints(databases, coaches, orgsByCoach) {
+  const coachIds = coaches.map((coach) => coach.$id);
+  const coachesById = new Map(coaches.map((coach) => [coach.$id, coach]));
   const candidates = new Map();
   for (let i = 0; i < coachIds.length; i += 100) {
     const page = await databases.listDocuments(DB_ID, 'pricing_packages', [
@@ -416,7 +467,7 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
       Query.limit(500),
     ]).catch(() => ({ documents: [] }));
     for (const pkg of page.documents) {
-      addPriceCandidate(candidates, pkg.coach_id, pkg);
+      addProfilePriceCandidates(candidates, coachesById.get(pkg.coach_id), pkg);
     }
   }
 
@@ -440,7 +491,7 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
       const eligibleCoachIds = coachesByOrg.get(pkg.organization_id) || [];
       for (const coachId of eligibleCoachIds) {
         if (pkg.coach_id && pkg.coach_id !== coachId) continue;
-        addPriceCandidate(candidates, coachId, pkg);
+        addProfilePriceCandidates(candidates, coachesById.get(coachId), { ...pkg, coach_id: coachId });
       }
     }
   }
@@ -458,9 +509,16 @@ async function packagePriceHints(databases, coachIds, orgsByCoach) {
   }
   const defaultHint = candidatePriceHint(defaultCandidate);
   if (defaultHint != null) {
-    for (const coachId of coachIds) {
+    for (const coach of coaches) {
+      const coachId = coach.$id;
       if (!candidates.has(coachId)) {
         candidates.set(coachId, { single_session: defaultHint, lowest_per_session: defaultHint });
+      }
+      for (const sportKey of selectedCoachSports(coach)) {
+        const profileId = `${coachId}:${sportKey}`;
+        if (!candidates.has(profileId)) {
+          candidates.set(profileId, { single_session: defaultHint, lowest_per_session: defaultHint });
+        }
       }
     }
   }
@@ -486,15 +544,16 @@ export default async ({ res, error }) => {
     const orgs = await orgAffiliations(databases, visibleIds);
     const sportProfiles = await sportProfilesForCoaches(databases, visibleIds);
     const sportCatalog = await sportCatalogForProfiles(databases, sportProfiles);
-    const priceHints = await packagePriceHints(databases, visibleIds, orgs);
+    const priceHints = await packagePriceHints(databases, visibleBase, orgs);
     const stats = await sessionStats(databases, visibleIds);
-    const visible = visibleBase.filter((doc) => priceHints.has(doc.$id));
     const cards = [];
-    for (const doc of visible) {
+    for (const doc of visibleBase) {
       for (const sportProfile of publicSportProfilesForCoach(doc, sportProfiles)) {
         const card = publicCard(doc, orgs.get(doc.$id), stats.get(doc.$id), sportProfile, sportCatalog);
+        const priceHint = priceHints.get(card.public_profile_id) ?? priceHints.get(doc.$id);
+        if (!priceHint) continue;
         // Package-derived hint wins over the coach's manual hint when present.
-        if (priceHints.has(doc.$id)) card.price_hint_cents = priceHints.get(doc.$id);
+        card.price_hint_cents = priceHint;
         cards.push(card);
       }
     }

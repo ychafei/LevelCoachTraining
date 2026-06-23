@@ -154,6 +154,32 @@ function MultiPick({ options, selected, onToggle, label }) {
   );
 }
 
+function emptySportProfileEntry() {
+  return {
+    headline: '',
+    bio: '',
+    intro_video_url: '',
+    credentials: '',
+    specialties: [],
+    levels: [],
+    positions: [],
+    session_types: [],
+  };
+}
+
+function parseSportProfileSections(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 // ── Per-sport profiles editor (coachSelf.setSportProfiles) ────────────────────
 
 function SportProfilesEditor({ coach, selectedSports }) {
@@ -171,7 +197,13 @@ function SportProfilesEditor({ coach, selectedSports }) {
         if (cancelled) return;
         const next = {};
         for (const row of rows || []) {
+          const sections = parseSportProfileSections(row.profile_sections);
           next[row.sport_key] = {
+            ...emptySportProfileEntry(),
+            headline: sections.headline || '',
+            bio: sections.bio || '',
+            intro_video_url: sections.intro_video_url || '',
+            credentials: row.credentials || '',
             specialties: Array.isArray(row.specialties) ? row.specialties : [],
             levels: Array.isArray(row.levels) ? row.levels : [],
             positions: Array.isArray(row.positions) ? row.positions : [],
@@ -186,11 +218,19 @@ function SportProfilesEditor({ coach, selectedSports }) {
     return () => { cancelled = true; };
   }, [coach?.id]);
 
-  const entryFor = (sportKey) => profiles[sportKey] || { specialties: [], levels: [], positions: [], session_types: [] };
+  const entryFor = (sportKey) => profiles[sportKey] || emptySportProfileEntry();
+
+  const updateEntry = (sportKey, patch) => {
+    setProfiles((prev) => {
+      const entry = prev[sportKey] || emptySportProfileEntry();
+      return { ...prev, [sportKey]: { ...entry, ...patch } };
+    });
+    setDirty(true);
+  };
 
   const toggle = (sportKey, field, value) => {
     setProfiles((prev) => {
-      const entry = prev[sportKey] || { specialties: [], levels: [], positions: [], session_types: [] };
+      const entry = prev[sportKey] || emptySportProfileEntry();
       const list = entry[field] || [];
       const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
       return { ...prev, [sportKey]: { ...entry, [field]: next } };
@@ -241,6 +281,57 @@ function SportProfilesEditor({ coach, selectedSports }) {
           <div key={sportKey} className="border border-border rounded-lg p-4">
             <p className="text-sm font-semibold text-foreground mb-3">{sport.display_name}</p>
             <div className="space-y-3">
+              <div>
+                <Label htmlFor={`sport-${sportKey}-headline`} className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Public headline
+                </Label>
+                <Input
+                  id={`sport-${sportKey}-headline`}
+                  value={entry.headline}
+                  onChange={(e) => updateEntry(sportKey, { headline: e.target.value })}
+                  className="mt-1 bg-secondary border-border"
+                  placeholder={`${sport.display_name} coach for focused athlete development`}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`sport-${sportKey}-bio`} className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Sport bio
+                </Label>
+                <Textarea
+                  id={`sport-${sportKey}-bio`}
+                  value={entry.bio}
+                  onChange={(e) => updateEntry(sportKey, { bio: e.target.value })}
+                  rows={4}
+                  className="mt-1 bg-secondary border-border"
+                  placeholder={`Describe your ${sport.display_name.toLowerCase()} background, training approach, and what athletes can expect.`}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`sport-${sportKey}-video`} className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Sport intro video URL
+                </Label>
+                <Input
+                  id={`sport-${sportKey}-video`}
+                  type="url"
+                  value={entry.intro_video_url}
+                  onChange={(e) => updateEntry(sportKey, { intro_video_url: e.target.value })}
+                  className="mt-1 bg-secondary border-border"
+                  placeholder="https://…"
+                />
+              </div>
+              <div>
+                <Label htmlFor={`sport-${sportKey}-credentials`} className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Credentials or experience
+                </Label>
+                <Textarea
+                  id={`sport-${sportKey}-credentials`}
+                  value={entry.credentials}
+                  onChange={(e) => updateEntry(sportKey, { credentials: e.target.value })}
+                  rows={3}
+                  className="mt-1 bg-secondary border-border"
+                  placeholder={`Relevant ${sport.display_name.toLowerCase()} coaching, playing, certifications, or training experience.`}
+                />
+              </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Specialties</p>
                 <MultiPick
@@ -760,7 +851,7 @@ export default function CoachProfile() {
 
           {/* Sport-specific profiles */}
           <Section title="Per-sport details" icon={Trophy}>
-            <SportProfilesEditor coach={coach} selectedSports={coach.sports || []} />
+            <SportProfilesEditor coach={coach} selectedSports={draft.sports || []} />
             {dirty && (
               <p className="text-[11px] text-muted-foreground mt-2">
                 Tip: save your sport selection above first — per-sport details apply to your saved sports.

@@ -172,6 +172,10 @@ export default function PackagesManager() {
       };
     });
   };
+  const coachSportOptions = (Array.isArray(coach?.sports) && coach.sports.length ? coach.sports : SPORTS_CATALOG.map((sport) => sport.sport_key))
+    .map((sportKey) => ({ value: sportKey, label: SPORT_LABELS.get(sportKey) || sportKey }))
+    .filter((item, index, arr) => item.value && arr.findIndex((other) => other.value === item.value) === index);
+  const requiresSportScopedPackages = coachSportOptions.length > 1;
 
   const updateDurationOption = (index, patch) => {
     setDraft((d) => ({
@@ -210,6 +214,9 @@ export default function PackagesManager() {
     if (!primary) return toast.error('Add at least one duration option.');
     if (!durationOptions.every((option) => option.duration_minutes >= 15 && option.duration_minutes <= 480 && option.price_cents >= 500)) {
       return toast.error('Each duration needs 15-480 minutes and a price of at least $5.');
+    }
+    if (requiresSportScopedPackages && !draft.sport_keys.length) {
+      return toast.error('Choose which sport this package belongs to.');
     }
     setSaving(true);
     try {
@@ -254,9 +261,6 @@ export default function PackagesManager() {
     return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading your packages…</div>;
   }
 
-  const coachSportOptions = (Array.isArray(coach?.sports) && coach.sports.length ? coach.sports : SPORTS_CATALOG.map((sport) => sport.sport_key))
-    .map((sportKey) => ({ value: sportKey, label: SPORT_LABELS.get(sportKey) || sportKey }))
-    .filter((item, index, arr) => item.value && arr.findIndex((other) => other.value === item.value) === index);
   const singleSessionDraft = draft ? isStarterPackage(draft) : false;
 
   return (
@@ -386,30 +390,32 @@ export default function PackagesManager() {
               </div>
             </div>
             {!singleSessionDraft && (
-              <>
-                <div className="sm:col-span-2">
-                  <Label htmlFor="pkg-desc">Description (optional)</Label>
-                  <Textarea id="pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
-                </div>
-                <div className="sm:col-span-2">
-                  <Label>Sports</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">Leave blank to offer this package for every sport on your profile.</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {coachSportOptions.map((sport) => (
-                      <button
-                        key={sport.value}
-                        type="button"
-                        onClick={() => toggleList('sport_keys', sport.value)}
-                        aria-pressed={draft.sport_keys.includes(sport.value)}
-                        className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                      >
-                        {sport.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+              <div className="sm:col-span-2">
+                <Label htmlFor="pkg-desc">Description (optional)</Label>
+                <Textarea id="pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
+              </div>
             )}
+            <div className="sm:col-span-2">
+              <Label>Sports</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {requiresSportScopedPackages
+                  ? 'Choose at least one sport so this package appears on the right public profile.'
+                  : 'Leave blank to offer this package for every sport on your profile.'}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {coachSportOptions.map((sport) => (
+                  <button
+                    key={sport.value}
+                    type="button"
+                    onClick={() => toggleList('sport_keys', sport.value)}
+                    aria-pressed={draft.sport_keys.includes(sport.value)}
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                  >
+                    {sport.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.is_active} onChange={(e) => update({ is_active: e.target.checked })} />
               Visible to athletes (uncheck to hide without deleting)

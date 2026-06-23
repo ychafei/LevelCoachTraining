@@ -75,6 +75,21 @@ function packagePriceCents(pkg) {
   return Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : 0;
 }
 
+function cleanSportKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function packageSportKeys(pkg) {
+  return Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.map(cleanSportKey).filter(Boolean) : [];
+}
+
+function packageAppliesToSport(pkg, sportKey) {
+  const sportKeys = packageSportKeys(pkg);
+  if (!sportKeys.length) return true;
+  const selectedSport = cleanSportKey(sportKey);
+  return !!selectedSport && sportKeys.includes(selectedSport);
+}
+
 function formatCents(cents) {
   return `$${(Number(cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
@@ -261,7 +276,7 @@ export default function CoachDetail() {
     : [];
   const defaultPackages = packages.filter((pkg) => !pkg.coach_id && !pkg.organization_id);
   const packagePool = (ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages)
-    .filter((pkg) => packagePriceCents(pkg) > 0);
+    .filter((pkg) => packagePriceCents(pkg) > 0 && packageAppliesToSport(pkg, model.sportKey));
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -442,6 +457,12 @@ export default function CoachDetail() {
               </p>
             )}
           </InfoSection>
+
+          {model.sportCredentials && (
+            <InfoSection title={`${model.primarySport} credentials`} icon={BadgeCheck}>
+              <p className="whitespace-pre-line text-base leading-8 text-slate-600">{model.sportCredentials}</p>
+            </InfoSection>
+          )}
 
           {packagePool.length > 0 && (
             <InfoSection title="Session packages & pricing" icon={CreditCard}>

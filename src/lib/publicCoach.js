@@ -226,6 +226,17 @@ function packageSingleSessionDollars(pkg) {
   return packagePerSessionDollars(pkg);
 }
 
+function packageSportKeys(pkg) {
+  return toArray(pkg?.sport_keys).map((sport) => String(sport || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function packageMatchesSport(pkg, sportKey) {
+  const sportKeys = packageSportKeys(pkg);
+  if (!sportKeys.length) return true;
+  const selectedSport = String(sportKey || '').trim().toLowerCase();
+  return !!selectedSport && sportKeys.includes(selectedSport);
+}
+
 function publicPackageSessionDollars(packages) {
   const pool = Array.isArray(packages) ? packages : [];
   const singleSessionPrices = pool.map(packageSingleSessionDollars).filter(Number.isFinite);
@@ -363,6 +374,7 @@ export function publicCoachDisplay(coach, options = {}) {
     'business_name',
     'academy_name',
   ]);
+  const sportKey = compact(normalized?.sport_profile?.sport_key) || toArray(normalized?.sports)[0] || '';
   const primarySport = inferSport(normalized, specializations);
   // Server-set price hint (integer cents). No client-side fee math. The hint is
   // anchored to the coach's active Single Session package when one exists, so a
@@ -385,7 +397,8 @@ export function publicCoachDisplay(coach, options = {}) {
   const defaultPackages = Array.isArray(options.packages)
     ? options.packages.filter((pkg) => visiblePackage(pkg) && !pkg.coach_id && !pkg.organization_id)
     : [];
-  const packagePool = ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages;
+  const packagePool = (ownPackages.length || orgPackages.length ? [...ownPackages, ...orgPackages] : defaultPackages)
+    .filter((pkg) => packageMatchesSport(pkg, sportKey));
   const publicPackagePrice = publicPackageSessionDollars(packagePool);
   const rateLabel = (Number.isFinite(priceHintCents) && priceHintCents > 0 ? `From ${money(priceHintCents / 100)}` : '')
     || (Number.isFinite(publicPackagePrice) ? `From $${Math.round(publicPackagePrice)}` : '');
@@ -407,7 +420,7 @@ export function publicCoachDisplay(coach, options = {}) {
     id: normalized?.id,
     publicProfileId: normalized?.public_profile_id || normalized?.id,
     sportProfileId: normalized?.sport_profile_id || '',
-    sportKey: compact(normalized?.sport_profile?.sport_key) || toArray(normalized?.sports)[0] || '',
+    sportKey,
     displayName,
     firstName: normalized?.first_name || 'Coach',
     initials: getCoachInitials(normalized),
@@ -431,6 +444,7 @@ export function publicCoachDisplay(coach, options = {}) {
     specializations,
     ageGroups,
     trainingFormats,
+    sportCredentials: compact(normalized?.sport_credentials) || compact(normalized?.sport_profile?.credentials) || '',
     sports: toArray(normalized?.sports),
     organization,
     headline: compact(normalized?.quote) || `Personal coaching for athletes who want structured, focused training.`,
