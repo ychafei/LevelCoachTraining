@@ -10,6 +10,7 @@ import {
   Menu,
   MessageSquare,
   Settings,
+  ShieldCheck,
   Star,
   UserRound,
   Users,
@@ -101,7 +102,7 @@ function SidebarContent({ onSelect }) {
 }
 
 function Topbar({ mobileOpen, setMobileOpen }) {
-  const { user, logout } = useAuth();
+  const { user, clearViewAs, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const [coachProfile, setCoachProfile] = useState(null);
   const displayName = useMemo(() => getDisplayName(user), [user]);
@@ -109,6 +110,9 @@ function Topbar({ mobileOpen, setMobileOpen }) {
   const avatarUrl = coachProfile?.photo_url || user?.photo_url || '';
   const accountId = user?.account_id || '';
   const coachId = user?.coach_id || '';
+  const showMasterAdminReturn = user?.master_admin_locked === true
+    && user?.is_super_admin === true
+    && Boolean(coachId || coachProfile?.id);
 
   useEffect(() => {
     if (!accountId && !coachId) {
@@ -192,11 +196,31 @@ function Topbar({ mobileOpen, setMobileOpen }) {
               <ChevronDown className="hidden h-4 w-4 text-slate-300 sm:block" aria-hidden="true" />
             </button>
             {profileOpen && (
-              <div className="absolute right-0 top-full mt-3 w-64 rounded-lg border border-slate-200 bg-white p-2 text-slate-950 shadow-xl">
+              <div className="absolute right-0 top-full mt-3 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 text-slate-950 shadow-xl">
                 <div className="px-3 py-2">
                   <p className="text-sm font-bold">{displayName}</p>
                   {user?.email && <p className="text-xs text-slate-500 truncate">{user.email}</p>}
                 </div>
+                {showMasterAdminReturn && (
+                  <>
+                    <div className="my-1 h-px bg-slate-200" />
+                    <Link
+                      to="/master-admin"
+                      onClick={() => {
+                        clearViewAs();
+                        setProfileOpen(false);
+                      }}
+                      className="flex items-start gap-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-900 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block font-semibold leading-5">Return to admin mode</span>
+                        <span className="block text-xs leading-4 text-blue-700">Open master admin controls</span>
+                      </span>
+                    </Link>
+                    <div className="my-1 h-px bg-slate-200" />
+                  </>
+                )}
                 <Link
                   to="/coach/profile"
                   onClick={() => setProfileOpen(false)}
