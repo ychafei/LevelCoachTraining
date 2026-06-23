@@ -31,30 +31,31 @@ function savedCoachIds(user) {
   return savedCoachIdsFromPrefs(user?.notification_prefs);
 }
 
-function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPath, lock = null }) {
+export function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPath, lock = null }) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const model = publicCoachDisplay(coach);
   const locked = lock && lock.type !== 'auth';
+  const authNextPath = nextPath || window.location.pathname;
   const actionCopy = locked ? {
     title: lock.title || 'Finish account setup',
     body: lock.body || 'Finish your LevelCoach account before using this feature.',
   } : ({
     save: {
       title: `Save ${model.firstName} to your coach list`,
-      body: 'Sign in with Google to keep a private list of coaches you want to compare later.',
+      body: 'Sign in to keep a private list of coaches you want to compare later.',
     },
     message: {
       title: `Message ${model.firstName}`,
-      body: 'Sign in with Google to start a secure LevelCoach conversation with this coach.',
+      body: 'Sign in to start a secure LevelCoach conversation with this coach.',
     },
     book: {
       title: `Book with ${model.firstName}`,
-      body: 'Sign in with Google to choose the athlete, confirm documents, and book training securely.',
+      body: 'Sign in to choose the athlete, use credits, confirm documents, and book training securely.',
     },
     continue: {
       title: 'Continue with LevelCoach',
-      body: 'Sign in with Google to keep going.',
+      body: 'Sign in or create an account to keep going.',
     },
   }[intent] || {});
 
@@ -62,7 +63,7 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
     setSubmitting(true);
     try {
       await auth.signOut();
-      auth.createOAuthSession('google', nextPath || window.location.pathname);
+      auth.createOAuthSession('google', authNextPath);
     } catch (err) {
       setSubmitting(false);
       toast.error(err?.message || 'Could not start Google sign-in.');
@@ -71,12 +72,22 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
 
   const continueLocked = () => {
     onOpenChange(false);
-    const next = nextPath || window.location.pathname;
+    const next = authNextPath;
     if (lock?.type === 'setup') {
       navigate(`/onboarding?next=${encodeURIComponent(next)}`);
       return;
     }
     navigate(lock?.path || '/verify-email');
+  };
+
+  const signInWithEmail = () => {
+    onOpenChange(false);
+    navigate(`/login?next=${encodeURIComponent(authNextPath)}`);
+  };
+
+  const createAccount = () => {
+    onOpenChange(false);
+    navigate(`/create-account?next=${encodeURIComponent(authNextPath)}`);
   };
 
   return (
@@ -110,15 +121,31 @@ function AuthGateDialog({ open, onOpenChange, coach, intent = 'continue', nextPa
               {lock?.cta || 'Continue'}
             </Button>
           ) : (
-            <button
-              type="button"
-              onClick={startGoogle}
-              disabled={submitting}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <GoogleIcon className="h-5 w-5" />
-              {submitting ? 'Opening Google...' : 'Continue with Google'}
-            </button>
+            <div className="space-y-2.5">
+              <Button
+                type="button"
+                onClick={signInWithEmail}
+                className="h-12 w-full rounded-lg bg-blue-600 text-sm font-extrabold text-white hover:bg-blue-700"
+              >
+                Sign in with email
+              </Button>
+              <button
+                type="button"
+                onClick={startGoogle}
+                disabled={submitting}
+                className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <GoogleIcon className="h-5 w-5" />
+                {submitting ? 'Opening Google...' : 'Continue with Google'}
+              </button>
+              <button
+                type="button"
+                onClick={createAccount}
+                className="h-11 w-full rounded-lg border border-blue-100 bg-blue-50 text-sm font-extrabold text-blue-700 transition hover:bg-blue-100"
+              >
+                Create free account
+              </button>
+            </div>
           )}
           <p className="mt-4 text-center text-xs leading-5 text-slate-500">
             {locked
@@ -410,16 +437,11 @@ export function CoachActionPanel({ coach, bookHref, mode = 'card' }) {
   }
 
   return (
-    <div data-testid="coach-action-panel" className="grid grid-cols-[40px_1fr] gap-2">
-      <MessageCoachButton
-        coach={coach}
-        className="inline-flex h-10 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
-        iconClassName="h-4 w-4"
-      />
+    <div data-testid="coach-action-panel">
       <BookCoachButton
         coach={coach}
         bookHref={bookHref}
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+        className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
         iconClassName="h-4 w-4"
       />
     </div>

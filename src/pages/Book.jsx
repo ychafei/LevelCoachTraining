@@ -33,7 +33,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { addDays, format, isBefore, parseISO, startOfDay } from 'date-fns';
+import { addDays, format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
 import useCurrentUser from '@/hooks/useCurrentUser';
 import StripeCheckout from '@/components/StripeCheckout';
 import OnboardingModal from '@/components/OnboardingModal';
@@ -194,7 +194,10 @@ export default function Book() {
   const urlParams = new URLSearchParams(window.location.search);
   const preCoachId = urlParams.get('coach_id');
   const preCreditId = urlParams.get('credit_id');
-  const directSchedule = preCreditId && urlParams.get('schedule') === '1';
+  const preSelectedDate = urlParams.get('selected_date') || urlParams.get('date');
+  const preSelectedTime = urlParams.get('selected_time') || urlParams.get('time');
+  const scheduleRequested = urlParams.get('schedule') === '1';
+  const directSchedule = scheduleRequested && (preCreditId || (preCoachId && preSelectedDate && preSelectedTime));
   const stripeSuccess = urlParams.get('stripe_success');
   const stripeCanceled = urlParams.get('stripe_cancel') === '1';
   const { user, refetch } = useCurrentUser();
@@ -255,8 +258,13 @@ export default function Book() {
   // Scheduling state
   const [scheduling, setScheduling]           = useState(!!directSchedule);
   const [availability, setAvailability]       = useState(null); // {windows, busy, availability, timezone, start_date, end_date}
-  const [selectedDate, setSelectedDate]       = useState(saved?.selectedDate ? parseISO(saved.selectedDate) : null);
-  const [selectedTime, setSelectedTime]       = useState(saved?.selectedTime || '');
+  const [selectedDate, setSelectedDate]       = useState(() => {
+    const queryDate = preSelectedDate ? parseISO(preSelectedDate) : null;
+    if (queryDate && isValid(queryDate)) return queryDate;
+    const savedDate = saved?.selectedDate ? parseISO(saved.selectedDate) : null;
+    return savedDate && isValid(savedDate) ? savedDate : null;
+  });
+  const [selectedTime, setSelectedTime]       = useState(preSelectedTime || saved?.selectedTime || '');
   const [submitting, setSubmitting]           = useState(false);
   const [sessionBooked, setSessionBooked]     = useState(false);
   const [lastBookedSession, setLastBookedSession] = useState(null);
@@ -412,12 +420,16 @@ export default function Book() {
       // Arriving with a credit preselects that balance, but still walks through
       // sport/location/package so the selected coach price is clear before
       // scheduling.
-      if (preCreditId && active) {
+      if (directSchedule && active) {
         setCreditRecord(active);
-        if (directSchedule) {
-          setSkipToSchedule(true);
-          setScheduling(true);
+        setSkipToSchedule(true);
+        setScheduling(true);
+        if (active.session_duration_minutes) {
+          const creditDur = durationFromMinutes(active.session_duration_minutes);
+          if (creditDur) setDuration(creditDur);
         }
+      } else if (preCreditId && active) {
+        setCreditRecord(active);
         if (active.session_duration_minutes) {
           const creditDur = durationFromMinutes(active.session_duration_minutes);
           if (creditDur) setDuration(creditDur);

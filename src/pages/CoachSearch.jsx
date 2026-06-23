@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowRight,
   BadgeCheck,
-  Building2,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  GraduationCap,
   Heart,
   LayoutList,
   LockKeyhole,
@@ -18,9 +17,7 @@ import {
   RefreshCcw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Star,
-  Tag,
   Trophy,
   Users,
   WalletCards,
@@ -46,7 +43,7 @@ import { savedCoachIdsFromPrefs } from '@/lib/savedCoachPrefs';
 import { formatCreditMoney, useCreditBalance } from '@/hooks/useCreditBalance';
 
 const PAGE_SIZE = 12;
-const MARKETPLACE_CONTAINER = 'mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8 2xl:px-10';
+const MARKETPLACE_CONTAINER = 'mx-auto w-full max-w-[1760px] px-4 sm:px-6 lg:px-8 2xl:px-10';
 const RADII = ['10', '15', '25', '50', '100'];
 const EXPANSION_RADII = [10, 15, 25, 50, 100];
 const AVAILABILITY_OPTIONS = ['Any time', 'Has set availability', 'Weekends', 'Evenings'];
@@ -215,6 +212,7 @@ export default function CoachSearch() {
   const [loadError, setLoadError] = useState('');
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
   const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [activeIntroPreviewIds, setActiveIntroPreviewIds] = useState(() => new Set());
   const { isAuthenticated, user, isAdmin, isCoach, isOrganizationAdmin } = useAuth();
   const showCreditBalance = isAuthenticated && !!user && !isAdmin && !isCoach && !isOrganizationAdmin;
   const creditBalance = useCreditBalance(user, showCreditBalance);
@@ -374,6 +372,20 @@ export default function CoachSearch() {
   const pageRows = filtered.rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const reviewStats = useMemo(() => reviewSummary(models), [models]);
   const activeFilterCount = useMemo(() => filterSummary(filters), [filters]);
+  const marketplaceSidebarFaded = activeIntroPreviewIds.size > 0;
+
+  const handleIntroPreviewChange = useCallback((coachId, active) => {
+    const key = String(coachId || '');
+    if (!key) return;
+    setActiveIntroPreviewIds((prev) => {
+      const hasKey = prev.has(key);
+      if ((active && hasKey) || (!active && !hasKey)) return prev;
+      const next = new Set(prev);
+      if (active) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
 
   const writeParams = (nextFilters, nextPage = 1, place = selectedPlace) => {
     const next = new URLSearchParams();
@@ -412,6 +424,12 @@ export default function CoachSearch() {
     setSearchParams(new URLSearchParams());
   };
 
+  const applyFilterPatch = (patch) => {
+    const nextFilters = { ...filters, ...patch };
+    setFilters(nextFilters);
+    writeParams(nextFilters, 1);
+  };
+
   const goToPage = (nextPage) => {
     writeParams(filters, nextPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -438,10 +456,10 @@ export default function CoachSearch() {
                 <span className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-700">Coaching marketplace</span>
               </div>
               <h1 className="mt-4 font-display text-4xl font-extrabold leading-tight tracking-normal text-slate-950 sm:text-5xl">
-                Find a coach
+                Find a coach who fits your athlete.
               </h1>
               <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
-                Connect with verified coaches. Transparent pricing, real reviews, and live booking.
+                Search vetted, experienced coaches by sport, location, age, and availability.
               </p>
             </div>
 
@@ -457,8 +475,8 @@ export default function CoachSearch() {
             </div>
           </div>
 
-          <form onSubmit={applyFilters} className="mt-6 rounded-[1.75rem] border border-blue-100 bg-white/95 p-3 shadow-2xl shadow-blue-900/10 backdrop-blur">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1.18fr_0.9fr_0.94fr_180px]">
+          <form onSubmit={applyFilters} className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/5">
+            <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-2 xl:grid-cols-[minmax(170px,1fr)_minmax(220px,1.18fr)_minmax(160px,0.9fr)_minmax(170px,0.96fr)_150px_90px]">
               <FilterSelect
                 label="Sport"
                 icon={Trophy}
@@ -480,11 +498,11 @@ export default function CoachSearch() {
                 }}
               />
               <FilterSelect
-                label="Price per session"
-                icon={CircleDollarSign}
-                value={filters.price}
-                onChange={(value) => setFilters((prev) => ({ ...prev, price: value }))}
-                options={PRICE_BANDS.map(({ value, label }) => ({ value, label }))}
+                label="Athlete age"
+                icon={Users}
+                value={filters.age}
+                onChange={(value) => setFilters((prev) => ({ ...prev, age: value }))}
+                options={AGE_GROUPS.map((value) => ({ value, label: value === 'Any age group' ? 'Any age' : value }))}
               />
               <FilterSelect
                 label="Availability"
@@ -493,65 +511,21 @@ export default function CoachSearch() {
                 onChange={(value) => setFilters((prev) => ({ ...prev, availability: value }))}
                 options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
               />
-              <Button type="submit" className="h-16 rounded-2xl bg-blue-600 px-6 text-base font-extrabold text-white shadow-xl shadow-blue-600/25 hover:bg-blue-700">
+              <Button type="submit" className="h-11 rounded-xl bg-blue-600 px-5 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
                 <Search className="h-5 w-5" aria-hidden="true" />
-                Search coaches
+                Search
               </Button>
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[0.72fr_0.72fr_0.82fr_0.82fr_0.92fr_0.92fr]">
-              <FilterSelect
-                label="Radius"
-                icon={MapPin}
-                value={filters.radius}
-                onChange={(value) => setFilters((prev) => ({ ...prev, radius: value }))}
-                options={RADII.map((value) => ({ value, label: `${value} mi` }))}
-                compact
-              />
-              <FilterSelect
-                label="Age group"
-                icon={Users}
-                value={filters.age}
-                onChange={(value) => setFilters((prev) => ({ ...prev, age: value }))}
-                options={AGE_GROUPS.map((value) => ({ value, label: value === 'Any age group' ? 'Any age' : value }))}
-                compact
-              />
-              <FilterSelect
-                label="Level"
-                icon={GraduationCap}
-                value={filters.level}
-                onChange={(value) => setFilters((prev) => ({ ...prev, level: value }))}
-                options={LEVELS.map((value) => ({ value, label: value }))}
-                compact
-              />
-              <FilterSelect
-                label="Session type"
-                icon={SlidersHorizontal}
-                value={filters.type}
-                onChange={(value) => setFilters((prev) => ({ ...prev, type: value }))}
-                options={SESSION_TYPES.map(({ value, label }) => ({ value, label: value === 'any' ? 'Any session type' : label }))}
-                compact
-              />
-              <FilterSelect
-                label="Organization"
-                icon={Building2}
-                value={filters.org}
-                onChange={(value) => setFilters((prev) => ({ ...prev, org: value }))}
-                options={[{ value: 'any', label: 'Any organization' }, ...organizationOptions]}
-                compact
-              />
-              <FilterSelect
-                label="Specialty"
-                icon={Tag}
-                value={filters.specialty}
-                onChange={(value) => setFilters((prev) => ({ ...prev, specialty: value }))}
-                options={[{ value: '', label: 'Any specialty' }, ...specialtyOptions.map((value) => ({ value, label: value }))]}
-                compact
-              />
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex h-11 items-center justify-center rounded-xl px-3 text-sm font-extrabold text-blue-700 transition hover:bg-blue-50"
+              >
+                Clear all
+              </button>
             </div>
 
             {activeFilterCount > 0 && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-blue-50 px-4 py-3">
                 <p className="text-sm font-semibold text-slate-600">
                   {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'} applied.
                 </p>
@@ -662,7 +636,16 @@ export default function CoachSearch() {
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+          <RefineSidebar
+            filters={filters}
+            activeFilterCount={activeFilterCount}
+            organizationOptions={organizationOptions}
+            specialtyOptions={specialtyOptions}
+            onChange={applyFilterPatch}
+            onClear={clearFilters}
+          />
+
           <div className="min-w-0">
             {loading && (
               <div className="space-y-4" aria-busy="true" aria-label="Loading coaches">
@@ -701,6 +684,7 @@ export default function CoachSearch() {
                       packages={packages}
                       distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}
                       bookingParams={bookingParams}
+                      onIntroPreviewChange={handleIntroPreviewChange}
                     />
                   ))}
                 </div>
@@ -782,6 +766,7 @@ export default function CoachSearch() {
             showCreditBalance={showCreditBalance}
             isAuthenticated={isAuthenticated}
             reviewStats={reviewStats}
+            faded={marketplaceSidebarFaded}
           />
         </div>
       </section>
@@ -817,14 +802,191 @@ function SidebarTrustItem({ title, body, icon: Icon }) {
   );
 }
 
-function MarketplaceSidebar({ creditBalance, showCreditBalance, isAuthenticated, reviewStats }) {
+function RefineSidebar({
+  filters,
+  activeFilterCount,
+  organizationOptions,
+  specialtyOptions,
+  onChange,
+  onClear,
+}) {
+  return (
+    <aside className="self-start xl:sticky xl:top-28">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-extrabold tracking-normal text-slate-950">Refine results</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              {activeFilterCount > 0
+                ? `${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`
+                : 'Browse every published coach'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="shrink-0 text-sm font-extrabold text-blue-700 transition hover:text-blue-800 hover:underline"
+          >
+            Clear all
+          </button>
+        </div>
+
+        <RefineBlock title="Distance">
+          <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-500">
+            <span>10 mi</span>
+            <span>100 mi</span>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5" aria-label="Distance radius">
+            {RADII.map((value) => {
+              const active = filters.radius === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onChange({ radius: value })}
+                  className={`h-10 rounded-xl border text-sm font-extrabold transition ${
+                    active
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                  }`}
+                  aria-pressed={active}
+                >
+                  {value}
+                </button>
+              );
+            })}
+          </div>
+        </RefineBlock>
+
+        <RefineBlock title="Price per session">
+          <div className="space-y-2">
+            {PRICE_BANDS.map((band) => (
+              <RefineChoice
+                key={band.value}
+                active={filters.price === band.value}
+                label={band.label}
+                onClick={() => onChange({ price: band.value })}
+              />
+            ))}
+          </div>
+        </RefineBlock>
+
+        <RefineBlock title="Athlete fit">
+          <div className="space-y-3">
+            <SidebarSelect
+              label="Age group"
+              value={filters.age}
+              onChange={(age) => onChange({ age })}
+              options={AGE_GROUPS.map((value) => ({ value, label: value === 'Any age group' ? 'Any age' : value }))}
+            />
+            <SidebarSelect
+              label="Availability"
+              value={filters.availability}
+              onChange={(availability) => onChange({ availability })}
+              options={AVAILABILITY_OPTIONS.map((value) => ({ value, label: value }))}
+            />
+          </div>
+        </RefineBlock>
+
+        <RefineBlock title="Coach details">
+          <div className="space-y-3">
+            <SidebarSelect
+              label="Level"
+              value={filters.level}
+              onChange={(level) => onChange({ level })}
+              options={LEVELS.map((value) => ({ value, label: value }))}
+            />
+            <SidebarSelect
+              label="Session type"
+              value={filters.type}
+              onChange={(type) => onChange({ type })}
+              options={SESSION_TYPES.map(({ value, label }) => ({ value, label }))}
+            />
+            <SidebarSelect
+              label="Organization"
+              value={filters.org}
+              onChange={(org) => onChange({ org })}
+              options={[{ value: 'any', label: 'Any organization' }, ...organizationOptions]}
+            />
+            <SidebarSelect
+              label="Specialty"
+              value={filters.specialty}
+              onChange={(specialty) => onChange({ specialty })}
+              options={[{ value: '', label: 'Any specialty' }, ...specialtyOptions.map((value) => ({ value, label: value }))]}
+            />
+          </div>
+        </RefineBlock>
+      </div>
+    </aside>
+  );
+}
+
+function RefineBlock({ title, children }) {
+  return (
+    <section className="mt-5 border-t border-slate-100 pt-5">
+      <h3 className="mb-3 text-sm font-extrabold text-slate-950">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function RefineChoice({ active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-10 w-full items-center gap-3 rounded-xl px-2.5 text-left text-sm font-bold transition ${
+        active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50 hover:text-blue-700'
+      }`}
+      aria-pressed={active}
+    >
+      <span
+        className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${
+          active ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+        }`}
+        aria-hidden="true"
+      >
+        {active && <span className="h-2 w-2 rounded-sm bg-white" />}
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SidebarSelect({ label, value, options, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <SelectMenu
+        value={value}
+        onChange={onChange}
+        ariaLabel={label}
+        options={options}
+        triggerClassName="h-11 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 shadow-sm"
+      />
+    </label>
+  );
+}
+
+function MarketplaceSidebar({ creditBalance, showCreditBalance, isAuthenticated, reviewStats, faded = false }) {
+  const reduceMotion = useReducedMotion();
   const hasCredits = showCreditBalance && creditBalance.remainingCents > 0;
   const reviewCopy = reviewStats.reviews > 0
     ? `${reviewStats.rating}/5 from ${reviewStats.reviews.toLocaleString()} public review${reviewStats.reviews === 1 ? '' : 's'}`
     : 'Public reviews appear after completed sessions';
+  const visibleState = { opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' };
+  const fadedState = reduceMotion
+    ? { opacity: 0, x: 0, scale: 1, filter: 'blur(0px)' }
+    : { opacity: 0, x: 34, scale: 0.96, filter: 'blur(10px)' };
 
   return (
-    <aside className="space-y-4 self-start xl:sticky xl:top-28">
+    <motion.aside
+      animate={faded ? fadedState : visibleState}
+      initial={false}
+      transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 26, mass: 0.7 }}
+      style={{ pointerEvents: faded ? 'none' : 'auto', transformOrigin: 'top right' }}
+      className="space-y-4 self-start xl:col-span-2 xl:sticky xl:top-28 2xl:col-span-1"
+    >
       <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-lg shadow-blue-900/5">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
@@ -895,24 +1057,22 @@ function MarketplaceSidebar({ creditBalance, showCreditBalance, isAuthenticated,
           Parents and athletes can compare completed-session reviews, pricing, specialties, and next availability before booking.
         </div>
       </div>
-    </aside>
+    </motion.aside>
   );
 }
 
 function FilterSelect({ label, icon: Icon, value, options, onChange, compact = false }) {
   return (
-    <div className={`group flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5 ${compact ? 'py-3' : 'py-4'}`}>
-      <span className={`${compact ? 'h-9 w-9' : 'h-10 w-10'} grid shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white`}>
-        <Icon className={compact ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">{label}</span>
+    <div className="block min-w-0">
+      <span className="mb-1.5 block truncate text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="group flex h-11 min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40">
+        <Icon className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} shrink-0 text-blue-600`} aria-hidden="true" />
         <SelectMenu
           value={value}
           onChange={onChange}
           ariaLabel={label}
           options={options}
-          triggerClassName={`${compact ? 'text-sm' : 'text-base'} mt-1 h-auto w-full justify-start gap-1.5 border-0 bg-transparent p-0 font-extrabold text-slate-950 shadow-none hover:border-0 focus:border-0 focus:ring-0`}
+          triggerClassName={`${compact ? 'text-sm' : 'text-sm'} h-auto min-w-0 flex-1 justify-start gap-1.5 border-0 bg-transparent p-0 font-extrabold text-slate-950 shadow-none hover:border-0 focus:border-0 focus:ring-0`}
         />
       </span>
     </div>
@@ -923,16 +1083,14 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
   const showSuggestions = value && suggestions.length > 0 && value !== selectedPlaceLabel;
 
   return (
-    <div className="group relative flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 transition hover:border-blue-200 hover:bg-white hover:shadow-md hover:shadow-blue-900/5">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-600 group-hover:text-white">
-        <MapPin className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-extrabold uppercase tracking-[0.2em] text-slate-500">Location</span>
+    <label className="relative block min-w-0">
+      <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.18em] text-slate-500">Location</span>
+      <span className="group flex h-11 min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40">
+        <MapPin className="h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="mt-1 h-auto border-0 bg-transparent p-0 text-base font-extrabold text-slate-950 shadow-none outline-none placeholder:text-slate-500 focus-visible:ring-0"
+          className="h-auto min-w-0 border-0 bg-transparent p-0 text-sm font-extrabold text-slate-950 shadow-none outline-none placeholder:text-slate-500 focus-visible:ring-0"
           placeholder="City, county, or ZIP"
           aria-label="Location"
         />
@@ -953,6 +1111,6 @@ function LocationInput({ value, onChange, suggestions = [], selectedPlaceLabel =
           ))}
         </span>
       )}
-    </div>
+    </label>
   );
 }

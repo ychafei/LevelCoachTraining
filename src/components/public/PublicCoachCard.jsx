@@ -9,6 +9,7 @@ import {
   Clock,
   Eye,
   MapPin,
+  Play,
   PlayCircle,
   ShieldCheck,
   Star,
@@ -25,8 +26,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { coachBookHref, coachIntroEmbedUrl, publicCoachDisplay } from '@/lib/publicCoach';
-import { CoachActionPanel, SaveCoachButton } from '@/components/public/CoachActionControls';
+import {
+  coachBookHref,
+  coachIntroEmbedUrl,
+  formatAvailabilityTime,
+  publicCoachDisplay,
+} from '@/lib/publicCoach';
+import {
+  AuthGateDialog,
+  BookCoachButton,
+  CoachActionPanel,
+  MessageCoachButton,
+  SaveCoachButton,
+} from '@/components/public/CoachActionControls';
+import { useAuth } from '@/lib/AuthContext';
+import { accountActionLock } from '@/lib/accountReadiness';
 
 export function CoachAvatar({ coach, size = 'lg', className = '' }) {
   const model = publicCoachDisplay(coach);
@@ -68,7 +82,7 @@ function PresenceDot({ model, className = '' }) {
 }
 
 function CoachCardPhoto({ model, compact = false }) {
-  const sizeClass = compact ? 'h-24 w-24' : 'h-28 w-28 sm:h-32 sm:w-32';
+  const sizeClass = compact ? 'h-20 w-20' : 'h-24 w-24 sm:h-[116px] sm:w-[116px]';
 
   return (
     <div className={`relative mx-auto overflow-hidden rounded-3xl bg-blue-50 ring-1 ring-slate-200 ${sizeClass}`}>
@@ -97,8 +111,97 @@ function CoachCardPhoto({ model, compact = false }) {
 function hrefWithParams(path, params = {}) {
   const clean = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
   if (!clean.length) return path;
-  const search = new URLSearchParams(clean);
-  return `${path}?${search.toString()}`;
+  const [base, existing = ''] = String(path).split('?');
+  const search = new URLSearchParams(existing);
+  clean.forEach(([key, value]) => search.set(key, value));
+  return `${base}?${search.toString()}`;
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function localDateString(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function coachDateParts(coach, date = new Date()) {
+  const timezone = String(coach?.timezone || '').trim();
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date);
+      const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      const hour = Number(byType.hour);
+      const minute = Number(byType.minute);
+      if (byType.weekday && byType.year && byType.month && byType.day) {
+        return {
+          weekday: byType.weekday,
+          date: `${byType.year}-${byType.month}-${byType.day}`,
+          minutes: Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : 0,
+        };
+      }
+    } catch {
+      // Fall back to browser-local time for legacy or malformed timezones.
+    }
+  }
+  return {
+    weekday: WEEKDAYS[date.getDay()],
+    date: localDateString(date),
+    minutes: date.getHours() * 60 + date.getMinutes(),
+  };
+}
+
+function timeToMinutes(value) {
+  const [hour, minute] = String(value || '').split(':').map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function minutesToTime(total) {
+  const minutes = Math.max(0, total);
+  return `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
+}
+
+function nextCoachOpeningSlots(coach, count = 3, durationMinutes = 60) {
+  const availability = coach?.availability || {};
+  const now = new Date();
+  const slots = [];
+
+  for (let offset = 0; offset <= 21 && slots.length < count; offset += 1) {
+    const date = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+    const parts = coachDateParts(coach, date);
+    const dayWindow = availability?.[parts.weekday];
+    if (!dayWindow?.enabled || !dayWindow.start || !dayWindow.end) continue;
+
+    const start = timeToMinutes(dayWindow.start);
+    const end = timeToMinutes(dayWindow.end);
+    if (start === null || end === null || end <= start) continue;
+
+    for (let minute = start; minute + durationMinutes <= end && slots.length < count; minute += durationMinutes) {
+      if (offset === 0 && minute <= parts.minutes) continue;
+      const dayLabel = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : parts.weekday.slice(0, 3);
+      const time = minutesToTime(minute);
+      slots.push({
+        date: parts.date,
+        time,
+        label: `${dayLabel} ${formatAvailabilityTime(time)}`,
+        shortLabel: formatAvailabilityTime(time),
+      });
+    }
+  }
+
+  return slots;
 }
 
 function coachTierLabel(model) {
@@ -119,20 +222,14 @@ function coachBenefits(model) {
   return benefits;
 }
 
-function CoachStat({ icon: Icon, label, value, sub, highlight = false, compactText = false }) {
-  const labelClass = compactText
-    ? 'flex min-w-0 items-center text-[10px] font-extrabold uppercase tracking-[0.11em] text-slate-500'
-    : 'flex min-w-0 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.11em] text-slate-500';
-
+function CoachStat({ icon: Icon, label, value, sub, highlight = false }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
-      <p className={labelClass}>
-        {!compactText && (
-          <Icon
-            className={`h-3 w-3 shrink-0 ${highlight ? 'fill-amber-400 text-amber-400' : 'text-blue-600'}`}
-            aria-hidden="true"
-          />
-        )}
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+      <p className="flex min-w-0 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.11em] text-slate-500">
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 ${highlight ? 'fill-amber-400 text-amber-400' : 'text-blue-600'}`}
+          aria-hidden="true"
+        />
         <span className="truncate" data-testid="coach-stat-label" title={label}>
           {label}
         </span>
@@ -157,7 +254,7 @@ function CoachVerificationButton({ model, onViewProfile }) {
         type="button"
         disabled
         onClick={(event) => event.stopPropagation()}
-        className="mt-2 inline-flex h-9 w-full max-w-[128px] cursor-default items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-extrabold text-emerald-700 shadow-sm shadow-emerald-900/5 disabled:opacity-100"
+        className="mt-1.5 inline-flex h-8 w-full max-w-[116px] cursor-default items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-extrabold text-emerald-700 shadow-sm shadow-emerald-900/5 disabled:opacity-100"
         aria-disabled="true"
         aria-label={`${model.displayName} is verified`}
       >
@@ -182,7 +279,7 @@ function CoachVerificationButton({ model, onViewProfile }) {
       <button
         type="button"
         onClick={openDialog}
-        className="mt-2 inline-flex h-9 w-full max-w-[128px] items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white text-xs font-extrabold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+        className="mt-1.5 inline-flex h-8 w-full max-w-[116px] items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white text-xs font-extrabold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
         aria-label={`Open verification status for ${model.displayName}`}
       >
         <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -243,20 +340,141 @@ function isDirectVideoUrl(url) {
   }
 }
 
-function CoachIntroVideoFrame({ model, mode = 'preview' }) {
+function youtubeVideoId(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (host === 'youtu.be') return parts[0] || '';
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      return parsed.searchParams.get('v')
+        || (['embed', 'shorts', 'live'].includes(parts[0]) ? parts[1] : '')
+        || '';
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function youtubePosterUrl(url) {
+  const id = youtubeVideoId(url);
+  return id ? `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg` : '';
+}
+
+function embedUrlWithAutoplay(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    parsed.searchParams.set('autoplay', '1');
+    if (host.includes('youtube')) {
+      parsed.searchParams.set('rel', '0');
+      parsed.searchParams.set('modestbranding', '1');
+    }
+    if (host === 'player.vimeo.com') {
+      parsed.searchParams.set('title', '0');
+      parsed.searchParams.set('byline', '0');
+      parsed.searchParams.set('portrait', '0');
+    }
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}
+
+function CoachIntroPreviewMedia({ model, embedUrl, directVideo, posterUrl }) {
+  if (posterUrl) {
+    return (
+      <img
+        src={posterUrl}
+        alt=""
+        className="h-full w-full object-cover object-center"
+        loading="lazy"
+        aria-hidden="true"
+      />
+    );
+  }
+
+  if (directVideo) {
+    return (
+      <video
+        className="h-full w-full object-cover"
+        src={model.introVideoUrl}
+        muted
+        playsInline
+        preload="metadata"
+        aria-hidden="true"
+      />
+    );
+  }
+
+  if (embedUrl) {
+    return (
+      <iframe
+        title={`${model.displayName} coach intro video preview`}
+        src={embedUrl}
+        className="pointer-events-none h-full w-full scale-[1.01]"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  return (
+    <div className="grid h-full w-full place-items-center bg-slate-950 text-white">
+      <Video className="h-9 w-9" aria-hidden="true" />
+    </div>
+  );
+}
+
+function CoachIntroVideoFrame({ model, mode = 'preview', onPlay }) {
   const embedUrl = coachIntroEmbedUrl(model.introVideoUrl);
   const directVideo = isDirectVideoUrl(model.introVideoUrl);
   const isModal = mode === 'modal';
   const isPreview = mode === 'preview';
+  const posterUrl = youtubePosterUrl(model.introVideoUrl);
+  const modalEmbedUrl = isModal ? embedUrlWithAutoplay(embedUrl) : embedUrl;
+
+  if (isPreview) {
+    return (
+      <button
+        type="button"
+        onClick={onPlay}
+        className="group relative block aspect-video w-full overflow-visible rounded-[10px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
+        aria-label={`Play ${model.displayName}'s coach intro video`}
+      >
+        <span className="relative block h-full w-full overflow-hidden rounded-[9px] border-2 border-slate-950 bg-slate-950 shadow-sm">
+          <CoachIntroPreviewMedia
+            model={model}
+            embedUrl={embedUrl}
+            directVideo={directVideo}
+            posterUrl={posterUrl}
+          />
+          <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/5" aria-hidden="true" />
+        </span>
+        <span
+          className="pointer-events-none absolute right-3 top-1/2 z-10 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full border-2 border-slate-950 bg-blue-600 text-white shadow-lg shadow-blue-950/20 transition duration-200 group-hover:scale-105 group-hover:bg-blue-700"
+          aria-hidden="true"
+        >
+          <Play className="ml-0.5 h-6 w-6 fill-current" />
+        </span>
+      </button>
+    );
+  }
 
   return (
-    <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-      {embedUrl ? (
+    <div className="relative aspect-video w-full overflow-hidden bg-slate-950">
+      {modalEmbedUrl ? (
         <iframe
           title={`${model.displayName} coach intro video`}
-          src={embedUrl}
+          src={modalEmbedUrl}
           className="h-full w-full"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
         />
       ) : directVideo ? (
@@ -264,6 +482,7 @@ function CoachIntroVideoFrame({ model, mode = 'preview' }) {
           className="h-full w-full object-cover"
           src={model.introVideoUrl}
           controls={isModal}
+          autoPlay={isModal}
           muted={!isModal}
           playsInline
           preload="metadata"
@@ -272,11 +491,6 @@ function CoachIntroVideoFrame({ model, mode = 'preview' }) {
         <div className="grid h-full w-full place-items-center bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_100%)] text-white">
           <Video className="h-9 w-9" aria-hidden="true" />
         </div>
-      )}
-      {isPreview && (
-        <span className="pointer-events-none absolute bottom-3 right-3 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-blue-700 shadow-md ring-1 ring-blue-100">
-          <PlayCircle className="h-5 w-5" aria-hidden="true" />
-        </span>
       )}
     </div>
   );
@@ -288,17 +502,14 @@ function CoachIntroVideoDialog({ model, open, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl rounded-3xl border-slate-200 bg-white p-4 text-slate-950 shadow-2xl shadow-slate-950/20 sm:p-5"
+        overlayClassName="bg-slate-950/60"
+        className="top-1/2 w-[calc(100vw-32px)] max-w-[970px] gap-0 border-0 bg-transparent p-0 text-white shadow-none sm:rounded-none [&>button]:right-2 [&>button]:top-[-3rem] [&>button]:grid [&>button]:h-11 [&>button]:w-11 [&>button]:place-items-center [&>button]:rounded-full [&>button]:bg-white [&>button]:text-slate-400 [&>button]:opacity-100 [&>button]:shadow-xl [&>button]:shadow-slate-950/20 [&>button]:ring-0 [&>button]:ring-offset-0 hover:[&>button]:text-slate-600 sm:[&>button]:-right-5 sm:[&>button]:-top-5 [&>button_svg]:h-6 [&>button_svg]:w-6"
         onClick={(event) => event.stopPropagation()}
       >
-        <DialogHeader className="px-1">
-          <DialogTitle className="font-display text-2xl font-extrabold tracking-normal">
-            {model.firstName}'s coach intro
-          </DialogTitle>
-          <DialogDescription className="text-sm text-slate-600">
-            Preview the coach's communication style before opening the full profile.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTitle className="sr-only">{model.firstName}'s coach intro</DialogTitle>
+        <DialogDescription className="sr-only">
+          Preview the coach's communication style before opening the full profile.
+        </DialogDescription>
         <CoachIntroVideoFrame model={model} mode="modal" />
       </DialogContent>
     </Dialog>
@@ -314,7 +525,7 @@ function CoachIntroMobileButton({ model, onWatchIntro }) {
         event.stopPropagation();
         onWatchIntro();
       }}
-      className="mt-2 inline-flex h-9 w-full max-w-[128px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 xl:hidden"
+      className="mt-1.5 inline-flex h-8 w-full max-w-[116px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 xl:hidden"
     >
       <Video className="h-4 w-4 text-blue-600" aria-hidden="true" />
       Watch intro
@@ -324,41 +535,26 @@ function CoachIntroMobileButton({ model, onWatchIntro }) {
 
 function CoachIntroPreviewPanel({ model, open, transition, onWatchIntro }) {
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence initial={false} mode="popLayout">
       {open && (
         <motion.aside
           key={`${model.id || model.displayName}-intro-preview`}
-          initial={{ width: 0, opacity: 0, x: 14 }}
-          animate={{ width: 260, opacity: 1, x: 0 }}
-          exit={{ width: 0, opacity: 0, x: 14 }}
+          initial={{ opacity: 0, x: -18, y: 18, scale: 0.94, rotateY: -8, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, x: 0, y: 0, scale: 1, rotateY: 0, filter: 'blur(0px)' }}
+          exit={{ opacity: 0, x: -14, y: 12, scale: 0.96, rotateY: -5, filter: 'blur(8px)' }}
           transition={transition}
-          className="hidden min-w-0 self-center overflow-hidden xl:block"
+          style={{ transformPerspective: 900, transformOrigin: 'left top' }}
+          className="absolute left-[calc(100%+16px)] top-0 z-30 hidden w-[360px] min-w-0 overflow-visible 2xl:block"
           aria-label={`${model.displayName} coach intro video preview`}
         >
           <div
-            className="w-[260px] rounded-3xl border border-blue-100 bg-white p-2.5 shadow-xl shadow-blue-950/10"
+            className="rounded-2xl border border-blue-100 bg-white p-3 shadow-2xl shadow-blue-950/15 ring-1 ring-white/80"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-blue-700">
-              Coach Intro Video
+            <p className="mb-2 px-0.5 text-[11px] font-extrabold uppercase tracking-[0.18em] text-blue-700">
+              Coach intro video
             </p>
-            <CoachIntroVideoFrame model={model} mode="preview" />
-            <div className="mt-3 space-y-2">
-              <p className="text-sm font-bold leading-5 text-slate-900">
-                Get a quick feel for this coach's style before booking.
-              </p>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onWatchIntro();
-                }}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-600 px-4 text-sm font-extrabold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
-              >
-                <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                Watch intro
-              </button>
-            </div>
+            <CoachIntroVideoFrame model={model} mode="preview" onPlay={onWatchIntro} />
           </div>
         </motion.aside>
       )}
@@ -366,7 +562,7 @@ function CoachIntroPreviewPanel({ model, open, transition, onWatchIntro }) {
   );
 }
 
-function CoachCardMotionShell({ hasIntroVideo, previewOpen, transition, children, ...props }) {
+function CoachCardMotionShell({ hasIntroVideo, children, ...props }) {
   if (!hasIntroVideo) {
     return (
       <div className="relative" data-has-intro-video="false" {...props}>
@@ -376,27 +572,20 @@ function CoachCardMotionShell({ hasIntroVideo, previewOpen, transition, children
   }
 
   return (
-    <motion.div
-      className="relative xl:grid xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center"
-      style={{ columnGap: 0 }}
-      animate={{ columnGap: previewOpen ? 14 : 0 }}
-      transition={transition}
-      data-has-intro-video="true"
-      {...props}
-    >
+    <div className="relative overflow-visible" data-has-intro-video="true" {...props}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-function CoachCardMotionArticle({ hasIntroVideo, previewOpen, reduceMotion, transition, className, ...props }) {
+function CoachCardMotionArticle({ hasIntroVideo, transition, className, ...props }) {
   if (!hasIntroVideo) {
     return <article className={className} {...props} />;
   }
 
   return (
     <motion.article
-      animate={{ x: previewOpen && !reduceMotion ? -14 : 0 }}
+      animate={{ x: 0 }}
       transition={transition}
       className={className}
       {...props}
@@ -436,12 +625,14 @@ function useCoachIntroHover(hasIntroVideo) {
       const element = hoverRef.current;
       if (!element) return;
       const rect = element.getBoundingClientRect();
-      const buffer = 8;
+      const leftBuffer = 12;
+      const rightBuffer = previewOpen ? 430 : 12;
+      const verticalBuffer = previewOpen ? 56 : 12;
       const outside =
-        event.clientX < rect.left - buffer ||
-        event.clientX > rect.right + buffer ||
-        event.clientY < rect.top - buffer ||
-        event.clientY > rect.bottom + buffer;
+        event.clientX < rect.left - leftBuffer ||
+        event.clientX > rect.right + rightBuffer ||
+        event.clientY < rect.top - verticalBuffer ||
+        event.clientY > rect.bottom + verticalBuffer;
 
       if (outside) setPreviewOpen(false);
     };
@@ -480,12 +671,12 @@ function useCoachIntroHover(hasIntroVideo) {
 function useDesktopIntroPreview() {
   const [isDesktopPreview, setIsDesktopPreview] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.matchMedia('(min-width: 1280px)').matches;
+    return window.matchMedia('(min-width: 1536px)').matches;
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const mediaQuery = window.matchMedia('(min-width: 1280px)');
+    const mediaQuery = window.matchMedia('(min-width: 1536px)');
     const updatePreviewMode = () => setIsDesktopPreview(mediaQuery.matches);
 
     updatePreviewMode();
@@ -503,6 +694,7 @@ export default function PublicCoachCard({
   className = '',
   distanceMiles = null,
   bookingParams = {},
+  onIntroPreviewChange = null,
 }) {
   const navigate = useNavigate();
   const model = publicCoachDisplay(coach, { packages });
@@ -516,25 +708,50 @@ export default function PublicCoachCard({
   const hasOrg = !!model.organization?.name;
   const profileHref = hrefWithParams(model.profileHref, bookingParams);
   const bookHref = coachBookHref(model.raw, { intro: '1', ...bookingParams });
+  const { isAuthenticated, user } = useAuth();
   const displayDistance = distanceMiles === null || distanceMiles === undefined ? null : Number(distanceMiles);
   const tierLabel = coachTierLabel(model);
   const benefits = coachBenefits(model);
+  const openingSlots = nextCoachOpeningSlots(model.raw, 3);
   const hasIntroVideo = !!model.introVideoUrl;
   const reduceMotion = useReducedMotion();
   const [introDialogOpen, setIntroDialogOpen] = useState(false);
+  const [timeGateOpen, setTimeGateOpen] = useState(false);
+  const [timeGateNextPath, setTimeGateNextPath] = useState(bookHref);
   const { previewOpen, hoverProps } = useCoachIntroHover(hasIntroVideo);
   const canShowIntroPreview = useDesktopIntroPreview();
   const desktopPreviewOpen = hasIntroVideo && canShowIntroPreview && previewOpen;
-  const compactHoverStats = desktopPreviewOpen;
+  const introPreviewSignalId = model.id || coach?.id || model.displayName;
   const motionTransition = reduceMotion
     ? { duration: 0 }
-    : { duration: 0.22, ease: [0.22, 1, 0.36, 1] };
+    : { type: 'spring', stiffness: 260, damping: 24, mass: 0.72 };
+
+  useEffect(() => {
+    if (!hasIntroVideo || !onIntroPreviewChange || !introPreviewSignalId) return undefined;
+    onIntroPreviewChange(introPreviewSignalId, desktopPreviewOpen);
+    return () => onIntroPreviewChange(introPreviewSignalId, false);
+  }, [desktopPreviewOpen, hasIntroVideo, introPreviewSignalId, onIntroPreviewChange]);
 
   const openProfile = () => navigate(profileHref);
   const openIntroDialog = () => setIntroDialogOpen(true);
   const openProfileButton = (event) => {
     event.stopPropagation();
     navigate(profileHref);
+  };
+  const openTimeSlot = (slot, event) => {
+    event.stopPropagation();
+    const slotHref = hrefWithParams(bookHref, {
+      schedule: '1',
+      selected_date: slot.date,
+      selected_time: slot.time,
+    });
+    const lock = isAuthenticated ? accountActionLock(user) : null;
+    setTimeGateNextPath(slotHref);
+    if (!isAuthenticated || lock) {
+      setTimeGateOpen(true);
+      return;
+    }
+    navigate(slotHref);
   };
   const onKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -546,38 +763,40 @@ export default function PublicCoachCard({
   return (
     <CoachCardMotionShell
       hasIntroVideo={hasIntroVideo}
-      previewOpen={desktopPreviewOpen}
-      transition={motionTransition}
       {...hoverProps}
     >
       <CoachCardMotionArticle
         hasIntroVideo={hasIntroVideo}
-        previewOpen={desktopPreviewOpen}
-        reduceMotion={reduceMotion}
         transition={motionTransition}
         data-testid="public-coach-card"
         role="link"
         tabIndex={0}
         onClick={openProfile}
         onKeyDown={onKeyDown}
-        className={`group relative cursor-pointer rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-4 ${className}`}
+        className={`group relative cursor-pointer rounded-3xl border border-slate-200 bg-white p-2.5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 sm:p-3 ${className}`}
         aria-label={`View ${model.displayName}'s full profile`}
       >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[132px_minmax(0,1fr)] xl:grid-cols-[132px_minmax(0,1fr)_minmax(208px,232px)]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[116px_minmax(0,1fr)] xl:grid-cols-[116px_minmax(0,1fr)_minmax(190px,214px)]">
           <div className="flex flex-col items-center">
             <CoachCardPhoto model={model} compact={compact} />
             <SaveCoachButton
               coach={coach}
               showLabel
-              className="mt-2 inline-flex h-9 w-full max-w-[128px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+              className="mt-1.5 inline-flex h-8 w-full max-w-[116px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
               iconClassName="h-4 w-4"
             />
             <CoachVerificationButton model={model} onViewProfile={openProfile} />
+            <MessageCoachButton
+              coach={coach}
+              showLabel
+              className="mt-1.5 inline-flex h-8 w-full max-w-[116px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+              iconClassName="h-4 w-4 text-blue-600"
+            />
             <CoachIntroMobileButton model={model} onWatchIntro={openIntroDialog} />
           </div>
 
-          <div className="min-w-0 pr-0 xl:pr-4">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 pr-0 xl:pr-3">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-extrabold text-blue-700 ring-1 ring-blue-100">
                 <Trophy className="h-3 w-3" aria-hidden="true" />
                 {tierLabel}
@@ -592,42 +811,43 @@ export default function PublicCoachCard({
                   Independent coach
                 </span>
               )}
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-extrabold ring-1 ${
-                  model.recentlyActive
-                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-                    : 'bg-white text-slate-600 ring-slate-200'
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${model.recentlyActive ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                />
-                {model.presenceLabel}
-              </span>
+              {model.recentlyActive && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-100">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  {model.presenceLabel}
+                </span>
+              )}
               {coach?.is_demo && (
                 <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-extrabold text-slate-600 ring-1 ring-slate-200">
                   Demo
                 </span>
               )}
             </div>
-
-            <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div className="mt-1.5 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h2 className="font-display text-xl font-extrabold leading-tight tracking-normal text-slate-950 transition group-hover:text-blue-700 sm:text-2xl">
+                <h2 className="font-display text-xl font-extrabold leading-tight tracking-normal text-slate-950 transition group-hover:text-blue-700 sm:text-[1.35rem]">
                   {model.displayName}
                 </h2>
                 <p className="text-xs font-extrabold text-slate-600 sm:text-sm">{model.primarySport} Coach</p>
               </div>
-              <button
-                type="button"
-                onClick={openProfileButton}
-                className="hidden shrink-0 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 ring-1 ring-slate-200 transition hover:bg-blue-50 sm:inline-flex"
-              >
-                View full profile
-              </button>
+              <div className="hidden shrink-0 items-center gap-2 sm:flex 2xl:-mt-7">
+                <BookCoachButton
+                  coach={coach}
+                  bookHref={bookHref}
+                  className="hidden h-8 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-extrabold text-white shadow-md shadow-blue-600/15 transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 2xl:inline-flex"
+                  iconClassName="h-4 w-4"
+                />
+                <button
+                  type="button"
+                  onClick={openProfileButton}
+                  className="inline-flex h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-extrabold text-blue-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+                >
+                  View full profile
+                </button>
+              </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-600 sm:text-sm">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-600 sm:text-sm">
               <span className="inline-flex items-center gap-1 text-blue-700">
                 <Tag className="h-3.5 w-3.5" aria-hidden="true" />
                 {model.primarySport}
@@ -647,11 +867,11 @@ export default function PublicCoachCard({
               )}
             </div>
 
-            <p className="mt-2 line-clamp-1 max-w-3xl text-sm leading-5 text-slate-600 sm:line-clamp-2 xl:line-clamp-1">
+            <p className="mt-1.5 line-clamp-1 max-w-3xl text-sm leading-5 text-slate-600">
               {model.headline}
             </p>
 
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {visibleSpecs.map((tag) => (
                 <span
                   key={tag}
@@ -675,57 +895,49 @@ export default function PublicCoachCard({
               )}
             </div>
 
-            <div
-              className={`mt-3 grid grid-cols-2 gap-2 ${model.hasActiveAthleteStat ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}
-            >
+            <div className="mt-2.5 grid grid-cols-2 gap-2 lg:grid-cols-4">
               <CoachStat
                 icon={Star}
                 label="Rating"
                 value={model.ratingLabel || 'New'}
                 sub={model.reviewLabel}
                 highlight={!!model.ratingLabel}
-                compactText={compactHoverStats}
               />
-              {model.hasActiveAthleteStat && (
-                <CoachStat
-                  icon={Users}
-                  label="Athletes"
-                  value={model.activeAthletes.toLocaleString()}
-                  sub="active"
-                  compactText={compactHoverStats}
-                />
-              )}
+              <CoachStat
+                icon={Users}
+                label="Athletes"
+                value={model.activeAthletes > 0 ? model.activeAthletes.toLocaleString() : '0'}
+                sub="active"
+              />
               <CoachStat
                 icon={Trophy}
                 label="Sessions"
                 value={model.sessionsTaught > 0 ? model.sessionsTaught.toLocaleString() : 'New'}
                 sub={model.sessionsTaught > 0 ? 'completed' : 'coach'}
-                compactText={compactHoverStats}
               />
               <CoachStat
                 icon={BadgeCheck}
                 label="Verified"
                 value={model.verified ? 'Yes' : 'Pending'}
                 sub="public profile"
-                compactText={compactHoverStats}
               />
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-100 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-3 shadow-inner shadow-blue-900/5 md:col-span-2 xl:col-span-1">
-            <div className="flex h-full flex-col gap-2">
+          <div className="rounded-2xl border border-blue-100 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-2.5 shadow-inner shadow-blue-900/5 md:col-span-2 xl:col-span-1">
+            <div className="flex flex-col gap-1.5">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">Starting at</p>
                   {model.rateLabel ? (
-                    <p className="mt-1">
-                      <span className="proof-number text-2xl text-slate-950">
+                    <p className="mt-0.5">
+                      <span className="proof-number text-xl text-slate-950">
                         {model.rateLabel.replace(/^From\s+/i, '')}
                       </span>
                       <span className="ml-1 text-xs font-semibold text-slate-500">/ session</span>
                     </p>
                   ) : (
-                    <p className="mt-1 text-sm font-bold text-slate-700">Shown at booking</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-700">Shown at booking</p>
                   )}
                 </div>
                 <div className="text-left">
@@ -740,9 +952,9 @@ export default function PublicCoachCard({
                 </div>
               </div>
 
-              <div className="space-y-1.5 border-t border-blue-100 pt-2.5">
+              <div className="space-y-1 border-t border-blue-100 pt-2">
                 {benefits.map((benefit) => (
-                  <p key={benefit} className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
+                  <p key={benefit} className="flex items-center gap-1.5 text-[11px] font-bold leading-4 text-slate-700">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
                     {benefit}
                   </p>
@@ -750,18 +962,39 @@ export default function PublicCoachCard({
               </div>
 
               {model.nextAvailable && (
-                <p className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2.5 py-1.5 text-xs font-extrabold text-blue-700 ring-1 ring-blue-100">
+                <p className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2 py-1 text-xs font-extrabold text-blue-700 ring-1 ring-blue-100">
                   <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
                   {model.nextAvailable}
                 </p>
               )}
 
-              <div className="mt-auto space-y-2 pt-1">
+              {openingSlots.length > 0 && (
+                <div className="rounded-xl border border-blue-100 bg-white/80 p-1.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-blue-700">
+                    Next times
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1">
+                    {openingSlots.map((slot) => (
+                      <button
+                        key={`${slot.date}-${slot.time}`}
+                        type="button"
+                        onClick={(event) => openTimeSlot(slot, event)}
+                        className="inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded-lg border border-blue-100 bg-blue-50 px-1 text-center text-[10px] font-extrabold leading-none text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+                        title={slot.label}
+                      >
+                        {slot.shortLabel}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5 pt-0.5 2xl:hidden">
                 <CoachActionPanel coach={coach} bookHref={bookHref} />
                 <button
                   type="button"
                   onClick={openProfileButton}
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 sm:hidden xl:inline-flex"
+                  className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-extrabold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 sm:hidden xl:inline-flex"
                 >
                   <Eye className="h-4 w-4" aria-hidden="true" />
                   View full profile
@@ -771,21 +1004,31 @@ export default function PublicCoachCard({
           </div>
         </div>
       </CoachCardMotionArticle>
-      {hasIntroVideo && (
-        <>
-          <CoachIntroPreviewPanel
-            model={model}
-            open={desktopPreviewOpen}
-            transition={motionTransition}
-            onWatchIntro={openIntroDialog}
-          />
-          <CoachIntroVideoDialog
-            model={model}
-            open={introDialogOpen}
-            onOpenChange={setIntroDialogOpen}
-          />
-        </>
-      )}
+      <>
+        {hasIntroVideo && (
+          <>
+            <CoachIntroPreviewPanel
+              model={model}
+              open={desktopPreviewOpen}
+              transition={motionTransition}
+              onWatchIntro={openIntroDialog}
+            />
+            <CoachIntroVideoDialog
+              model={model}
+              open={introDialogOpen}
+              onOpenChange={setIntroDialogOpen}
+            />
+          </>
+        )}
+        <AuthGateDialog
+          open={timeGateOpen}
+          onOpenChange={setTimeGateOpen}
+          coach={coach}
+          intent="book"
+          nextPath={timeGateNextPath}
+          lock={isAuthenticated ? accountActionLock(user) : null}
+        />
+      </>
     </CoachCardMotionShell>
   );
 }
