@@ -167,7 +167,11 @@ function locationMatches(coach, model, haystack, place, locationText, radius) {
 }
 
 function reviewSummary(rows) {
+  const seenCoachIds = new Set();
   const totals = rows.reduce((acc, { coach }) => {
+    const coachId = String(coach?.id || '');
+    if (coachId && seenCoachIds.has(coachId)) return acc;
+    if (coachId) seenCoachIds.add(coachId);
     const rating = Number(coach.rating_avg);
     const count = Number(coach.review_count);
     if (Number.isFinite(rating) && rating > 0 && Number.isFinite(count) && count > 0) {
@@ -679,7 +683,7 @@ export default function CoachSearch() {
                 <div className="space-y-4">
                   {pageRows.map(({ coach }) => (
                     <PublicCoachCard
-                      key={coach.id}
+                      key={coach.public_profile_id || coach.id}
                       coach={coach}
                       packages={packages}
                       distanceMiles={activePlace ? coachDistanceMiles(coach, activePlace) : null}

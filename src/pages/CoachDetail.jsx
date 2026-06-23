@@ -135,6 +135,10 @@ export default function CoachDetail() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const requestedSport = useMemo(
+    () => new URLSearchParams(location.search).get('sport') || '',
+    [location.search],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,7 +151,13 @@ export default function CoachDetail() {
         pricingPackageRepo.filter({ is_visible: true }, 'display_order').catch(() => []),
       ]);
       const liveCoaches = (coachRes?.coaches || []).map(normalizePublicCoach);
-      const match = liveCoaches.find((item) => item.id === coachId);
+      const coachMatches = liveCoaches.filter((item) => item.id === coachId);
+      const match = requestedSport
+        ? coachMatches.find((item) => {
+          const sportKey = item.sport_profile?.sport_key || item.sports?.[0] || '';
+          return sportKey === requestedSport;
+        }) || coachMatches[0]
+        : coachMatches[0];
       if (!match) {
         setNotFound(true);
         return;
@@ -168,7 +178,7 @@ export default function CoachDetail() {
     } finally {
       setLoading(false);
     }
-  }, [coachId]);
+  }, [coachId, requestedSport]);
 
   useEffect(() => { load(); }, [load]);
 

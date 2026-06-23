@@ -707,7 +707,8 @@ export default function PublicCoachCard({
     : [model.primarySport].filter(Boolean);
   const hasOrg = !!model.organization?.name;
   const profileHref = hrefWithParams(model.profileHref, bookingParams);
-  const bookHref = coachBookHref(model.raw, { intro: '1', ...bookingParams });
+  const sportBookingParams = model.sportKey ? { sport: model.sportKey } : {};
+  const bookHref = coachBookHref(model.raw, { intro: '1', ...sportBookingParams, ...bookingParams });
   const { isAuthenticated, user } = useAuth();
   const displayDistance = distanceMiles === null || distanceMiles === undefined ? null : Number(distanceMiles);
   const tierLabel = coachTierLabel(model);
@@ -721,7 +722,7 @@ export default function PublicCoachCard({
   const { previewOpen, hoverProps } = useCoachIntroHover(hasIntroVideo);
   const canShowIntroPreview = useDesktopIntroPreview();
   const desktopPreviewOpen = hasIntroVideo && canShowIntroPreview && previewOpen;
-  const introPreviewSignalId = model.id || coach?.id || model.displayName;
+  const introPreviewSignalId = model.publicProfileId || model.id || coach?.id || model.displayName;
   const motionTransition = reduceMotion
     ? { duration: 0 }
     : { type: 'spring', stiffness: 260, damping: 24, mass: 0.72 };

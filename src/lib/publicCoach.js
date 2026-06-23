@@ -37,6 +37,10 @@ const SERVICE_TYPE_LABELS = {
 
 const PUBLIC_COACH_FIELDS = [
   'id',
+  'coach_id',
+  'public_profile_id',
+  'sport_profile_id',
+  'sport_profile',
   'first_name',
   'last_name',
   'bio',
@@ -72,6 +76,8 @@ const PUBLIC_COACH_FIELDS = [
   'sport',
   'age_groups',
   'training_formats',
+  'positions',
+  'sport_credentials',
   'service_area_label',
   'location',
   'city',
@@ -108,9 +114,12 @@ export function parseAvailability(val) {
 export function normalizePublicCoach(doc) {
   if (!doc) return doc;
   const safe = pickAllowed(doc, PUBLIC_COACH_FIELDS);
+  const coachId = doc.coach_id || doc.id || doc.$id;
   return {
     ...safe,
-    id: doc.id || doc.$id,
+    id: coachId,
+    coach_id: coachId,
+    public_profile_id: safe.public_profile_id || safe.sport_profile_id || coachId,
     availability: parseAvailability(safe.availability),
     sports: Array.isArray(safe.sports) ? safe.sports : [],
     organization: sanitizeOrganization(safe.organization),
@@ -322,7 +331,12 @@ export function coachBookHref(coach, params = {}) {
 }
 
 export function coachProfileHref(coach) {
-  return coach?.id ? `/coaches/${encodeURIComponent(coach.id)}` : '/coaches';
+  if (!coach?.id) return '/coaches';
+  const search = new URLSearchParams();
+  const sportKey = compact(coach?.sport_profile?.sport_key) || toArray(coach?.sports)[0] || '';
+  if (sportKey) search.set('sport', sportKey);
+  const query = search.toString();
+  return `/coaches/${encodeURIComponent(coach.id)}${query ? `?${query}` : ''}`;
 }
 
 export function publicCoachDisplay(coach, options = {}) {
@@ -391,6 +405,9 @@ export function publicCoachDisplay(coach, options = {}) {
   return {
     raw: normalized,
     id: normalized?.id,
+    publicProfileId: normalized?.public_profile_id || normalized?.id,
+    sportProfileId: normalized?.sport_profile_id || '',
+    sportKey: compact(normalized?.sport_profile?.sport_key) || toArray(normalized?.sports)[0] || '',
     displayName,
     firstName: normalized?.first_name || 'Coach',
     initials: getCoachInitials(normalized),

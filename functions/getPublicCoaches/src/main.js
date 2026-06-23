@@ -49,19 +49,64 @@ function publicMinimumComplete(doc, hasAvailabilityBlock = false) {
     && (hasAnyAvailability(doc) || hasAvailabilityBlock);
 }
 
+function completeSportProfile(row) {
+  return asArray(row?.specialties).length > 0
+    && asArray(row?.levels).length > 0
+    && asArray(row?.session_types).length > 0;
+}
+
+function sportLabelFromKey(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(' ');
+}
+
+function sportProfileForCard(sportProfile, sportCatalog) {
+  if (!sportProfile) return null;
+  const sportKey = String(sportProfile.sport_key || '').trim();
+  if (!sportKey) return null;
+  const sport = sportCatalog.get(sportKey);
+  return {
+    id: sportProfile.$id || '',
+    sport_key: sportKey,
+    display_name: sport?.display_name || sportLabelFromKey(sportKey),
+    specialties: asArray(sportProfile.specialties),
+    levels: asArray(sportProfile.levels),
+    positions: asArray(sportProfile.positions),
+    session_types: asArray(sportProfile.session_types),
+    credentials: sportProfile.credentials || '',
+  };
+}
+
 // Explicit allowlist — anything not listed here never leaves the server.
-function publicCard(doc, organization, stats = null) {
+function publicCard(doc, organization, stats = null, sportProfile = null, sportCatalog = new Map()) {
   const publicStats = stats || {};
+  const sportCard = sportProfileForCard(sportProfile, sportCatalog);
+  const sportKey = sportCard?.sport_key || '';
+  const sportDisplayName = sportCard?.display_name || '';
   return {
     id: doc.$id,
+    coach_id: doc.$id,
+    public_profile_id: sportKey ? `${doc.$id}:${sportKey}` : doc.$id,
+    sport_profile_id: sportCard?.id || '',
     first_name: doc.first_name || '',
     last_name: doc.last_name || '',
     bio: doc.bio || '',
     quote: doc.quote || '',
     photo_url: doc.photo_url || '',
     intro_video_url: doc.intro_video_url || '',
-    specializations: doc.specializations || [],
-    sports: doc.sports || [],
+    specializations: sportCard?.specialties?.length ? sportCard.specialties : (doc.specializations || []),
+    sports: sportKey ? [sportKey] : (doc.sports || []),
+    primary_sport: sportDisplayName || '',
+    age_groups: sportCard?.levels || [],
+    training_formats: sportCard?.session_types || [],
+    positions: sportCard?.positions || [],
+    sport_credentials: sportCard?.credentials || '',
+    sport_profile: sportCard,
     rating_avg: Number.isFinite(Number(doc.rating_avg)) ? Number(doc.rating_avg) : 0,
     review_count: Number.isInteger(Number(doc.review_count)) ? Number(doc.review_count) : 0,
     price_hint_cents: Number.isInteger(Number(doc.price_hint_cents)) ? Number(doc.price_hint_cents) : null,
@@ -86,6 +131,57 @@ function publicCard(doc, organization, stats = null) {
     public_verified: true,
     organization: organization || null,
   };
+}
+
+async function sportProfilesForCoaches(databases, coachIds) {
+  const byCoach = new Map();
+  for (let i = 0; i < coachIds.length; i += 100) {
+    const ids = coachIds.slice(i, i + 100);
+    const page = await databases.listDocuments(DB_ID, 'coach_sport_profiles', [
+      Query.equal('coach_id', ids),
+      Query.limit(500),
+    ]).catch(() => ({ documents: [] }));
+    for (const row of page.documents) {
+      if (!byCoach.has(row.coach_id)) byCoach.set(row.coach_id, []);
+      byCoach.get(row.coach_id).push(row);
+    }
+  }
+  return byCoach;
+}
+
+async function sportCatalogForProfiles(databases, profilesByCoach) {
+  const keys = [...new Set(
+    [...profilesByCoach.values()]
+      .flat()
+      .map((row) => String(row.sport_key || '').trim())
+      .filter(Boolean),
+  )];
+  const catalog = new Map();
+  for (let i = 0; i < keys.length; i += 100) {
+    const page = await databases.listDocuments(DB_ID, 'sports', [
+      Query.equal('sport_key', keys.slice(i, i + 100)),
+      Query.limit(100),
+    ]).catch(() => ({ documents: [] }));
+    for (const sport of page.documents) {
+      catalog.set(sport.sport_key, {
+        sport_key: sport.sport_key,
+        display_name: sport.display_name || sportLabelFromKey(sport.sport_key),
+      });
+    }
+  }
+  return catalog;
+}
+
+function publicSportProfilesForCoach(doc, profilesByCoach) {
+  const selectedSports = new Set(asArray(doc.sports).map((sport) => sport.toLowerCase()));
+  const rows = (profilesByCoach.get(doc.$id) || [])
+    .filter(completeSportProfile)
+    .filter((row) => {
+      const sportKey = String(row.sport_key || '').trim().toLowerCase();
+      return !selectedSports.size || selectedSports.has(sportKey);
+    });
+  if (!rows.length) return [null];
+  return rows.sort((a, b) => String(a.sport_key || '').localeCompare(String(b.sport_key || '')));
 }
 
 async function listSessionsForCoaches(databases, coachIds) {
@@ -381,16 +477,22 @@ export default async ({ res, error }) => {
 
     const visibleIds = visibleBase.map((doc) => doc.$id);
     const orgs = await orgAffiliations(databases, visibleIds);
+    const sportProfiles = await sportProfilesForCoaches(databases, visibleIds);
+    const sportCatalog = await sportCatalogForProfiles(databases, sportProfiles);
     const priceHints = await packagePriceHints(databases, visibleIds, orgs);
     const stats = await sessionStats(databases, visibleIds);
     const visible = visibleBase.filter((doc) => priceHints.has(doc.$id));
-    return res.json({
-      coaches: visible.map((doc) => {
-        const card = publicCard(doc, orgs.get(doc.$id), stats.get(doc.$id));
+    const cards = [];
+    for (const doc of visible) {
+      for (const sportProfile of publicSportProfilesForCoach(doc, sportProfiles)) {
+        const card = publicCard(doc, orgs.get(doc.$id), stats.get(doc.$id), sportProfile, sportCatalog);
         // Package-derived hint wins over the coach's manual hint when present.
         if (priceHints.has(doc.$id)) card.price_hint_cents = priceHints.get(doc.$id);
-        return card;
-      }),
+        cards.push(card);
+      }
+    }
+    return res.json({
+      coaches: cards,
     });
   } catch (err) {
     error?.(err?.message || String(err));
