@@ -147,6 +147,7 @@ export default function CoachDetail() {
   const [reviews, setReviews] = useState([]);
   const [reviewsError, setReviewsError] = useState(false);
   const [availability, setAvailability] = useState(null);
+  const [coachSportProfiles, setCoachSportProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -160,6 +161,7 @@ export default function CoachDetail() {
     setNotFound(false);
     setLoadError('');
     setReviewsError(false);
+    setCoachSportProfiles([]);
     try {
       const [coachRes, packageRows] = await Promise.all([
         callFn('getPublicCoaches', {}),
@@ -178,6 +180,7 @@ export default function CoachDetail() {
         return;
       }
       setCoach(match);
+      setCoachSportProfiles(coachMatches);
       setPackages(packageRows);
 
       // Secondary loads degrade gracefully — the profile still renders.
@@ -200,6 +203,10 @@ export default function CoachDetail() {
   const model = useMemo(
     () => (coach ? publicCoachDisplay(coach, { packages }) : null),
     [coach, packages],
+  );
+  const sportProfileModels = useMemo(
+    () => coachSportProfiles.map((item) => publicCoachDisplay(item, { packages })),
+    [coachSportProfiles, packages],
   );
 
   usePageMeta({
@@ -623,6 +630,32 @@ export default function CoachDetail() {
         </div>
 
         <aside className="space-y-4">
+          {sportProfileModels.length > 1 && (
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="eyebrow text-slate-500">Sport profiles</p>
+              <div className="mt-3 space-y-2">
+                {sportProfileModels.map((profile) => {
+                  const active = profile.publicProfileId === model.publicProfileId;
+                  return (
+                    <Link
+                      key={profile.publicProfileId}
+                      to={`/coaches/${encodeURIComponent(coachId)}?sport=${encodeURIComponent(profile.sportKey)}`}
+                      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm font-bold transition ${
+                        active
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50'
+                      }`}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      <span>{profile.primarySport}</span>
+                      <span className="text-xs font-semibold text-slate-500">{active ? 'Viewing' : 'Open'}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {org?.name && (
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <p className="eyebrow text-slate-500">Affiliated organization</p>

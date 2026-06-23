@@ -27,7 +27,7 @@ const COACH_PROFILE_UPDATED_EVENT = 'levelcoach:coach-profile-updated';
 
 const navItems = [
   { label: 'Dashboard', to: '/coach', icon: LayoutDashboard, isActive: ({ pathname, hash }) => pathname === '/coach' && !hash },
-  { label: 'Profile builder', to: '/coach/profile', icon: UserRound, isActive: ({ pathname }) => pathname === '/coach/profile' },
+  { label: 'Profile builder', to: '/coach/profile', icon: UserRound, isActive: ({ pathname }) => pathname === '/coach/profile' || pathname.startsWith('/coach/profile/sports/') },
   {
     label: 'Bookings',
     to: '/coach/sessions?view=bookings',

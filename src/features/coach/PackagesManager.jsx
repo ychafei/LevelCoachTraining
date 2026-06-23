@@ -113,7 +113,17 @@ function PackageRow({ pkg, onEdit, onDelete, busy }) {
   );
 }
 
-export default function PackagesManager() {
+function cleanSportKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function packageAppliesToSport(pkg, sportKey) {
+  if (!sportKey) return true;
+  const packageSports = Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.map(cleanSportKey).filter(Boolean) : [];
+  return packageSports.length === 0 || packageSports.includes(cleanSportKey(sportKey));
+}
+
+export default function PackagesManager({ sportFilterKey = '', sportFilterLabel = '', lockSport = false }) {
   const [coach, setCoach] = useState(null);
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -139,26 +149,30 @@ export default function PackagesManager() {
   useEffect(() => { load(); }, []);
 
   const startNew = () => {
-    const hasStarter = packages.some(isStarterPackage);
-    setDraft(hasStarter ? { ...emptyDraft } : starterDraftFromCoach(coach));
+    const hasStarter = packages.filter((pkg) => packageAppliesToSport(pkg, sportFilterKey)).some(isStarterPackage);
+    const nextDraft = hasStarter ? { ...emptyDraft } : starterDraftFromCoach(coach);
+    setDraft(lockSport && sportFilterKey ? { ...nextDraft, sport_keys: [sportFilterKey] } : nextDraft);
   };
   const optionDrafts = (pkg) => {
     const options = normalizeDurationOptions(pkg);
     return options.length ? options : [{ duration_minutes: Number(pkg.duration_minutes) || 60, price_cents: Number(pkg.price_cents) || 0 }];
   };
-  const startEdit = (pkg) => setDraft({
-    package_id: cleanPackageId(pkg.id || pkg.$id),
-    name: pkg.name,
-    sessions: String(pkg.sessions),
-    duration_minutes: String(pkg.duration_minutes),
-    price_dollars: priceInput(pkg.price_cents),
-    duration_options: optionDrafts(pkg),
-    session_type: pkg.session_type || 'private',
-    description: pkg.description || '',
-    badge: pkg.badge || '',
-    sport_keys: Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [],
-    is_active: pkg.is_active !== false,
-  });
+  const startEdit = (pkg) => {
+    const sportKeys = Array.isArray(pkg.sport_keys) ? pkg.sport_keys : [];
+    setDraft({
+      package_id: cleanPackageId(pkg.id || pkg.$id),
+      name: pkg.name,
+      sessions: String(pkg.sessions),
+      duration_minutes: String(pkg.duration_minutes),
+      price_dollars: priceInput(pkg.price_cents),
+      duration_options: optionDrafts(pkg),
+      session_type: pkg.session_type || 'private',
+      description: pkg.description || '',
+      badge: pkg.badge || '',
+      sport_keys: lockSport && sportFilterKey ? [sportFilterKey] : sportKeys,
+      is_active: pkg.is_active !== false,
+    });
+  };
 
   const update = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const toggleList = (key, value) => {
@@ -175,7 +189,7 @@ export default function PackagesManager() {
   const coachSportOptions = (Array.isArray(coach?.sports) && coach.sports.length ? coach.sports : SPORTS_CATALOG.map((sport) => sport.sport_key))
     .map((sportKey) => ({ value: sportKey, label: SPORT_LABELS.get(sportKey) || sportKey }))
     .filter((item, index, arr) => item.value && arr.findIndex((other) => other.value === item.value) === index);
-  const requiresSportScopedPackages = coachSportOptions.length > 1;
+  const requiresSportScopedPackages = !lockSport && coachSportOptions.length > 1;
 
   const updateDurationOption = (index, patch) => {
     setDraft((d) => ({
@@ -215,7 +229,8 @@ export default function PackagesManager() {
     if (!durationOptions.every((option) => option.duration_minutes >= 15 && option.duration_minutes <= 480 && option.price_cents >= 500)) {
       return toast.error('Each duration needs 15-480 minutes and a price of at least $5.');
     }
-    if (requiresSportScopedPackages && !draft.sport_keys.length) {
+    const scopedSportKeys = lockSport && sportFilterKey ? [sportFilterKey] : draft.sport_keys;
+    if (requiresSportScopedPackages && !scopedSportKeys.length) {
       return toast.error('Choose which sport this package belongs to.');
     }
     setSaving(true);
@@ -230,7 +245,7 @@ export default function PackagesManager() {
         session_type: draft.session_type,
         description: draft.description.trim(),
         badge: draft.badge.trim(),
-        sport_keys: draft.sport_keys,
+        sport_keys: scopedSportKeys,
         is_active: draft.is_active,
       });
       toast.success(draft.package_id ? 'Package updated' : 'Package created');
@@ -262,23 +277,27 @@ export default function PackagesManager() {
   }
 
   const singleSessionDraft = draft ? isStarterPackage(draft) : false;
+  const displayedPackages = packages.filter((pkg) => packageAppliesToSport(pkg, sportFilterKey));
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Your Single Session price is what athletes see first on your public coach card.
-        Bundles can offer discounts, but they will not lower that public single-session price.
+        {sportFilterKey
+          ? `Manage the packages athletes see on your ${sportFilterLabel || sportFilterKey} profile.`
+          : 'Your Single Session price is what athletes see first on your public coach card. Bundles can offer discounts, but they will not lower that public single-session price.'}
       </p>
 
-      {packages.length === 0 && !draft ? (
+      {displayedPackages.length === 0 && !draft ? (
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
           <PackageIcon className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No packages yet. Add at least one to accept bookings.</p>
+          <p className="text-sm text-muted-foreground">
+            {sportFilterKey ? `No ${sportFilterLabel || sportFilterKey} packages yet.` : 'No packages yet. Add at least one to accept bookings.'}
+          </p>
         </div>
       ) : null}
 
       <div className="space-y-2">
-        {packages.map((pkg) => (
+        {displayedPackages.map((pkg) => (
           <PackageRow key={pkg.id} pkg={pkg} onEdit={startEdit} onDelete={remove} busy={deletingId === pkg.id} />
         ))}
       </div>
@@ -395,27 +414,36 @@ export default function PackagesManager() {
                 <Textarea id="pkg-desc" value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={2} placeholder="What athletes get with this package." className="mt-1" />
               </div>
             )}
-            <div className="sm:col-span-2">
-              <Label>Sports</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {requiresSportScopedPackages
-                  ? 'Choose at least one sport so this package appears on the right public profile.'
-                  : 'Leave blank to offer this package for every sport on your profile.'}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {coachSportOptions.map((sport) => (
-                  <button
-                    key={sport.value}
-                    type="button"
-                    onClick={() => toggleList('sport_keys', sport.value)}
-                    aria-pressed={draft.sport_keys.includes(sport.value)}
-                    className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
-                  >
-                    {sport.label}
-                  </button>
-                ))}
+            {lockSport && sportFilterKey ? (
+              <div className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50/70 p-3">
+                <p className="text-sm font-bold text-slate-950">{sportFilterLabel || sportFilterKey} package</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  This package will appear on this sport profile only.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="sm:col-span-2">
+                <Label>Sports</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {requiresSportScopedPackages
+                    ? 'Choose at least one sport so this package appears on the right public profile.'
+                    : 'Leave blank to offer this package for every sport on your profile.'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {coachSportOptions.map((sport) => (
+                    <button
+                      key={sport.value}
+                      type="button"
+                      onClick={() => toggleList('sport_keys', sport.value)}
+                      aria-pressed={draft.sport_keys.includes(sport.value)}
+                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${draft.sport_keys.includes(sport.value) ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:border-accent/30'}`}
+                    >
+                      {sport.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.is_active} onChange={(e) => update({ is_active: e.target.checked })} />
               Visible to athletes (uncheck to hide without deleting)

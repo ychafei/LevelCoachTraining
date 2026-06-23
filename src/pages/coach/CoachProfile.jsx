@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Save, Upload, Mail, AlertTriangle, Eye, BadgeCheck, RotateCcw, Wallet, ExternalLink, Trophy,
+  ArrowRight, CheckCircle2, CircleAlert, PackageCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CoachProfilePreviewCard from '@/components/coach/CoachProfilePreviewCard';
@@ -178,6 +179,28 @@ function parseSportProfileSections(value) {
     }
   }
   return {};
+}
+
+function hasText(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : value !== undefined && value !== null && value !== '';
+}
+
+function profileComplete(entry) {
+  if (!entry) return false;
+  return (hasText(entry.bio) || hasText(entry.headline))
+    && hasText(entry.credentials)
+    && Array.isArray(entry.specialties) && entry.specialties.length > 0
+    && Array.isArray(entry.levels) && entry.levels.length > 0
+    && Array.isArray(entry.session_types) && entry.session_types.length > 0;
+}
+
+function cleanSportKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function packageAppliesToSport(pkg, sportKey) {
+  const packageSports = Array.isArray(pkg?.sport_keys) ? pkg.sport_keys.map(cleanSportKey).filter(Boolean) : [];
+  return packageSports.length === 0 || packageSports.includes(cleanSportKey(sportKey));
 }
 
 // ── Per-sport profiles editor (coachSelf.setSportProfiles) ────────────────────
@@ -383,6 +406,124 @@ function SportProfilesEditor({ coach, selectedSports }) {
           <Save className="w-3 h-3 mr-1" aria-hidden="true" /> {saving ? 'Saving…' : 'Save sport profiles'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function SportProfileHub({ coach, selectedSports, dirty }) {
+  const [profiles, setProfiles] = useState({});
+  const [packages, setPackages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!coach?.id) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      coachSportProfileRepo.filter({ coach_id: coach.id }).catch(() => []),
+      coachRepo.listPackages().catch(() => []),
+    ]).then(([rows, packageRows]) => {
+      if (cancelled) return;
+      const next = {};
+      for (const row of rows || []) {
+        const sections = parseSportProfileSections(row.profile_sections);
+        next[row.sport_key] = {
+          headline: sections.headline || '',
+          bio: sections.bio || '',
+          intro_video_url: sections.intro_video_url || '',
+          credentials: row.credentials || '',
+          specialties: Array.isArray(row.specialties) ? row.specialties : [],
+          levels: Array.isArray(row.levels) ? row.levels : [],
+          positions: Array.isArray(row.positions) ? row.positions : [],
+          session_types: Array.isArray(row.session_types) ? row.session_types : [],
+        };
+      }
+      setProfiles(next);
+      setPackages(packageRows || []);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [coach?.id]);
+
+  if (loading) {
+    return <div className="h-28 animate-pulse rounded-lg bg-secondary/60" aria-hidden="true" />;
+  }
+
+  if (!selectedSports.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+        Pick at least one sport above, save your profile, then build each sport profile here.
+      </div>
+    );
+  }
+
+  const savedSports = new Set((Array.isArray(coach?.sports) ? coach.sports : []).map(cleanSportKey));
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {selectedSports.map((sportKey) => {
+        const sport = getSport(sportKey);
+        if (!sport) return null;
+        const saved = savedSports.has(cleanSportKey(sportKey));
+        const profileDone = profileComplete(profiles[sportKey]);
+        const activePackages = packages.filter((pkg) => pkg.is_active !== false && packageAppliesToSport(pkg, sportKey));
+        const pricingDone = activePackages.length > 0;
+        const ready = saved && profileDone && pricingDone;
+        return (
+          <div key={sportKey} className="rounded-lg border border-border bg-secondary/20 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-base font-bold text-foreground">{sport.display_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Dedicated public bio, video, credentials, skills, and pricing.
+                </p>
+              </div>
+              <Badge className={`shrink-0 border text-[10px] ${
+                ready
+                  ? 'border-green-500/30 bg-green-500/10 text-green-700'
+                  : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700'
+              }`}
+              >
+                {ready ? 'Ready' : saved ? 'Needs work' : 'Save first'}
+              </Badge>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                {profileDone ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <CircleAlert className="h-3.5 w-3.5 text-yellow-600" />}
+                Sport content {profileDone ? 'complete' : 'needs headline/bio, credentials, specialties, levels, and session types'}
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                {pricingDone ? <PackageCheck className="h-3.5 w-3.5 text-green-600" /> : <CircleAlert className="h-3.5 w-3.5 text-yellow-600" />}
+                {pricingDone ? `${activePackages.length} active package${activePackages.length === 1 ? '' : 's'}` : 'No active sport package yet'}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {saved && !dirty ? (
+                <Button asChild size="sm" className="h-9 bg-accent text-xs font-semibold text-accent-foreground hover:bg-accent/90">
+                  <Link to={`/coach/profile/sports/${encodeURIComponent(sportKey)}`}>
+                    Edit profile
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button size="sm" disabled className="h-9 text-xs font-semibold">
+                  Save sports first
+                </Button>
+              )}
+              {saved && coach?.id && (
+                <Button asChild variant="outline" size="sm" className="h-9 text-xs font-semibold">
+                  <Link to={`/coaches/${encodeURIComponent(coach.id)}?sport=${encodeURIComponent(sportKey)}`}>
+                    Public view
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -850,11 +991,14 @@ export default function CoachProfile() {
           </Section>
 
           {/* Sport-specific profiles */}
-          <Section title="Per-sport details" icon={Trophy}>
-            <SportProfilesEditor coach={coach} selectedSports={draft.sports || []} />
+          <Section title="Sport profile hub" icon={Trophy}>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Keep the main profile clean. Each sport gets its own focused public profile and pricing setup.
+            </p>
+            <SportProfileHub coach={coach} selectedSports={draft.sports || []} dirty={dirty} />
             {dirty && (
               <p className="text-[11px] text-muted-foreground mt-2">
-                Tip: save your sport selection above first — per-sport details apply to your saved sports.
+                Tip: save your sport selection above before opening a sport profile.
               </p>
             )}
           </Section>
