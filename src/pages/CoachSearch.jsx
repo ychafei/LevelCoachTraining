@@ -187,6 +187,78 @@ function reviewSummary(rows) {
   };
 }
 
+function rowCoachKey(row) {
+  return String(row?.coach?.id || row?.coach?.coach_id || row?.model?.id || row?.coach?.public_profile_id || '');
+}
+
+function rowSportKey(row) {
+  return String(row?.model?.sportKey || row?.coach?.sport_profile?.sport_key || row?.coach?.sports?.[0] || '')
+    .trim()
+    .toLowerCase();
+}
+
+function rowPriceCents(row) {
+  const cents = Number(row?.coach?.price_hint_cents);
+  return Number.isFinite(cents) && cents > 0 ? cents : null;
+}
+
+function compareRowPrices(a, b, direction = 1) {
+  const pa = rowPriceCents(a);
+  const pb = rowPriceCents(b);
+  if (pa === null && pb === null) return 0;
+  if (pa === null) return 1;
+  if (pb === null) return -1;
+  return (pa - pb) * direction;
+}
+
+function compareFeaturedRows(a, b) {
+  const genericA = a?.coach?.sport_profile_id ? 1 : 0;
+  const genericB = b?.coach?.sport_profile_id ? 1 : 0;
+  if (genericA !== genericB) return genericA - genericB;
+
+  const orderA = Number(a?.coach?.display_order) || 0;
+  const orderB = Number(b?.coach?.display_order) || 0;
+  if (orderA !== orderB) return orderA - orderB;
+
+  const sportA = String(a?.model?.primarySport || rowSportKey(a));
+  const sportB = String(b?.model?.primarySport || rowSportKey(b));
+  const sportOrder = sportA.localeCompare(sportB);
+  if (sportOrder !== 0) return sportOrder;
+
+  return String(a?.coach?.public_profile_id || '').localeCompare(String(b?.coach?.public_profile_id || ''));
+}
+
+function chooseCoachRow(rows, { sportKey = '', sort = 'featured' } = {}) {
+  if (!rows.length) return null;
+  let candidates = rows;
+  if (sportKey) {
+    const exactSportRows = rows.filter((row) => rowSportKey(row) === sportKey);
+    if (exactSportRows.length) candidates = exactSportRows;
+  }
+
+  const sorted = [...candidates];
+  if (sort === 'price_asc') {
+    sorted.sort((a, b) => compareRowPrices(a, b, 1) || compareFeaturedRows(a, b));
+  } else if (sort === 'price_desc') {
+    sorted.sort((a, b) => compareRowPrices(a, b, -1) || compareFeaturedRows(a, b));
+  } else {
+    sorted.sort(compareFeaturedRows);
+  }
+  return sorted[0] || null;
+}
+
+function collapseCoachRows(rows, options = {}) {
+  const groups = new Map();
+  rows.forEach((row, index) => {
+    const key = rowCoachKey(row) || `${row?.coach?.public_profile_id || 'profile'}-${index}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  return [...groups.values()]
+    .map((group) => chooseCoachRow(group, options))
+    .filter(Boolean);
+}
+
 function filterSummary(filters) {
   return [
     filters.sport,
@@ -302,36 +374,42 @@ export default function CoachSearch() {
     const baseRadius = Number(filters.radius) > 0 ? Number(filters.radius) : 15;
     const priceBand = PRICE_BANDS.find((band) => band.value === filters.price);
 
-    const matchAt = (radius) => models.filter(({ coach, model, haystack }) => {
-      if (showSavedOnly && !savedCoachIds.has(String(coach.id))) return false;
-      if (sport) {
-        const sportTerms = coach.sports.map((s) => String(s).toLowerCase());
-        const matchesSport = sportTerms.includes(sport.sport_key)
-          || sportTerms.includes(sport.display_name.toLowerCase())
-          || haystack.includes(sport.display_name.toLowerCase());
-        if (!matchesSport) return false;
-      }
-      if (!locationMatches(coach, model, haystack, activePlace, filters.location.trim(), radius)) return false;
-      if (!availabilityMatches(coach, filters.availability)) return false;
-      if (filters.level !== 'Any level' && !haystack.includes(filters.level.toLowerCase())) return false;
-      if (filters.age !== 'Any age group' && !haystack.includes(filters.age.toLowerCase())) return false;
-      if (filters.org !== 'any' && coach.organization?.id !== filters.org) return false;
-      if (priceBand && priceBand.value !== 'any') {
-        const cents = Number(coach.price_hint_cents);
-        if (!Number.isFinite(cents) || cents <= 0) return false;
-        if (cents < priceBand.min || cents > priceBand.max) return false;
-      }
-      if (filters.specialty) {
-        const want = filters.specialty.toLowerCase();
-        const hasSpecialty = model.specializations.some((item) => {
-          const have = item.toLowerCase();
-          return have.includes(want) || want.includes(have);
-        });
-        if (!hasSpecialty) return false;
-      }
-      if (filters.type !== 'any' && coach.service_type !== filters.type) return false;
-      return true;
-    });
+    const matchAt = (radius) => {
+      const matches = models.filter(({ coach, model, haystack }) => {
+        if (showSavedOnly && !savedCoachIds.has(String(coach.id))) return false;
+        if (sport) {
+          const sportTerms = coach.sports.map((s) => String(s).toLowerCase());
+          const matchesSport = sportTerms.includes(sport.sport_key)
+            || sportTerms.includes(sport.display_name.toLowerCase())
+            || haystack.includes(sport.display_name.toLowerCase());
+          if (!matchesSport) return false;
+        }
+        if (!locationMatches(coach, model, haystack, activePlace, filters.location.trim(), radius)) return false;
+        if (!availabilityMatches(coach, filters.availability)) return false;
+        if (filters.level !== 'Any level' && !haystack.includes(filters.level.toLowerCase())) return false;
+        if (filters.age !== 'Any age group' && !haystack.includes(filters.age.toLowerCase())) return false;
+        if (filters.org !== 'any' && coach.organization?.id !== filters.org) return false;
+        if (priceBand && priceBand.value !== 'any') {
+          const cents = Number(coach.price_hint_cents);
+          if (!Number.isFinite(cents) || cents <= 0) return false;
+          if (cents < priceBand.min || cents > priceBand.max) return false;
+        }
+        if (filters.specialty) {
+          const want = filters.specialty.toLowerCase();
+          const hasSpecialty = model.specializations.some((item) => {
+            const have = item.toLowerCase();
+            return have.includes(want) || want.includes(have);
+          });
+          if (!hasSpecialty) return false;
+        }
+        if (filters.type !== 'any' && coach.service_type !== filters.type) return false;
+        return true;
+      });
+      return collapseCoachRows(matches, {
+        sportKey: sport?.sport_key || '',
+        sort: filters.sort,
+      });
+    };
 
     // If a place is set and nothing matched, widen the radius progressively
     // so the page suggests real nearby coaches instead of a dead end.
