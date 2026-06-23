@@ -7,6 +7,23 @@ const CODE_RATE_LIMIT = 3;                    // max codes per hour per coach
 const MAX_CODE_ATTEMPTS = 5;
 
 const SERVICE_TYPES = ['facility', 'travels', 'hybrid', 'online'];
+const CATALOG_SPORT_KEYS = new Set([
+  'soccer',
+  'basketball',
+  'football',
+  'baseball',
+  'softball',
+  'volleyball',
+  'tennis',
+  'lacrosse',
+  'hockey',
+  'golf',
+  'track_field',
+  'swimming',
+  'speed_agility',
+  'strength_conditioning',
+  'general_performance',
+]);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -435,14 +452,18 @@ async function setSportProfiles(databases, coach, payload) {
     });
   }
 
-  // Every sport_key must exist in the sports collection.
+  // Every sport_key should be known. Production can lag on `sports` seed data, so
+  // valid catalog keys still pass when the collection has not been populated yet.
   const keys = [...new Set(cleaned.map((p) => p.sport_key))];
   const known = await databases.listDocuments(DB_ID, 'sports', [
     Query.equal('sport_key', keys),
     Query.limit(keys.length),
+  ]).catch(() => ({ documents: [] }));
+  const knownKeys = new Set([
+    ...known.documents.map((s) => String(s.sport_key || '').trim().toLowerCase()),
+    ...CATALOG_SPORT_KEYS,
   ]);
-  const knownKeys = new Set(known.documents.map((s) => s.sport_key));
-  const unknown = keys.filter((key) => !knownKeys.has(key));
+  const unknown = keys.filter((key) => !knownKeys.has(String(key || '').trim().toLowerCase()));
   if (unknown.length > 0) {
     return { status: 400, body: { error: `Unknown sport(s): ${unknown.join(', ')}.` } };
   }
