@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { homePathForRole } from '@/lib/roleHome';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ViewAsBanner from '@/features/admin/ViewAsBanner';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import {
   RequireOnboardingComplete,
   RequireCoach,
@@ -302,6 +303,7 @@ function App() {
         </Router>
         <Toaster />
         <SonnerToaster position="top-right" richColors closeButton />
+        <SpeedInsights />
       </QueryClientProvider>
     </AuthProvider>
   )
